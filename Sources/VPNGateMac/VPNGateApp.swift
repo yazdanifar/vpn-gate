@@ -8,7 +8,17 @@ struct VPNGateApp: App {
 
     var body: some Scene {
         Window("VPN Gate", id: "main") {
-            ServerListView().environmentObject(model)
+            TabView {
+                ServerListView()
+                    .tabItem {
+                        Label("VPN Gate Relays", systemImage: "globe")
+                    }
+                AccountsView(appModel: model, accountManager: model.accountManager)
+                    .tabItem {
+                        Label("Client Manager", systemImage: "network")
+                    }
+            }
+            .environmentObject(model)
         }
         Settings { SettingsView().environmentObject(model) }
 
@@ -31,7 +41,7 @@ struct VPNGateApp: App {
                 Button("Disconnect") { model.disconnect() }
                 if model.lastServer != nil { Button("Reconnect") { model.reconnect() } }
             }
-            Button("Open Server List") {
+            Button("Open VPN Gate") {
                 openWindow(id: "main"); NSApp.activate(ignoringOtherApps: true)
             }
             SettingsLink { Text("Settings…") }

@@ -38,6 +38,8 @@ final class AppModel: ObservableObject {
     @Published var listSource: ListSource = .bundle
     @Published var listTimestamp: Date? = nil
     @Published var listIsFresh: Bool = true
+    @Published var activeAccount: ClientAccount? = nil
+    public let accountManager = AccountManager()
 
     private let helper: HelperClient
     private let defaults: UserDefaults
@@ -159,6 +161,8 @@ final class AppModel: ObservableObject {
 
     var lastServer: VPNServer? { servers.first { $0.id == lastServerID } }
 
+    var isConnected: Bool { event.state == .connected }
+
     /// True when the installed helper predates this app (it then lacks fixes or IPC fields).
     var helperOutdated: Bool { helperRunning && lastEventAt > .distantPast && (event.helperVersion ?? 0) < helperVersion }
 
@@ -178,6 +182,31 @@ final class AppModel: ObservableObject {
         event.state = .connecting; event.server = s.ip
         // A helper that accepts the socket but never answers (hung, or an outdated build) must not leave the UI
         // on "Connecting…" forever.
+        Task {
+            try? await Task.sleep(nanoseconds: Self.helperAnswerTimeoutNs)
+            if self.lastEventAt < sentAt && self.event.state == .connecting {
+                self.event = HelperEvent(state: .disconnected)
+                self.notice = "The helper is not responding. Open Settings and choose “Reinstall helper…”."
+                self.appendLog("No answer from the helper within \(Self.helperAnswerTimeoutNs / 1_000_000_000) s")
+            }
+        }
+    }
+
+    func connect(account: ClientAccount) {
+        pollHelper()
+        if !helperRunning { setupPrompt = .install; return }
+        if helperOutdated { setupPrompt = .update; return }
+        notice = nil
+        let pw = accountManager.password(for: account)
+        let cert = accountManager.certificate(for: account)
+        let cfg = account.toConnectConfig(password: pw, certDer: cert, blockIPv6: blockIPv6)
+        var r = HelperRequest(cmd: "connect")
+        r.config = cfg
+        activeAccount = account
+        lastServerID = account.name
+        let sentAt = Date()
+        helper.send(r)
+        event.state = .connecting; event.server = account.host
         Task {
             try? await Task.sleep(nanoseconds: Self.helperAnswerTimeoutNs)
             if self.lastEventAt < sentAt && self.event.state == .connecting {

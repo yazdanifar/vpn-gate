@@ -2,11 +2,55 @@ import Foundation
 import VPNGateCore
 
 struct SessionDependencies {
-    var makeTransport: (_ host: String, _ port: UInt16, _ proxy: ProxySettings) -> VPNTransport = {
-        SoftEtherClient(host: $0, port: $1, proxy: $2)
-    }
+    var makeTransport: ((_ host: String, _ port: UInt16, _ proxy: ProxySettings) -> VPNTransport)?
+    var makeTransportConfig: ((_ config: ConnectConfig, _ port: UInt16) -> VPNTransport)?
     var makeTun: () throws -> TunDevice = { try Utun() }
     var makeNet: () -> NetConfiguring = { NetConfig() }
+
+    init(
+        makeTransport: ((_ host: String, _ port: UInt16, _ proxy: ProxySettings) -> VPNTransport)? = nil,
+        makeTransportConfig: ((_ config: ConnectConfig, _ port: UInt16) -> VPNTransport)? = nil,
+        makeTun: @escaping () throws -> TunDevice = { try Utun() },
+        makeNet: @escaping () -> NetConfiguring = { NetConfig() }
+    ) {
+        self.makeTransport = makeTransport
+        self.makeTransportConfig = makeTransportConfig
+        self.makeTun = makeTun
+        self.makeNet = makeNet
+    }
+
+    func transport(config: ConnectConfig, port: UInt16) -> VPNTransport {
+        if let customConfig = makeTransportConfig {
+            return customConfig(config, port)
+        }
+        if let customLegacy = makeTransport {
+            return customLegacy(config.host, port, config.proxy)
+        }
+        let auth: ClientAuth
+        switch config.authType.lowercased() {
+        case "standard password (sha-0)", "password":
+            auth = .hashedPassword(config.password ?? "")
+        case "plain password", "plain":
+            auth = .plainPassword(config.password ?? "")
+        case "user certificate", "cert":
+            auth = .certificate(certDer: config.certDer ?? Data(), sign: { _ in config.certSignData ?? Data() })
+        case "ticket":
+            auth = .ticket(config.ticket ?? Data())
+        default:
+            auth = .anonymous
+        }
+        return SoftEtherClient(
+            host: config.host,
+            port: port,
+            hubName: config.hubName,
+            userName: config.userName,
+            auth: auth,
+            proxy: config.proxy,
+            maxConnections: config.maxConnection,
+            useCompress: config.useCompress,
+            useUdpAccel: config.useUdpAccel
+        )
+    }
 }
 
 struct SessionTiming {
@@ -109,11 +153,7 @@ final class VPNSession: SessionControlling {
 
     // MARK: control
 
-    func connect(host: String, port: Int?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool) {
-        connect(host: host, port: port, ports: nil, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6)
-    }
-
-    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool) {
+    func connect(config: ConnectConfig) {
         lock.lock()
         generation += 1
         let gen = generation
@@ -124,10 +164,29 @@ final class VPNSession: SessionControlling {
         oldTask?.cancel()
         if let old = old { release(old) }
         runTask = Task.detached { [weak self] in
-            await self?.run(gen, host: host, preferredPort: port, preferredPorts: ports, proxy: proxy,
-                            autoReconnect: autoReconnect, blockIPv6: blockIPv6)
+            await self?.run(gen, config: config)
             if let self = self { self.lock.lock(); self.activeRuns -= 1; self.lock.unlock() }
         }
+    }
+
+    func connect(host: String, port: Int?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool) {
+        connect(host: host, port: port, ports: nil, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6)
+    }
+
+    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool) {
+        var portList = ports ?? []
+        if let p = port, !portList.contains(p) { portList.insert(p, at: 0) }
+        let cfg = ConnectConfig(
+            host: host,
+            ports: portList.isEmpty ? [443, 992, 5555, 1194] : portList,
+            hubName: "VPNGATE",
+            userName: "vpn",
+            authType: "anonymous",
+            proxy: proxy,
+            autoReconnect: autoReconnect,
+            blockIPv6: blockIPv6
+        )
+        connect(config: cfg)
     }
 
     func disconnect() {
@@ -144,11 +203,10 @@ final class VPNSession: SessionControlling {
 
     // MARK: run loop
 
-    private func run(_ gen: Int, host: String, preferredPort: Int?, preferredPorts: [Int]?, proxy: ProxySettings,
-                     autoReconnect: Bool, blockIPv6: Bool) async {
+    private func run(_ gen: Int, config: ConnectConfig) async {
         var attempt = 0
         while isCurrent(gen) && !Task.isCancelled {
-            set(gen, attempt == 0 ? .connecting : .reconnecting, server: host)
+            set(gen, attempt == 0 ? .connecting : .reconnecting, server: config.host)
             let r = Resources(gen: gen)
             lock.lock()
             guard generation == gen else { lock.unlock(); return }
@@ -157,8 +215,7 @@ final class VPNSession: SessionControlling {
 
             var failure: Error?
             do {
-                try await establish(r, host: host, preferredPort: preferredPort, preferredPorts: preferredPorts, proxy: proxy,
-                                    autoReconnect: autoReconnect, blockIPv6: blockIPv6)
+                try await establish(r, config: config)
                 attempt = 0
                 await r.linkDown.wait()
             } catch { failure = error }
@@ -171,15 +228,15 @@ final class VPNSession: SessionControlling {
             if !isCurrent(gen) || Task.isCancelled { return }
 
             if let failure = failure, !(failure is CancellationError) {
-                if !autoReconnect { set(gen, .disconnected, error: failure.localizedDescription); return }
-            } else if !autoReconnect {
+                if !config.autoReconnect { set(gen, .disconnected, error: failure.localizedDescription); return }
+            } else if !config.autoReconnect {
                 set(gen, .disconnected, error: "Connection lost"); return
             }
             guard attempt < timing.maxAttempts else {
                 set(gen, .disconnected, error: "Gave up reconnecting"); return
             }
             attempt += 1
-            set(gen, .reconnecting, server: host, log: "Reconnecting in \(Int(timing.reconnectDelay.rounded(.up)))s (attempt \(attempt))",
+            set(gen, .reconnecting, server: config.host, log: "Reconnecting in \(Int(timing.reconnectDelay.rounded(.up)))s (attempt \(attempt))",
                 error: failure?.localizedDescription)
             try? await Task.sleep(nanoseconds: UInt64(timing.reconnectDelay * 1_000_000_000))
         }
@@ -193,16 +250,13 @@ final class VPNSession: SessionControlling {
         return true
     }
 
-    private func establish(_ r: Resources, host: String, preferredPort: Int?, preferredPorts: [Int]?, proxy: ProxySettings,
-                           autoReconnect: Bool, blockIPv6: Bool) async throws {
+    private func establish(_ r: Resources, config: ConnectConfig) async throws {
         let gen = r.gen
         var ports = [Int]()
-        if let preferredPorts = preferredPorts {
-            for p in preferredPorts where InputValidation.isValidPort(p) && !ports.contains(p) {
-                ports.append(p)
-            }
+        for p in config.ports where InputValidation.isValidPort(p) && !ports.contains(p) {
+            ports.append(p)
         }
-        for p in [preferredPort ?? 0, 443, 992, 5555, 1194] where InputValidation.isValidPort(p) && !ports.contains(p) {
+        for p in [443, 992, 5555, 1194] where InputValidation.isValidPort(p) && !ports.contains(p) {
             ports.append(p)
         }
 
@@ -211,11 +265,11 @@ final class VPNSession: SessionControlling {
         for port in ports {
             try Task.checkCancellation()
             guard isCurrent(gen) else { throw CancellationError() }
-            let c = deps.makeTransport(host, UInt16(port), proxy)
+            let c = deps.transport(config: config, port: UInt16(port))
             // Registered before connecting so that a disconnect() during the handshake can reach it.
             guard withResources(r, { $0.client = c }) else { c.close(); throw CancellationError() }
             do {
-                set(gen, .authenticating, server: host, log: "Connecting to \(host):\(port)")
+                set(gen, .authenticating, server: config.host, log: "Connecting to \(config.host):\(port)")
                 _ = try await c.connect { [weak self] m in self?.set(gen, .authenticating, log: m) }
                 guard isCurrent(gen) else { throw CancellationError() }
                 client = c; break
@@ -239,7 +293,7 @@ final class VPNSession: SessionControlling {
         client.onFrame = { [weak bridge] in bridge?.fromHub($0) }
         tun.onPacket = { [weak bridge] in bridge?.fromHost($0) }
         client.onClose = { [weak self] err in
-            if let err = err, autoReconnect, self?.isCurrent(gen) == true {
+            if let err = err, config.autoReconnect, self?.isCurrent(gen) == true {
                 self?.set(gen, .reconnecting, log: "Link closed: \(err.localizedDescription)")
             }
             r.linkDown.fire()
@@ -252,7 +306,8 @@ final class VPNSession: SessionControlling {
         let net = deps.makeNet()
         guard withResources(r, { $0.net = net }) else { throw CancellationError() }
         try net.apply(iface: tun.name, lease: lease,
-                      bypassHost: proxy.kind == .none ? host : proxy.host, blockIPv6: blockIPv6)
+                      bypassHost: config.proxy.kind == .none ? config.host : config.proxy.host,
+                      blockIPv6: config.blockIPv6)
         tun.startReading()
 
         set(gen, .connected, ip: ipString(lease.ip), log: "Connected via \(tun.name), gateway \(ipString(lease.router))")

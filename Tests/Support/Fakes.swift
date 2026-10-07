@@ -138,10 +138,19 @@ final class FakeNet: NetConfiguring {
 final class FakeSession: SessionControlling {
     var emit: ((HelperEvent) -> Void)?
     var snapshot = HelperEvent(state: .disconnected)
-    private let state = Locked((connects: [(host: String, port: Int?)](), disconnects: 0, blockIPv6: [Bool]()))
+    private let state = Locked((connects: [(host: String, port: Int?)](), disconnects: 0, blockIPv6: [Bool](), configs: [ConnectConfig]()))
     var connects: [(host: String, port: Int?)] { state.value.connects }
     var blockIPv6Flags: [Bool] { state.value.blockIPv6 }
     var disconnects: Int { state.value.disconnects }
+    var configs: [ConnectConfig] { state.value.configs }
+
+    func connect(config: ConnectConfig) {
+        state.update {
+            $0.connects.append((config.host, config.ports.first))
+            $0.blockIPv6.append(config.blockIPv6)
+            $0.configs.append(config)
+        }
+    }
     func connect(host: String, port: Int?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool) {
         connect(host: host, port: port, ports: nil, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6)
     }

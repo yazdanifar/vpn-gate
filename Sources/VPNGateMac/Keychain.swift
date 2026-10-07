@@ -10,19 +10,35 @@ enum Keychain {
     }
 
     static func get(_ account: String) -> String? {
+        getData(account).flatMap { String(data: $0, encoding: .utf8) }
+    }
+
+    static func set(_ value: String, account: String) {
+        if value.isEmpty {
+            delete(account)
+        } else {
+            setData(Data(value.utf8), account: account)
+        }
+    }
+
+    static func getData(_ account: String) -> Data? {
         var q = query(account)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var out: CFTypeRef?
         guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
-        return String(data: d, encoding: .utf8)
+        return d
     }
 
-    static func set(_ value: String, account: String) {
+    static func setData(_ data: Data, account: String) {
         SecItemDelete(query(account) as CFDictionary)
-        guard !value.isEmpty else { return }
+        guard !data.isEmpty else { return }
         var q = query(account)
-        q[kSecValueData as String] = Data(value.utf8)
+        q[kSecValueData as String] = data
         SecItemAdd(q as CFDictionary, nil)
+    }
+
+    static func delete(_ account: String) {
+        SecItemDelete(query(account) as CFDictionary)
     }
 }

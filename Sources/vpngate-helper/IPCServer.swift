@@ -156,9 +156,14 @@ final class IPCServer {
 
     /// Everything that reaches `route`/the network stack from here must pass validation first.
     static func validate(_ r: HelperRequest) -> String? {
-        guard let host = r.host, InputValidation.isValidHost(host) else { return "invalid host" }
+        let host = r.config?.host ?? r.host
+        guard let host = host, InputValidation.isValidHost(host) else { return "invalid host" }
         if let port = r.port, !InputValidation.isValidPort(port) { return "invalid port" }
-        if let p = r.proxy, p.kind != .none {
+        if let config = r.config {
+            for p in config.ports where !InputValidation.isValidPort(p) { return "invalid port \(p)" }
+        }
+        let p = r.config?.proxy ?? r.proxy
+        if let p = p, p.kind != .none {
             if !InputValidation.isValidHost(p.host) { return "invalid proxy host" }
             if !InputValidation.isValidPort(p.port) { return "invalid proxy port" }
         }
@@ -174,8 +179,12 @@ final class IPCServer {
                 send(client, e)
                 return
             }
-            session.connect(host: r.host!, port: r.port, ports: r.ports, proxy: r.proxy ?? ProxySettings(),
-                            autoReconnect: r.autoReconnect ?? true, blockIPv6: r.blockIPv6 ?? true)
+            if let cfg = r.config {
+                session.connect(config: cfg)
+            } else {
+                session.connect(host: r.host!, port: r.port, ports: r.ports, proxy: r.proxy ?? ProxySettings(),
+                                autoReconnect: r.autoReconnect ?? true, blockIPv6: r.blockIPv6 ?? true)
+            }
         case "disconnect": session.disconnect()
         default: send(client, session.snapshot)
         }

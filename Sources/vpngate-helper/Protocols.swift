@@ -44,6 +44,8 @@ protocol NetConfiguring: AnyObject {
 protocol SessionControlling: AnyObject {
     var emit: ((HelperEvent) -> Void)? { get set }
     var snapshot: HelperEvent { get }
+    func connect(config: ConnectConfig)
+    func connect(host: String, port: Int?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool)
     func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool)
     func disconnect()
 }
