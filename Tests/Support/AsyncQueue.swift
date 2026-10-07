@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import VPNGateCore
 
 /// Async byte-chunk queue used by the in-memory stream.
 final class AsyncQueue {

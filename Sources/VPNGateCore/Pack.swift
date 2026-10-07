@@ -51,13 +51,23 @@ public struct Pack: Equatable {
         addInt(name, ip)
     }
 
+    public func element(named name: String) -> Element? {
+        elements.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+    }
     public func value(_ name: String) -> PackValue? {
-        elements.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }?.values.first
+        element(named: name)?.values.first
     }
     public func int(_ name: String) -> UInt32? {
         switch value(name) {
         case .int(let v): return v
         case .int64(let v): return UInt32(truncatingIfNeeded: v)
+        default: return nil
+        }
+    }
+    public func int64(_ name: String) -> UInt64? {
+        switch value(name) {
+        case .int64(let v): return v
+        case .int(let v): return UInt64(v)
         default: return nil
         }
     }
@@ -70,6 +80,46 @@ public struct Pack: Equatable {
     public func data(_ name: String) -> Data? {
         if case .data(let d)? = value(name) { return d }
         return nil
+    }
+
+    public func ints(_ name: String) -> [UInt32] {
+        guard let vals = element(named: name)?.values else { return [] }
+        return vals.compactMap {
+            switch $0 {
+            case .int(let v): return v
+            case .int64(let v): return UInt32(truncatingIfNeeded: v)
+            default: return nil
+            }
+        }
+    }
+
+    public func int64s(_ name: String) -> [UInt64] {
+        guard let vals = element(named: name)?.values else { return [] }
+        return vals.compactMap {
+            switch $0 {
+            case .int64(let v): return v
+            case .int(let v): return UInt64(v)
+            default: return nil
+            }
+        }
+    }
+
+    public func strs(_ name: String) -> [String] {
+        guard let vals = element(named: name)?.values else { return [] }
+        return vals.compactMap {
+            switch $0 {
+            case .str(let s), .unistr(let s): return s
+            default: return nil
+            }
+        }
+    }
+
+    public func datas(_ name: String) -> [Data] {
+        guard let vals = element(named: name)?.values else { return [] }
+        return vals.compactMap {
+            if case .data(let d) = $0 { return d }
+            return nil
+        }
     }
 
     // MARK: serialize

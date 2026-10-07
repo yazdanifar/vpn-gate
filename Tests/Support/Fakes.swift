@@ -143,6 +143,9 @@ final class FakeSession: SessionControlling {
     var blockIPv6Flags: [Bool] { state.value.blockIPv6 }
     var disconnects: Int { state.value.disconnects }
     func connect(host: String, port: Int?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool) {
+        connect(host: host, port: port, ports: nil, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6)
+    }
+    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool) {
         state.update { $0.connects.append((host, port)); $0.blockIPv6.append(blockIPv6) }
     }
     func disconnect() { state.update { $0.disconnects += 1 } }
@@ -167,6 +170,11 @@ func tempPath(_ name: String) -> String {
 func fixture(_ name: String, file: String = #filePath) -> String {
     let root = URL(fileURLWithPath: file).deletingLastPathComponent().deletingLastPathComponent()
     return (try? String(contentsOf: root.appendingPathComponent("Fixtures/" + name), encoding: .utf8)) ?? ""
+}
+
+func fixtureData(_ name: String, file: String = #filePath) -> Data {
+    let root = URL(fileURLWithPath: file).deletingLastPathComponent().deletingLastPathComponent()
+    return (try? Data(contentsOf: root.appendingPathComponent("Fixtures/" + name))) ?? Data()
 }
 
 /// Runs a DHCP exchange through the fake network and returns the lease.

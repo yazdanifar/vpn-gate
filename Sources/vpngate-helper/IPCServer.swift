@@ -174,7 +174,7 @@ final class IPCServer {
                 send(client, e)
                 return
             }
-            session.connect(host: r.host!, port: r.port, proxy: r.proxy ?? ProxySettings(),
+            session.connect(host: r.host!, port: r.port, ports: r.ports, proxy: r.proxy ?? ProxySettings(),
                             autoReconnect: r.autoReconnect ?? true, blockIPv6: r.blockIPv6 ?? true)
         case "disconnect": session.disconnect()
         default: send(client, session.snapshot)

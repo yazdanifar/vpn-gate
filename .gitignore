@@ -2,3 +2,6 @@ build/
 .build/
 decompiled/*.c
 decompiled/*.java
+__pycache__/
+*.pyc
+

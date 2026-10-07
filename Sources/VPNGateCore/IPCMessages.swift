@@ -22,6 +22,7 @@ public struct HelperRequest: Codable {
     public var cmd: String            // connect | disconnect | status
     public var host: String?
     public var port: Int?
+    public var ports: [Int]?
     public var proxy: ProxySettings?
     public var autoReconnect: Bool?
     public var blockIPv6: Bool?

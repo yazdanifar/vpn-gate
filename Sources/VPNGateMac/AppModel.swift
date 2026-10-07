@@ -35,12 +35,17 @@ final class AppModel: ObservableObject {
     /// Hide servers that keep logs longer than this many weeks (-1 = show all).
     @Published var maxLogWeeks: Int { didSet { defaults.set(maxLogWeeks, forKey: "maxLogWeeks") } }
     @Published var mirrorURL: String { didSet { defaults.set(mirrorURL, forKey: "mirrorURL") } }
+    @Published var listSource: ListSource = .bundle
+    @Published var listTimestamp: Date? = nil
+    @Published var listIsFresh: Bool = true
 
     private let helper: HelperClient
     private let defaults: UserDefaults
     private let openInstaller: () -> Bool
     private var lastEventAt = Date.distantPast
     private var retry: Timer?
+    private var pollTimer: Timer?
+    private let datFetcher = VGDatFetcher()
 
     /// `autoStart: false` (tests) skips the background timer, the cache and the server-list download.
     init(socketPath: String = helperSocketPath, defaults: UserDefaults = .standard, autoStart: Bool = true,
@@ -60,7 +65,22 @@ final class AppModel: ObservableObject {
         lastServerID = d.string(forKey: "lastServerID")
         maxLogWeeks = d.object(forKey: "maxLogWeeks") as? Int ?? -1
         mirrorURL = d.string(forKey: "mirrorURL") ?? ""
-        if autoStart { servers = Self.loadCache(); migrateFavorites() }
+        if autoStart {
+            if let cached = VGDatFetcher.loadCachedDat() {
+                servers = cached.servers
+                listSource = .cache
+                listTimestamp = cached.timestamp
+                listIsFresh = cached.isFresh
+            } else if let bundled = VGDatFetcher.loadBundleDat() {
+                servers = bundled.servers
+                listSource = .bundle
+                listTimestamp = bundled.timestamp
+                listIsFresh = bundled.isFresh
+            } else {
+                servers = Self.loadCache()
+            }
+            migrateFavorites()
+        }
 
         helper.onEvent = { [weak self] e in Task { @MainActor in self?.handle(e) } }
         helper.onDisconnect = { [weak self] in
@@ -150,6 +170,7 @@ final class AppModel: ObservableObject {
         notice = nil
         var r = HelperRequest(cmd: "connect")
         r.host = s.ip; r.port = s.connectPort
+        if !s.sslPorts.isEmpty { r.ports = s.sslPorts.map(Int.init) }
         r.proxy = currentProxy; r.autoReconnect = autoReconnect; r.blockIPv6 = blockIPv6
         lastServerID = s.id
         let sentAt = Date()
@@ -188,13 +209,27 @@ final class AppModel: ObservableObject {
         loading = true; loadError = nil
         let mirror = URL(string: mirrorURL)
         Task {
-            do {
-                let list = try await ServerList.fetch(mirror: mirror)
-                servers = list
+            let res = await datFetcher.sync(currentServers: servers, proxy: currentProxy, mirror: mirror)
+            if !res.servers.isEmpty {
+                servers = res.servers
+                listSource = res.source
+                listTimestamp = res.timestamp
+                listIsFresh = res.isFresh
                 migrateFavorites()
-                Self.saveCache(list)
-            } catch { loadError = error.localizedDescription }
+                Self.saveCache(res.servers)
+            } else if servers.isEmpty {
+                loadError = "Failed to load servers"
+            }
             loading = false
+            scheduleNextPoll(success: !res.servers.isEmpty)
+        }
+    }
+
+    private func scheduleNextPoll(success: Bool) {
+        pollTimer?.invalidate()
+        let interval = success ? VGDatFetcher.pollIntervalOk : VGDatFetcher.pollIntervalError
+        pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
         }
     }
 

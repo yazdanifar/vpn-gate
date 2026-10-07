@@ -1,10 +1,9 @@
 import Foundation
 import Network
-import VPNGateCore
 
-enum StreamError: Error, LocalizedError {
+public enum StreamError: Error, LocalizedError {
     case closed, timeout, protocolError(String)
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .closed: return "Connection closed"
         case .timeout: return "Timed out"
@@ -13,13 +12,44 @@ enum StreamError: Error, LocalizedError {
     }
 }
 
-/// TLS stream over NWConnection that accepts the self-signed certificates VPN Gate relays use.
-final class TLSStream: ByteStream {
-    private let conn: NWConnection
-    var buffer = ByteBuffer()
-    var connState: NWConnection.State { conn.state }
+/// Byte stream under the SoftEther protocol.
+public protocol ByteStream: AnyObject {
+    var buffer: ByteBuffer { get set }
+    func start() async throws
+    func send(_ data: Data) async throws
+    /// Reads whatever the transport has next (at least 1 byte) or throws.
+    func readChunk() async throws -> Data
+    func cancel()
+}
 
-    init(host: String, port: UInt16, proxy: ProxySettings) {
+public extension ByteStream {
+    func recv(_ n: Int) async throws -> Data {
+        while buffer.count < n { buffer.append(try await readChunk()) }
+        return Data(buffer.take(n)!)
+    }
+
+    func recvU32() async throws -> UInt32 {
+        rd32([UInt8](try await recv(4)), 0)
+    }
+
+    func recvHTTPHead() async throws -> HTTPHead {
+        while true {
+            if let head = buffer.take(upTo: HTTPHead.terminator) { return HTTPHead.parse(head) }
+            if buffer.count > HTTPHead.maxSize { throw StreamError.protocolError("HTTP header too large") }
+            buffer.append(try await readChunk())
+        }
+    }
+}
+
+public typealias StreamFactory = (_ host: String, _ port: UInt16, _ proxy: ProxySettings) -> ByteStream
+
+/// TLS stream over NWConnection that accepts the self-signed certificates VPN Gate relays use.
+public final class TLSStream: ByteStream {
+    private let conn: NWConnection
+    public var buffer = ByteBuffer()
+    public var connState: NWConnection.State { conn.state }
+
+    public init(host: String, port: UInt16, proxy: ProxySettings) {
         let tls = NWProtocolTLS.Options()
         let sec = tls.securityProtocolOptions
         sec_protocol_options_set_verify_block(sec, { _, _, complete in complete(true) }, .global())
@@ -47,9 +77,9 @@ final class TLSStream: ByteStream {
                             port: NWEndpoint.Port(rawValue: port) ?? 443, using: params)
     }
 
-    func start() async throws { try await start(timeout: 15) }
+    public func start() async throws { try await start(timeout: 15) }
 
-    func start(timeout: TimeInterval) async throws {
+    public func start(timeout: TimeInterval) async throws {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
             let lock = NSLock()
             var done = false
@@ -77,7 +107,7 @@ final class TLSStream: ByteStream {
         }
     }
 
-    func send(_ data: Data) async throws {
+    public func send(_ data: Data) async throws {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
             conn.send(content: data, completion: .contentProcessed { err in
                 if let err = err { c.resume(throwing: err) } else { c.resume() }
@@ -85,7 +115,7 @@ final class TLSStream: ByteStream {
         }
     }
 
-    func readChunk() async throws -> Data {
+    public func readChunk() async throws -> Data {
         try await withCheckedThrowingContinuation { c in
             conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, err in
                 if let err = err { c.resume(throwing: err) }
@@ -96,5 +126,5 @@ final class TLSStream: ByteStream {
         }
     }
 
-    func cancel() { conn.cancel() }
+    public func cancel() { conn.cancel() }
 }

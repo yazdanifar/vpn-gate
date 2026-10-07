@@ -87,7 +87,7 @@ final class SoftEtherClient: VPNTransport {
                           message: w.data("Msg").map { String(decoding: $0, as: UTF8.self) })
         welcome = wel
         log("Session \(wel.sessionName) established")
-        startDataPhase(st, timeoutMs: max(wel.timeoutMs, 5000))
+        startDataPhase(st, timeoutMs: max(wel.timeoutMs, 500))
         return wel
     }
 
@@ -208,7 +208,7 @@ final class SoftEtherClient: VPNTransport {
         }
         // Read-idle watchdog: fires if no bytes (data or keepalive) arrive within timeoutMs.
         let watchdog = Task.detached { [weak self] in
-            let pollNs = UInt64(max(timeoutMs, 1000)) * 1_000_000
+            let pollNs = UInt64(max(timeoutMs / 2, 50)) * 1_000_000
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: pollNs)
                 guard !Task.isCancelled else { return }

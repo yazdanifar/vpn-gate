@@ -1,37 +1,6 @@
 import Foundation
 import VPNGateCore
 
-/// Byte stream under the SoftEther protocol. The real one is TLS over NWConnection; tests use an in-memory fake.
-protocol ByteStream: AnyObject {
-    var buffer: ByteBuffer { get set }
-    func start() async throws
-    func send(_ data: Data) async throws
-    /// Reads whatever the transport has next (at least 1 byte) or throws.
-    func readChunk() async throws -> Data
-    func cancel()
-}
-
-extension ByteStream {
-    func recv(_ n: Int) async throws -> Data {
-        while buffer.count < n { buffer.append(try await readChunk()) }
-        return Data(buffer.take(n)!)
-    }
-
-    func recvU32() async throws -> UInt32 {
-        rd32([UInt8](try await recv(4)), 0)
-    }
-
-    func recvHTTPHead() async throws -> HTTPHead {
-        while true {
-            if let head = buffer.take(upTo: HTTPHead.terminator) { return HTTPHead.parse(head) }
-            if buffer.count > HTTPHead.maxSize { throw StreamError.protocolError("HTTP header too large") }
-            buffer.append(try await readChunk())
-        }
-    }
-}
-
-typealias StreamFactory = (_ host: String, _ port: UInt16, _ proxy: ProxySettings) -> ByteStream
-
 /// An established-or-establishing link to a VPN Gate relay, as seen by the session.
 protocol VPNTransport: AnyObject {
     var onFrame: (([UInt8]) -> Void)? { get set }
@@ -75,6 +44,6 @@ protocol NetConfiguring: AnyObject {
 protocol SessionControlling: AnyObject {
     var emit: ((HelperEvent) -> Void)? { get set }
     var snapshot: HelperEvent { get }
-    func connect(host: String, port: Int?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool)
+    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool)
     func disconnect()
 }

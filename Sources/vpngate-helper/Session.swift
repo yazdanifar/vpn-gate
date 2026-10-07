@@ -110,6 +110,10 @@ final class VPNSession: SessionControlling {
     // MARK: control
 
     func connect(host: String, port: Int?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool) {
+        connect(host: host, port: port, ports: nil, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6)
+    }
+
+    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool) {
         lock.lock()
         generation += 1
         let gen = generation
@@ -120,7 +124,7 @@ final class VPNSession: SessionControlling {
         oldTask?.cancel()
         if let old = old { release(old) }
         runTask = Task.detached { [weak self] in
-            await self?.run(gen, host: host, preferredPort: port, proxy: proxy,
+            await self?.run(gen, host: host, preferredPort: port, preferredPorts: ports, proxy: proxy,
                             autoReconnect: autoReconnect, blockIPv6: blockIPv6)
             if let self = self { self.lock.lock(); self.activeRuns -= 1; self.lock.unlock() }
         }
@@ -140,7 +144,7 @@ final class VPNSession: SessionControlling {
 
     // MARK: run loop
 
-    private func run(_ gen: Int, host: String, preferredPort: Int?, proxy: ProxySettings,
+    private func run(_ gen: Int, host: String, preferredPort: Int?, preferredPorts: [Int]?, proxy: ProxySettings,
                      autoReconnect: Bool, blockIPv6: Bool) async {
         var attempt = 0
         while isCurrent(gen) && !Task.isCancelled {
@@ -153,7 +157,7 @@ final class VPNSession: SessionControlling {
 
             var failure: Error?
             do {
-                try await establish(r, host: host, preferredPort: preferredPort, proxy: proxy,
+                try await establish(r, host: host, preferredPort: preferredPort, preferredPorts: preferredPorts, proxy: proxy,
                                     autoReconnect: autoReconnect, blockIPv6: blockIPv6)
                 attempt = 0
                 await r.linkDown.wait()
@@ -189,10 +193,15 @@ final class VPNSession: SessionControlling {
         return true
     }
 
-    private func establish(_ r: Resources, host: String, preferredPort: Int?, proxy: ProxySettings,
+    private func establish(_ r: Resources, host: String, preferredPort: Int?, preferredPorts: [Int]?, proxy: ProxySettings,
                            autoReconnect: Bool, blockIPv6: Bool) async throws {
         let gen = r.gen
         var ports = [Int]()
+        if let preferredPorts = preferredPorts {
+            for p in preferredPorts where InputValidation.isValidPort(p) && !ports.contains(p) {
+                ports.append(p)
+            }
+        }
         for p in [preferredPort ?? 0, 443, 992, 5555, 1194] where InputValidation.isValidPort(p) && !ports.contains(p) {
             ports.append(p)
         }
