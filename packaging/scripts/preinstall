@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stop a running (older) helper before its files are replaced. Never fails the installation.
+launchctl bootout system/com.yazdanifar.vpngate.helper >/dev/null 2>&1 || true
+exit 0

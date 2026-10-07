@@ -1,0 +1,18 @@
+#!/bin/sh
+# Start the helper. `bootout` just ran in preinstall, and launchd can still be tearing the old job down, so
+# bootstrap is retried for a few seconds ("Bootstrap failed: 5: Input/output error").
+LABEL=com.yazdanifar.vpngate.helper
+PLIST=/Library/LaunchDaemons/$LABEL.plist
+HELPER=/Library/PrivilegedHelperTools/vpngate-helper
+
+chown root:wheel "$HELPER" "$PLIST" 2>/dev/null
+chmod 755 "$HELPER"
+chmod 644 "$PLIST"
+
+i=0
+until launchctl bootstrap system "$PLIST"; do
+  i=$((i + 1))
+  if [ "$i" -ge 5 ]; then echo "could not start $LABEL" >&2; exit 1; fi
+  sleep 1
+done
+exit 0
