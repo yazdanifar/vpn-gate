@@ -15,6 +15,7 @@ public func be16(_ v: Int) -> [UInt8] { [UInt8(v >> 8 & 0xff), UInt8(v & 0xff)] 
 public func be32(_ v: UInt32) -> [UInt8] { (0..<4).map { UInt8(v >> UInt32(24 - 8 * $0) & 0xff) } }
 public func rd16(_ b: [UInt8], _ o: Int) -> Int { Int(b[o]) << 8 | Int(b[o+1]) }
 public func rd32(_ b: [UInt8], _ o: Int) -> UInt32 { b[o..<o+4].reduce(0) { $0 << 8 | UInt32($1) } }
+public func rd64(_ b: [UInt8], _ o: Int) -> UInt64 { b[o..<o+8].reduce(0) { $0 << 8 | UInt64($1) } }
 
 public let broadcastMAC: MAC = [UInt8](repeating: 0xff, count: 6)
 

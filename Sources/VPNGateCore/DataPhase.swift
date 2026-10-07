@@ -1,4 +1,5 @@
 import Foundation
+import zlib
 
 public enum DataPhaseItem: Equatable {
     case frame([UInt8])
@@ -9,12 +10,14 @@ public enum DataPhaseError: Error, Equatable, LocalizedError {
     case oversizedBlock(Int)
     case badBlockCount(Int)
     case badKeepAlive(Int)
+    case decompressionFailed
 
     public var errorDescription: String? {
         switch self {
         case .oversizedBlock(let n): return "Oversized block (\(n) bytes)"
         case .badBlockCount(let n): return "Bad block count (\(n))"
         case .badKeepAlive(let n): return "Bad keep-alive length (\(n))"
+        case .decompressionFailed: return "Zlib block decompression failed"
         }
     }
 }
@@ -27,9 +30,31 @@ public enum DataPhase {
     public static let keepAliveMagic: UInt32 = 0xFFFF_FFFF
     public static let maxKeepAlive = 4095
 
-    public static func encode(frames: [[UInt8]]) -> [UInt8] {
+    /// Compress an individual Ethernet frame with zlib (deflate).
+    public static func compressFrame(_ frame: [UInt8]) -> [UInt8] {
+        var destLen = uLongf(compressBound(uLong(frame.count)))
+        var dest = [UInt8](repeating: 0, count: Int(destLen))
+        let rc = compress(&dest, &destLen, frame, uLong(frame.count))
+        guard rc == Z_OK else { return frame }
+        return Array(dest.prefix(Int(destLen)))
+    }
+
+    /// Decompress a zlib-compressed Ethernet frame.
+    public static func uncompressFrame(_ data: [UInt8], maxLen: Int = 4096) throws -> [UInt8] {
+        var destLen = uLongf(maxLen)
+        var dest = [UInt8](repeating: 0, count: maxLen)
+        let rc = uncompress(&dest, &destLen, data, uLong(data.count))
+        guard rc == Z_OK else { throw DataPhaseError.decompressionFailed }
+        return Array(dest.prefix(Int(destLen)))
+    }
+
+    public static func encode(frames: [[UInt8]], useCompress: Bool = false) -> [UInt8] {
         var out = be32(UInt32(frames.count))
-        for f in frames { out += be32(UInt32(f.count)); out += f }
+        for f in frames {
+            let block = useCompress ? compressFrame(f) : f
+            out += be32(UInt32(block.count))
+            out += block
+        }
         return out
     }
 
@@ -49,8 +74,11 @@ public struct DataPhaseDecoder {
     }
     private var buf = ByteBuffer()
     private var state = State.header
+    public var useCompress: Bool = false
 
-    public init() {}
+    public init(useCompress: Bool = false) {
+        self.useCompress = useCompress
+    }
 
     private mutating func u32() -> UInt32? {
         guard let b = buf.take(4) else { return nil }
@@ -81,8 +109,13 @@ public struct DataPhaseDecoder {
                 if n > UInt32(DataPhase.maxBlock) { throw DataPhaseError.oversizedBlock(Int(n)) }
                 state = .blockBody(size: Int(n), remaining: remaining)
             case .blockBody(let size, let remaining):
-                guard let f = buf.take(size) else { return out }
-                out.append(.frame(f))
+                guard let raw = buf.take(size) else { return out }
+                if useCompress {
+                    let frame = try DataPhase.uncompressFrame(raw)
+                    out.append(.frame(frame))
+                } else {
+                    out.append(.frame(raw))
+                }
                 state = remaining > 1 ? .blockSize(remaining: remaining - 1) : .header
             }
         }

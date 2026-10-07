@@ -10,6 +10,17 @@ final class FakeSoftEtherServer {
     var omitRandom = false
     var loginError: UInt32 = 0
     var redirect = false
+    var redirectHost = "5.6.7.8"
+    var redirectPort: UInt32 = 443
+    var redirectTicket = Data(repeating: 0x42, count: 20)
+    var useCompress = false
+    var maxConnections: UInt32 = 1
+    var sessionKey = Data(repeating: 0x11, count: 20)
+    var useUdpAccel = false
+    var udpServerPort: UInt16 = 40001
+    var udpServerCookie: UInt32 = 0x12345678
+    var udpClientCookie: UInt32 = 0x87654321
+    var udpServerKey = Data(repeating: 0x99, count: 128)
     var helloStatus = 200
     var welcomeTimeoutMs: UInt32 = 20000
     var failStart: Error?
@@ -24,11 +35,13 @@ final class FakeSoftEtherServer {
     private let lock = NSLock()
     private var _requests: [Request] = []
     private var _logins: [Pack] = []
+    private var _additionalConnects: [Pack] = []
     private var _frames: [[UInt8]] = []
     private var _keepAlives = 0
     private var _streams: [FakeStream] = []
     var requests: [Request] { lock.lock(); defer { lock.unlock() }; return _requests }
     var logins: [Pack] { lock.lock(); defer { lock.unlock() }; return _logins }
+    var additionalConnects: [Pack] { lock.lock(); defer { lock.unlock() }; return _additionalConnects }
     var framesReceived: [[UInt8]] { lock.lock(); defer { lock.unlock() }; return _frames }
     var keepAlivesReceived: Int { lock.lock(); defer { lock.unlock() }; return _keepAlives }
     var streamsCreated: Int { lock.lock(); defer { lock.unlock() }; return _streams.count }
@@ -47,6 +60,7 @@ final class FakeSoftEtherServer {
 
     fileprivate func record(_ r: Request) { lock.lock(); _requests.append(r); lock.unlock() }
     fileprivate func record(login: Pack) { lock.lock(); _logins.append(login); lock.unlock() }
+    fileprivate func record(additionalConnect: Pack) { lock.lock(); _additionalConnects.append(additionalConnect); lock.unlock() }
     fileprivate func record(frame: [UInt8]) { lock.lock(); _frames.append(frame); lock.unlock() }
     fileprivate func recordKeepAlive() { lock.lock(); _keepAlives += 1; lock.unlock() }
 
@@ -65,11 +79,28 @@ final class FakeSoftEtherServer {
     func welcomePack() -> Pack {
         var p = Pack()
         if loginError != 0 { p.addInt("error", loginError); return p }
+        if redirect {
+            p.addInt("Redirect", 1)
+            p.addStr("Ip", redirectHost)
+            p.addInt("Port", redirectPort)
+            p.addData("Ticket", redirectTicket)
+            return p
+        }
         p.addStr("session_name", "SID-VPN-TEST-1")
         p.addStr("connection_name", "CID-1")
         p.addInt("timeout", welcomeTimeoutMs)
-        p.addInt("max_connection", 1)
-        if redirect { p.addInt("Redirect", 1) }
+        p.addData("session_key", sessionKey)
+        p.addInt("max_connection", maxConnections)
+        p.addBool("use_compress", useCompress)
+        if useUdpAccel {
+            p.addBool("use_udp_acceleration", true)
+            p.addInt("udp_acceleration_version", 2)
+            p.addStr("udp_acceleration_server_ip", "127.0.0.1")
+            p.addInt("udp_acceleration_server_port", UInt32(udpServerPort))
+            p.addInt("udp_acceleration_server_cookie", udpServerCookie)
+            p.addInt("udp_acceleration_client_cookie", udpClientCookie)
+            p.addData("udp_acceleration_server_key_v2", udpServerKey)
+        }
         return p
     }
 }
@@ -166,6 +197,15 @@ final class FakeStream: ByteStream {
                 var e = Pack(); e.addInt("error", 4)
                 deliver(FakeSoftEtherServer.http(200, [UInt8](e.serialize()))); return
             }
+
+            if p.str("method") == "additional_connect" {
+                server.record(additionalConnect: p)
+                decoder.useCompress = server.useCompress
+                deliver(FakeSoftEtherServer.http(200, [UInt8](Pack().serialize())))
+                mode = .data
+                return
+            }
+
             server.record(login: p)
             // Real servers reject packs with duplicate (case-insensitive) element names.
             let names = p.elements.map { $0.name.lowercased() }
@@ -173,6 +213,7 @@ final class FakeStream: ByteStream {
                 var e = Pack(); e.addInt("error", 3)
                 deliver(FakeSoftEtherServer.http(200, [UInt8](e.serialize()))); return
             }
+            decoder.useCompress = server.useCompress
             deliver(FakeSoftEtherServer.http(200, [UInt8](server.welcomePack().serialize())) + server.trailingAfterWelcome)
             if server.loginError == 0 && !server.redirect { mode = .data }
         default:

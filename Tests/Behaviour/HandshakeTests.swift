@@ -52,10 +52,118 @@ func registerHandshakeTests() {
         let e = await connectFails(s)
         expect(e?.contains("not a SoftEther") == true, "got \(e ?? "success")")
     }
-    test("handshake/cluster-redirect-is-unsupported") {
+    test("handshake/cluster-redirect-limit-throws-error") {
         let s = FakeSoftEtherServer(); s.redirect = true
         let e = await connectFails(s)
         expect(e?.lowercased().contains("redirect") == true, "got \(e ?? "success")")
+    }
+    test("handshake/cluster-redirect-succeeds-with-ticket") {
+        let s = FakeSoftEtherServer()
+        s.redirect = true
+        // First server redirects, then turns redirect off for second connection
+        let client = SoftEtherClient(host: "1.2.3.4", port: 443, proxy: ProxySettings(), makeStream: { h, p, pr in
+            if s.redirect && s.streamsCreated >= 1 {
+                s.redirect = false // second connection succeeds!
+            }
+            return s.factory(h, p, pr)
+        })
+        let wel = try await client.connect { _ in }
+        expectEqual(wel.sessionName, "SID-VPN-TEST-1")
+        // Verify second login used authtype 99 and the ticket
+        expectEqual(s.logins.count, 2)
+        expectEqual(s.logins[1].int("authtype"), 99)
+        expectEqual(s.logins[1].data("ticket"), s.redirectTicket)
+        client.close(nil)
+    }
+    test("handshake/plain-password-auth") {
+        let s = FakeSoftEtherServer()
+        let c = SoftEtherClient(host: "1.2.3.4", port: 443, userName: "alice", auth: .plainPassword("secret123"),
+                                proxy: ProxySettings(), makeStream: s.factory)
+        _ = try await c.connect { _ in }
+        expectEqual(s.logins[0].int("authtype"), 2)
+        expectEqual(s.logins[0].str("plain_password"), "secret123")
+        expectEqual(s.logins[0].str("username"), "alice")
+        c.close(nil)
+    }
+    test("handshake/hashed-password-auth-uses-sha0") {
+        let s = FakeSoftEtherServer()
+        let c = SoftEtherClient(host: "1.2.3.4", port: 443, userName: "bob", auth: .hashedPassword("pass456"),
+                                proxy: ProxySettings(), makeStream: s.factory)
+        _ = try await c.connect { _ in }
+        expectEqual(s.logins[0].int("authtype"), 1)
+        guard let securePw = s.logins[0].data("secure_password") else {
+            fatalError("missing secure_password")
+        }
+        // Verify hash formula: SHA0(SHA0(password + UPPER(username)) + random)
+        let pwData = Array("pass456".utf8) + Array("BOB".utf8)
+        let hashed = SHA0.hash(pwData)
+        let random = Array(s.helloPack().data("random")!)
+        let expected = SHA0.hash(hashed + random)
+        expectEqual([UInt8](securePw), expected)
+        c.close(nil)
+    }
+    test("handshake/certificate-auth") {
+        let s = FakeSoftEtherServer()
+        let fakeCert = Data([1, 2, 3, 4, 5])
+        let fakeSig = Data([6, 7, 8, 9, 10])
+        let c = SoftEtherClient(host: "1.2.3.4", port: 443, userName: "charlie",
+                                auth: .certificate(certDer: fakeCert, sign: { _ in fakeSig }),
+                                proxy: ProxySettings(), makeStream: s.factory)
+        _ = try await c.connect { _ in }
+        expectEqual(s.logins[0].int("authtype"), 3)
+        expectEqual(s.logins[0].data("cert"), fakeCert)
+        expectEqual(s.logins[0].data("sign"), fakeSig)
+        c.close(nil)
+    }
+    test("handshake/compression-negotiated-and-data-phase-transfers") {
+        let s = FakeSoftEtherServer()
+        s.useCompress = true
+        let c = SoftEtherClient(host: "1.2.3.4", port: 443, proxy: ProxySettings(),
+                                useCompress: true, makeStream: s.factory)
+        let got = Locked([[UInt8]]())
+        c.onFrame = { frame in got.update { $0.append(frame) } }
+        let wel = try await c.connect { _ in }
+        expect(wel.useCompress)
+
+        // Send uncompressed frames from client, server decoder uncompresses
+        let frame: [UInt8] = Array("test compression data frame payload".utf8)
+        c.sendFrame(frame)
+        await eventually(5) { s.framesReceived.count == 1 }
+        expectEqual(s.framesReceived.first, frame)
+        c.close(nil)
+    }
+    test("handshake/multi-tcp-additional-connections-established") {
+        let s = FakeSoftEtherServer()
+        s.maxConnections = 4
+        let c = SoftEtherClient(host: "1.2.3.4", port: 443, proxy: ProxySettings(),
+                                maxConnections: 4, makeStream: s.factory)
+        let wel = try await c.connect { _ in }
+        expectEqual(wel.maxConnection, 4)
+
+        // Give background tasks a brief moment to open additional connections
+        await eventually(5) { s.additionalConnects.count >= 1 }
+        expect(s.additionalConnects.count >= 1, "additional connect received")
+        expectEqual(s.additionalConnects[0].str("method"), "additional_connect")
+        expectEqual(s.additionalConnects[0].data("session_key"), s.sessionKey)
+        c.close(nil)
+    }
+    test("handshake/udp-acceleration-packet-encode-decode-roundtrip") {
+        let key = (0..<32).map { UInt8($0) }
+        let iv = (0..<12).map { UInt8($0 + 1) }
+        let payload = Array("UDP acceleration v2 payload test".utf8)
+        let (packet, nextIV) = try UdpAccelPacket.encode(
+            key32: key, iv: iv, cookie: 0x11223344, myTick: 1000, yourTick: 2000,
+            flag: .data, payload: payload, paddingSize: 10
+        )
+        expect(packet.count >= UdpAccelPacket.minPacketSize)
+        expectEqual(nextIV.count, 12)
+
+        let decoded = try UdpAccelPacket.decode(packet: packet, key32: key)
+        expectEqual(decoded.header.cookie, 0x11223344)
+        expectEqual(decoded.header.myTick, 1000)
+        expectEqual(decoded.header.yourTick, 2000)
+        expectEqual(decoded.header.flag, .data)
+        expectEqual(decoded.payload, payload)
     }
     test("handshake/http-error-fails") {
         let s = FakeSoftEtherServer(); s.helloStatus = 500

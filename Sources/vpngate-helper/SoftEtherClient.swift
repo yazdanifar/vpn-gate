@@ -1,30 +1,100 @@
 import Foundation
 import VPNGateCore
 
-struct Welcome {
-    var sessionName: String
-    var connectionName: String
-    var timeoutMs: Int
-    var message: String?
+public enum ClientAuth {
+    case anonymous
+    case plainPassword(String)
+    case hashedPassword(String)
+    case certificate(certDer: Data, sign: (Data) throws -> Data)
+    case ticket(Data)
 }
 
-/// SoftEther SSL-VPN client (anonymous login to the VPN Gate hub, single TCP connection, no compression).
-/// Protocol reference: SoftEtherVPN src/Cedar/Protocol.c and Connection.c.
+public struct Welcome {
+    public var sessionName: String
+    public var connectionName: String
+    public var timeoutMs: Int
+    public var message: String?
+    public var sessionKey: Data?
+    public var maxConnection: Int
+    public var useCompress: Bool
+    public var useEncrypt: Bool
+    public var halfConnection: Bool
+    public var qos: Bool
+
+    // UDP acceleration
+    public var useUdpAcceleration: Bool
+    public var udpAccelVersion: Int
+    public var udpServerIp: String?
+    public var udpServerPort: UInt16?
+    public var udpServerCookie: UInt32?
+    public var udpClientCookie: UInt32?
+    public var udpServerKey: Data?
+    public var udpFastDisconnect: Bool
+
+    public init(
+        sessionName: String,
+        connectionName: String,
+        timeoutMs: Int = 20000,
+        message: String? = nil,
+        sessionKey: Data? = nil,
+        maxConnection: Int = 1,
+        useCompress: Bool = false,
+        useEncrypt: Bool = true,
+        halfConnection: Bool = false,
+        qos: Bool = false,
+        useUdpAcceleration: Bool = false,
+        udpAccelVersion: Int = 1,
+        udpServerIp: String? = nil,
+        udpServerPort: UInt16? = nil,
+        udpServerCookie: UInt32? = nil,
+        udpClientCookie: UInt32? = nil,
+        udpServerKey: Data? = nil,
+        udpFastDisconnect: Bool = false
+    ) {
+        self.sessionName = sessionName
+        self.connectionName = connectionName
+        self.timeoutMs = timeoutMs
+        self.message = message
+        self.sessionKey = sessionKey
+        self.maxConnection = maxConnection
+        self.useCompress = useCompress
+        self.useEncrypt = useEncrypt
+        self.halfConnection = halfConnection
+        self.qos = qos
+        self.useUdpAcceleration = useUdpAcceleration
+        self.udpAccelVersion = udpAccelVersion
+        self.udpServerIp = udpServerIp
+        self.udpServerPort = udpServerPort
+        self.udpServerCookie = udpServerCookie
+        self.udpClientCookie = udpClientCookie
+        self.udpServerKey = udpServerKey
+        self.udpFastDisconnect = udpFastDisconnect
+    }
+}
+
+/// SoftEther SSL-VPN client with full protocol parity (multi-TCP pool, compression, UDP acceleration v2, auth, cluster redirect).
+/// Protocol reference: SoftEtherVPN src/Cedar/Protocol.c, Connection.c, and UdpAccel.c.
 final class SoftEtherClient: VPNTransport {
-    static let hubName = "VPNGATE"
-    static let userName = "vpn"
+    static let defaultHubName = "VPNGATE"
+    static let defaultUserName = "vpn"
     static let maxBlock = DataPhase.maxBlock
 
-    private let host: String
-    private let port: UInt16
+    private var host: String
+    private var port: UInt16
+    private let hubName: String
+    private let userName: String
+    private var auth: ClientAuth
     private let proxy: ProxySettings
+    private let maxConnectionsConfig: Int
+    private let useCompressConfig: Bool
+    private let useUdpAccelConfig: Bool
     private let makeStream: StreamFactory
-    private var _stream: ByteStream?
-    private var stream: ByteStream? {
-        get { sendLock.lock(); defer { sendLock.unlock() }; return _stream }
-        set { sendLock.lock(); _stream = newValue; sendLock.unlock() }
-    }
-    private var tasks: [Task<Void, Never>] = []
+
+    private let pool = ConnectionPool()
+    private var udpAccel: UdpAccel?
+    private var additionalTasks: [Task<Void, Never>] = []
+    private var keepAliveTask: Task<Void, Never>?
+
     private let sendLock = NSLock()
     private var pending: [[UInt8]] = []
     private var flushing = false
@@ -33,6 +103,7 @@ final class SoftEtherClient: VPNTransport {
     var onFrame: (([UInt8]) -> Void)?
     var onClose: ((Error?) -> Void)?
     private(set) var welcome: Welcome?
+
     private let statsLock = NSLock()
     private var _bytesIn: UInt64 = 0
     private var _bytesOut: UInt64 = 0
@@ -41,58 +112,249 @@ final class SoftEtherClient: VPNTransport {
     private func add(in n: Int) { statsLock.lock(); _bytesIn += UInt64(n); statsLock.unlock() }
     private func add(out n: Int) { statsLock.lock(); _bytesOut += UInt64(n); statsLock.unlock() }
 
-    init(host: String, port: UInt16, proxy: ProxySettings,
-         makeStream: @escaping StreamFactory = { TLSStream(host: $0, port: $1, proxy: $2) }) {
-        self.host = host; self.port = port; self.proxy = proxy; self.makeStream = makeStream
+    init(
+        host: String,
+        port: UInt16,
+        hubName: String = defaultHubName,
+        userName: String = defaultUserName,
+        auth: ClientAuth = .anonymous,
+        proxy: ProxySettings,
+        maxConnections: Int = 8,
+        useCompress: Bool = false,
+        useUdpAccel: Bool = true,
+        makeStream: @escaping StreamFactory = { TLSStream(host: $0, port: $1, proxy: $2) }
+    ) {
+        self.host = host
+        self.port = port
+        self.hubName = hubName
+        self.userName = userName
+        self.auth = auth
+        self.proxy = proxy
+        self.maxConnectionsConfig = max(1, min(maxConnections, 32))
+        self.useCompressConfig = useCompress
+        self.useUdpAccelConfig = useUdpAccel
+        self.makeStream = makeStream
+
+        pool.onFrame = { [weak self] frame in self?.onFrame?(frame) }
+        pool.onClose = { [weak self] error in self?.close(error) }
+        pool.onByteCount = { [weak self] bIn, bOut in
+            if bIn > 0 { self?.add(in: bIn) }
+            if bOut > 0 { self?.add(out: bOut) }
+        }
     }
 
-    // MARK: handshake
+    // MARK: - Handshake & Cluster Redirect
 
     func connect(log: (String) -> Void) async throws -> Welcome {
+        var currentHost = host
+        var currentPort = port
+        var currentAuth = auth
+        var redirectCount = 0
+
+        while redirectCount < 5 {
+            let (wel, redirect) = try await connectOnce(
+                host: currentHost,
+                port: currentPort,
+                auth: currentAuth,
+                log: log
+            )
+
+            if let redirect = redirect {
+                redirectCount += 1
+                log("Cluster redirect (\(redirectCount)/5) to \(redirect.host):\(redirect.port)")
+                currentHost = redirect.host
+                currentPort = redirect.port
+                currentAuth = .ticket(redirect.ticket)
+                self.host = currentHost
+                self.port = currentPort
+                self.auth = currentAuth
+                continue
+            }
+
+            guard let finalWelcome = wel else {
+                throw StreamError.protocolError("Connection closed without welcome or redirect")
+            }
+
+            self.welcome = finalWelcome
+            log("Session \(finalWelcome.sessionName) established (TCP max=\(finalWelcome.maxConnection), compress=\(finalWelcome.useCompress), UDP=\(finalWelcome.useUdpAcceleration))")
+
+            // Start KeepAlive & Additional connections
+            startDataServices(welcome: finalWelcome)
+            return finalWelcome
+        }
+
+        throw StreamError.protocolError("Too many cluster redirects (\(redirectCount))")
+    }
+
+    private struct RedirectInfo {
+        let host: String
+        let port: UInt16
+        let ticket: Data
+    }
+
+    private func connectOnce(
+        host: String,
+        port: UInt16,
+        auth: ClientAuth,
+        log: (String) -> Void
+    ) async throws -> (welcome: Welcome?, redirect: RedirectInfo?) {
         let s = makeStream(host, port, proxy)
-        stream = s
-        try await s.start()
-        if isClosed { s.cancel(); throw StreamError.closed }
+        var activeStream: ByteStream = s
+        try await activeStream.start()
+        if isClosed { activeStream.cancel(); throw StreamError.closed }
         log("TLS established with \(host):\(port)")
 
-        // 1. signature upload; fall back to the plain "VPNCONNECT" body for servers that reject the image
+        // 1. Signature upload
         var hello: Pack
         do {
-            hello = try await uploadSignature(s, body: softEtherWaterMark + randomBytes(Int.random(in: 0..<2000)))
+            hello = try await uploadSignature(activeStream, body: softEtherWaterMark + randomBytes(Int.random(in: 0..<2000)), host: host)
         } catch {
             log("Signature rejected (\(error.localizedDescription)); retrying plain")
-            s.cancel()
+            activeStream.cancel()
             let s2 = makeStream(host, port, proxy)
-            stream = s2
-            try await s2.start()
-            hello = try await uploadSignature(s2, body: Data("VPNCONNECT".utf8))
+            activeStream = s2
+            try await activeStream.start()
+            hello = try await uploadSignature(activeStream, body: Data("VPNCONNECT".utf8), host: host)
         }
-        let st = stream!
+
         guard let random = hello.data("random"), random.count == 20 else {
+            activeStream.cancel()
             throw StreamError.protocolError("Server hello missing random (not a SoftEther server?)")
         }
         log("Server: \(hello.str("hello") ?? "?") v\(hello.int("version") ?? 0) build \(hello.int("build") ?? 0)")
 
-        // 2. login
-        try await st.send(httpPost(path: "/vpnsvc/vpn.cgi", type: "application/octet-stream",
-                                   body: withDummy(loginPack()).serialize()))
-        let w = try await readPack(st)
+        // UDP acceleration setup
+        let clientKeyV1 = randomBytes(20)
+        let clientKeyV2 = randomBytes(128)
+        var tempUdpAccel: UdpAccel?
+        if useUdpAccelConfig {
+            tempUdpAccel = UdpAccel(
+                serverIP: host,
+                serverPort: port,
+                myCookie: UInt32.random(in: 1...UInt32.max),
+                yourCookie: 0,
+                myKeyV2: [UInt8](clientKeyV2),
+                yourKeyV2: [UInt8](clientKeyV2)
+            )
+        }
+
+        // 2. Login
+        let login = try loginPack(
+            random: random,
+            auth: auth,
+            host: host,
+            port: port,
+            clientUdpPort: tempUdpAccel?.localPort ?? 0,
+            clientKeyV1: clientKeyV1,
+            clientKeyV2: clientKeyV2
+        )
+
+        try await activeStream.send(httpPost(path: "/vpnsvc/vpn.cgi", type: "application/octet-stream",
+                                             body: withDummy(login).serialize(), host: host))
+        let w = try await readPack(activeStream)
+
         if let err = w.int("error"), err != 0 {
+            activeStream.cancel()
             throw StreamError.protocolError("Server refused login: \(SoftEtherError.describe(Int(err)))")
         }
-        if (w.int("Redirect") ?? 0) != 0 { throw StreamError.protocolError("Server requested a cluster redirect (unsupported)") }
-        let wel = Welcome(sessionName: w.str("session_name") ?? "",
-                          connectionName: w.str("connection_name") ?? "",
-                          timeoutMs: Int(w.int("timeout") ?? 20000),
-                          message: w.data("Msg").map { String(decoding: $0, as: UTF8.self) })
-        welcome = wel
-        log("Session \(wel.sessionName) established")
-        startDataPhase(st, timeoutMs: max(wel.timeoutMs, 500))
-        return wel
+
+        // Handle Cluster Redirect
+        if (w.int("Redirect") ?? 0) != 0 {
+            guard let ticket = w.data("Ticket"), ticket.count == 20 else {
+                activeStream.cancel()
+                throw StreamError.protocolError("Cluster redirect missing 20-byte ticket")
+            }
+            let redirectIP: String
+            if let ipStr = w.str("Ip"), !ipStr.isEmpty {
+                redirectIP = ipStr
+            } else if let ipInt = w.int("Ip") {
+                redirectIP = ipString(ipInt)
+            } else {
+                redirectIP = host
+            }
+            let redirectPort = UInt16(w.int("Port") ?? UInt32(port))
+            activeStream.cancel()
+            return (nil, RedirectInfo(host: redirectIP, port: redirectPort, ticket: ticket))
+        }
+
+        // Parse Welcome packet
+        let sessionKey = w.data("session_key")
+        let maxConn = Int(w.int("max_connection") ?? 1)
+        let useCompress = (w.int("use_compress") ?? 0) != 0
+        let useEncrypt = (w.int("use_encrypt") ?? 0) != 0
+        let halfConn = (w.int("half_connection") ?? 0) != 0
+        let qos = (w.int("qos") ?? 0) != 0
+        let timeoutMs = max(Int(w.int("timeout") ?? 20000), 500)
+        let message = w.data("Msg").map { String(decoding: $0, as: UTF8.self) }
+
+        // Parse UDP acceleration fields
+        let useUdp = (w.int("use_udp_acceleration") ?? 0) != 0
+        let udpVer = Int(w.int("udp_acceleration_version") ?? 1)
+        let udpServerPort = w.int("udp_acceleration_server_port").map { UInt16($0) }
+        let udpServerCookie = w.int("udp_acceleration_server_cookie")
+        let udpClientCookie = w.int("udp_acceleration_client_cookie")
+        let udpKey = w.data("udp_acceleration_server_key_v2") ?? w.data("udp_acceleration_server_key")
+        let udpFastDisconnect = (w.int("udp_accel_fast_disconnect_detect") ?? 0) != 0
+
+        var udpServerIP: String?
+        if let sIp = w.str("udp_acceleration_server_ip"), !sIp.isEmpty {
+            udpServerIP = sIp
+        } else if let sIpInt = w.int("udp_acceleration_server_ip") {
+            udpServerIP = ipString(sIpInt)
+        } else {
+            udpServerIP = host
+        }
+
+        // Initialize active UdpAccel if negotiated
+        if useUdp, let sPort = udpServerPort, let sCookie = udpServerCookie,
+           let cCookie = udpClientCookie, let sKey = udpKey, sKey.count >= 32 {
+            let realUdp = UdpAccel(
+                serverIP: udpServerIP ?? host,
+                serverPort: sPort,
+                myCookie: cCookie,
+                yourCookie: sCookie,
+                myKeyV2: [UInt8](clientKeyV2),
+                yourKeyV2: [UInt8](sKey)
+            )
+            if let realUdp = realUdp {
+                realUdp.onFrame = { [weak self] frame in self?.onFrame?(frame) }
+                realUdp.onByteCount = { [weak self] bIn, bOut in
+                    if bIn > 0 { self?.add(in: bIn) }
+                    if bOut > 0 { self?.add(out: bOut) }
+                }
+                realUdp.start()
+                self.udpAccel = realUdp
+            }
+        }
+
+        let wel = Welcome(
+            sessionName: w.str("session_name") ?? "",
+            connectionName: w.str("connection_name") ?? "",
+            timeoutMs: timeoutMs,
+            message: message,
+            sessionKey: sessionKey,
+            maxConnection: maxConn,
+            useCompress: useCompress,
+            useEncrypt: useEncrypt,
+            halfConnection: halfConn,
+            qos: qos,
+            useUdpAcceleration: useUdp,
+            udpAccelVersion: udpVer,
+            udpServerIp: udpServerIP,
+            udpServerPort: udpServerPort,
+            udpServerCookie: udpServerCookie,
+            udpClientCookie: udpClientCookie,
+            udpServerKey: udpKey,
+            udpFastDisconnect: udpFastDisconnect
+        )
+
+        // Add main stream to ConnectionPool
+        pool.add(stream: activeStream, useCompress: useCompress, timeoutMs: timeoutMs)
+        return (wel, nil)
     }
 
-    private func uploadSignature(_ s: ByteStream, body: Data) async throws -> Pack {
-        try await s.send(httpPost(path: "/vpnsvc/connect.cgi", type: "image/jpeg", body: body))
+    private func uploadSignature(_ s: ByteStream, body: Data, host: String) async throws -> Pack {
+        try await s.send(httpPost(path: "/vpnsvc/connect.cgi", type: "image/jpeg", body: body, host: host))
         return try await readPack(s)
     }
 
@@ -105,7 +367,7 @@ final class SoftEtherClient: VPNTransport {
         return try Pack(parsing: try await s.recv(len))
     }
 
-    private func httpPost(path: String, type: String, body: Data) -> Data {
+    private func httpPost(path: String, type: String, body: Data, host: String) -> Data {
         var h = "POST \(path) HTTP/1.1\r\nHost: \(host)\r\n"
         h += "Content-Type: \(type)\r\nConnection: Keep-Alive\r\nContent-Length: \(body.count)\r\n\r\n"
         return Data(h.utf8) + body
@@ -117,8 +379,25 @@ final class SoftEtherClient: VPNTransport {
         return p
     }
 
+    // MARK: - Login Pack
+
     func loginPack() -> Pack {
+        (try? loginPack(random: Data(repeating: 0, count: 20), auth: self.auth)) ?? Pack()
+    }
+
+    func loginPack(
+        random: Data = Data(repeating: 0, count: 20),
+        auth: ClientAuth? = nil,
+        host: String? = nil,
+        port: UInt16? = nil,
+        clientUdpPort: UInt16 = 0,
+        clientKeyV1: Data = Data(repeating: 0, count: 20),
+        clientKeyV2: Data = Data(repeating: 0, count: 128)
+    ) throws -> Pack {
         var p = Pack()
+        let auth = auth ?? self.auth
+        let host = host ?? self.host
+        let port = port ?? self.port
         let clientVer: UInt32 = 444, build: UInt32 = 9807
         let os = ProcessInfo.processInfo.operatingSystemVersion
         let osVer = "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
@@ -126,9 +405,33 @@ final class SoftEtherClient: VPNTransport {
         let uid = randomBytes(20)
 
         p.addStr("method", "login")
-        p.addStr("hubname", Self.hubName)
-        p.addStr("username", Self.userName)
-        p.addInt("authtype", 0)                       // anonymous
+        p.addStr("hubname", hubName)
+        p.addStr("username", userName)
+
+        // Authentication fields
+        switch auth {
+        case .anonymous:
+            p.addInt("authtype", 0)
+        case .hashedPassword(let pw):
+            p.addInt("authtype", 1)
+            let userUpper = userName.uppercased()
+            let pwData = Array(pw.utf8) + Array(userUpper.utf8)
+            let hashed = SHA0.hash(pwData)
+            let secure = SHA0.hash(hashed + Array(random))
+            p.addData("secure_password", Data(secure))
+        case .plainPassword(let pw):
+            p.addInt("authtype", 2)
+            p.addStr("plain_password", pw)
+        case .certificate(let certDer, let signBlock):
+            p.addInt("authtype", 3)
+            p.addData("cert", certDer)
+            let signature = try signBlock(random)
+            p.addData("sign", signature)
+        case .ticket(let ticket):
+            p.addInt("authtype", 99)
+            p.addData("ticket", ticket)
+        }
+
         p.addStr("client_str", "SoftEther VPN Client")
         p.addInt("client_ver", clientVer)
         p.addInt("client_build", build)
@@ -137,18 +440,32 @@ final class SoftEtherClient: VPNTransport {
         p.addInt("version", clientVer)
         p.addInt("build", build)
         p.addInt("client_id", 0)
-        p.addInt("max_connection", 1)
+        p.addInt("max_connection", UInt32(maxConnectionsConfig))
         p.addBool("use_encrypt", true)
-        p.addBool("use_compress", false)
+        p.addBool("use_compress", useCompressConfig)
         p.addBool("half_connection", false)
         p.addBool("require_bridge_routing_mode", false)
         p.addBool("require_monitor_mode", false)
         p.addBool("qos", false)
-        p.addBool("support_bulk_on_rudp", false)
-        p.addBool("support_hmac_on_bulk_of_rudp", false)
-        p.addBool("support_udp_recovery", false)
+        p.addBool("support_bulk_on_rudp", true)
+        p.addBool("support_hmac_on_bulk_of_rudp", true)
+        p.addBool("support_udp_recovery", true)
         p.addData("unique_id", uid)
-        // node info
+
+        // UDP Acceleration negotiation
+        if useUdpAccelConfig {
+            p.addBool("use_udp_acceleration", true)
+            p.addIPv4("udp_acceleration_client_ip", 0)
+            p.addInt("udp_acceleration_client_port", UInt32(clientUdpPort))
+            p.addData("udp_acceleration_client_key", clientKeyV1)
+            p.addData("udp_acceleration_client_key_v2", clientKeyV2)
+            p.addBool("support_hmac_on_udp_acceleration", true)
+            p.addBool("support_udp_accel_fast_disconnect_detect", true)
+            p.addInt("udp_acceleration_version", 2)
+            p.addInt("udp_acceleration_max_version", 2)
+        }
+
+        // Node info
         p.addStr("ClientProductName", "SoftEther VPN Client")
         p.addStr("ServerProductName", "")
         p.addStr("ClientOsName", "macOS")
@@ -171,94 +488,112 @@ final class SoftEtherClient: VPNTransport {
         return p
     }
 
-    // MARK: data phase
+    // MARK: - Data Services & Multi-TCP
 
-    private func startDataPhase(_ s: ByteStream, timeoutMs: Int) {
-        // Shared idle clock: updated by the reader every time bytes arrive.
-        // The watchdog closes the link if it hasn't moved for `timeoutMs`.
-        let rxLock = NSLock()
-        var lastRxDate = Date()
-        func touchRx() { rxLock.lock(); lastRxDate = Date(); rxLock.unlock() }
-        func idleMs() -> Double { rxLock.lock(); let t = -lastRxDate.timeIntervalSinceNow * 1000; rxLock.unlock(); return t }
+    private func startDataServices(welcome: Welcome) {
+        let timeoutMs = welcome.timeoutMs
+        let useCompress = welcome.useCompress
 
-        let reader = Task.detached { [weak self] in
-            do {
-                var decoder = DataPhaseDecoder()
-                var chunk = s.buffer.takeAll()          // anything that arrived together with the welcome
-                while true {
-                    for item in try decoder.feed(chunk) {
-                        if case .frame(let d) = item {
-                            self?.add(in: d.count)
-                            self?.onFrame?(d)
-                        }
-                    }
-                    chunk = [UInt8](try await s.readChunk())
-                    touchRx()                           // reset idle clock on every received chunk
-                }
-            } catch { self?.close(error) }
-        }
-        let keepAlive = Task.detached { [weak self] in
+        // 1. KeepAlive task
+        keepAliveTask = Task.detached { [weak self] in
             while !Task.isCancelled {
                 let lo = max(timeoutMs / 5, 1000), hi = max(timeoutMs / 2, lo + 1)
                 try? await Task.sleep(nanoseconds: UInt64(Int.random(in: lo...hi)) * 1_000_000)
                 guard let self = self, !Task.isCancelled else { return }
                 let junk = self.randomBytes(Int.random(in: 0..<512))
-                self.enqueue(Data(DataPhase.encodeKeepAlive(junk: [UInt8](junk))))
+                let packet = Data(DataPhase.encodeKeepAlive(junk: [UInt8](junk)))
+                await self.pool.broadcastKeepAlive(packet)
             }
         }
-        // Read-idle watchdog: fires if no bytes (data or keepalive) arrive within timeoutMs.
-        let watchdog = Task.detached { [weak self] in
-            let pollNs = UInt64(max(timeoutMs / 2, 50)) * 1_000_000
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: pollNs)
-                guard !Task.isCancelled else { return }
-                if idleMs() >= Double(timeoutMs) {
-                    self?.close(StreamError.protocolError("Read idle timeout (\(timeoutMs) ms)"))
-                    return
+
+        // 2. Open additional TCP connections if negotiated
+        if welcome.maxConnection > 1, let sessionKey = welcome.sessionKey {
+            let targetCount = min(welcome.maxConnection, self.maxConnectionsConfig)
+            for i in 1..<targetCount {
+                let task = Task.detached { [weak self] in
+                    guard let self = self, !Task.isCancelled else { return }
+                    try? await self.openAdditionalConnection(index: i, sessionKey: sessionKey, useCompress: useCompress, timeoutMs: timeoutMs)
                 }
+                additionalTasks.append(task)
             }
         }
-        sendLock.lock(); tasks = [reader, keepAlive, watchdog]; let alreadyClosed = closed; sendLock.unlock()
-        if alreadyClosed { reader.cancel(); keepAlive.cancel(); watchdog.cancel() }
     }
 
-    /// Queue an Ethernet frame for the hub. Frames are batched into one write when the socket is busy.
+    private func openAdditionalConnection(
+        index: Int,
+        sessionKey: Data,
+        useCompress: Bool,
+        timeoutMs: Int
+    ) async throws {
+        guard !closed else { return }
+        let s = makeStream(host, port, proxy)
+        try await s.start()
+        guard !closed else { s.cancel(); return }
+
+        // Signature
+        _ = try await uploadSignature(s, body: Data("VPNCONNECT".utf8), host: host)
+
+        // Additional Connect Pack
+        var p = Pack()
+        p.addStr("method", "additional_connect")
+        p.addData("session_key", sessionKey)
+        p.addStr("client_str", "SoftEther VPN Client")
+        p.addInt("client_ver", 444)
+        p.addInt("client_build", 9807)
+        p.addInt("direction", 0) // both
+
+        try await s.send(httpPost(path: "/vpnsvc/vpn.cgi", type: "application/octet-stream", body: p.serialize(), host: host))
+        let resp = try await readPack(s)
+        if let err = resp.int("error"), err != 0 {
+            s.cancel()
+            return
+        }
+
+        guard !closed else { s.cancel(); return }
+        pool.add(stream: s, useCompress: useCompress, timeoutMs: timeoutMs)
+    }
+
+    // MARK: - Send Frame
+
     func sendFrame(_ frame: [UInt8]) {
-        guard frame.count <= Self.maxBlock else { return }
+        guard frame.count <= Self.maxBlock, !closed else { return }
+
+        // Try UDP acceleration first if usable
+        if let udp = udpAccel, udp.isUsable {
+            if udp.sendFrame(frame) {
+                return
+            }
+        }
+
+        // Fall back to TCP pool
         sendLock.lock()
         pending.append(frame)
-        sendLock.unlock()
-        enqueue(nil)
-    }
-
-    private func enqueue(_ raw: Data?) {
-        sendLock.lock()
-        if let raw = raw { rawQueue.append(raw) }
         if flushing || closed { sendLock.unlock(); return }
         flushing = true
         sendLock.unlock()
+
         Task.detached { [weak self] in await self?.flush() }
     }
-    private var rawQueue: [Data] = []
 
-    private func takeBatch() -> (frames: [[UInt8]], raws: [Data])? {
+    private func takeBatch() -> [[UInt8]]? {
         sendLock.lock(); defer { sendLock.unlock() }
         let frames = Array(pending.prefix(64)); pending.removeFirst(frames.count)
-        let raws = rawQueue; rawQueue.removeAll()
-        if frames.isEmpty && raws.isEmpty { flushing = false; return nil }
-        return (frames, raws)
+        if frames.isEmpty { flushing = false; return nil }
+        return frames
     }
 
     private func flush() async {
         while true {
-            guard let (frames, raws) = takeBatch() else { return }
-            var out = Data()
-            for r in raws { out.append(r) }
-            if !frames.isEmpty {
-                out.append(contentsOf: DataPhase.encode(frames: frames))
-                add(out: frames.reduce(0) { $0 + $1.count })
+            guard let frames = takeBatch() else { return }
+            let useCompress = welcome?.useCompress ?? false
+            let encoded = DataPhase.encode(frames: frames, useCompress: useCompress)
+            let totalBytes = frames.reduce(0) { $0 + $1.count }
+            do {
+                try await pool.send(data: Data(encoded), byteCount: totalBytes)
+            } catch {
+                close(error)
+                return
             }
-            do { try await stream?.send(out) } catch { close(error); return }
         }
     }
 
@@ -266,10 +601,12 @@ final class SoftEtherClient: VPNTransport {
         sendLock.lock()
         if closed { sendLock.unlock(); return }
         closed = true
-        let ts = tasks
         sendLock.unlock()
-        ts.forEach { $0.cancel() }
-        stream?.cancel()
+
+        keepAliveTask?.cancel()
+        additionalTasks.forEach { $0.cancel() }
+        udpAccel?.stop()
+        pool.close(error)
         onClose?(error)
     }
 
