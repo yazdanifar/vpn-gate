@@ -37,7 +37,15 @@ func registerHandshakeTests() {
     test("handshake/login-error-is-reported") {
         let s = FakeSoftEtherServer(); s.loginError = 3
         let e = await connectFails(s)
-        expect(e?.contains("error 3") == true, "got \(e ?? "success")")
+        // Error message now includes the symbolic name from SoftEtherError
+        expect(e?.contains("ERR_DISCONNECTED") == true, "got \(e ?? "success")")
+        expect(e?.contains("(3)") == true, "got \(e ?? "success")")
+    }
+    test("handshake/login-error-unknown-code-is-reported") {
+        let s = FakeSoftEtherServer(); s.loginError = 999
+        let e = await connectFails(s)
+        expect(e?.contains("ERR_999") == true, "got \(e ?? "success")")
+        expect(e?.contains("Unknown server error") == true, "got \(e ?? "success")")
     }
     test("handshake/missing-random-is-not-softether") {
         let s = FakeSoftEtherServer(); s.omitRandom = true
@@ -155,5 +163,18 @@ func registerHandshakeTests() {
         expectEqual(seen.value, p)
         expectEqual(s.logins[0].str("ProxyHostname"), "px")
         c.close(nil)
+    }
+    test("dataphase/read-idle-watchdog-closes-link", timeout: 10) {
+        // Use a very short timeout so the watchdog fires quickly in tests.
+        let s = FakeSoftEtherServer(); s.welcomeTimeoutMs = 500   // 500 ms idle timeout
+        let c = client(s)
+        let closed = Locked<Error?>(nil)
+        c.onClose = { e in closed.update { $0 = e } }
+        _ = try await c.connect { _ in }
+        // Don't deliver any bytes — the watchdog should fire within ~500 ms.
+        let fired = await eventually(5) { closed.value != nil }
+        expect(fired, "watchdog did not fire within 5 s")
+        expect(closed.value?.localizedDescription.contains("idle") == true,
+               "expected idle-timeout error, got \(String(describing: closed.value))")
     }
 }

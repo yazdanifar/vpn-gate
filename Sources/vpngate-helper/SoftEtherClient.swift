@@ -77,7 +77,9 @@ final class SoftEtherClient: VPNTransport {
         try await st.send(httpPost(path: "/vpnsvc/vpn.cgi", type: "application/octet-stream",
                                    body: withDummy(loginPack()).serialize()))
         let w = try await readPack(st)
-        if let err = w.int("error"), err != 0 { throw StreamError.protocolError("Server refused login (error \(err))") }
+        if let err = w.int("error"), err != 0 {
+            throw StreamError.protocolError("Server refused login: \(SoftEtherError.describe(Int(err)))")
+        }
         if (w.int("Redirect") ?? 0) != 0 { throw StreamError.protocolError("Server requested a cluster redirect (unsupported)") }
         let wel = Welcome(sessionName: w.str("session_name") ?? "",
                           connectionName: w.str("connection_name") ?? "",
@@ -117,7 +119,7 @@ final class SoftEtherClient: VPNTransport {
 
     func loginPack() -> Pack {
         var p = Pack()
-        let clientVer: UInt32 = 443, build: UInt32 = 9799
+        let clientVer: UInt32 = 444, build: UInt32 = 9807
         let os = ProcessInfo.processInfo.operatingSystemVersion
         let osVer = "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
         let hostname = ProcessInfo.processInfo.hostName
@@ -172,6 +174,13 @@ final class SoftEtherClient: VPNTransport {
     // MARK: data phase
 
     private func startDataPhase(_ s: ByteStream, timeoutMs: Int) {
+        // Shared idle clock: updated by the reader every time bytes arrive.
+        // The watchdog closes the link if it hasn't moved for `timeoutMs`.
+        let rxLock = NSLock()
+        var lastRxDate = Date()
+        func touchRx() { rxLock.lock(); lastRxDate = Date(); rxLock.unlock() }
+        func idleMs() -> Double { rxLock.lock(); let t = -lastRxDate.timeIntervalSinceNow * 1000; rxLock.unlock(); return t }
+
         let reader = Task.detached { [weak self] in
             do {
                 var decoder = DataPhaseDecoder()
@@ -184,6 +193,7 @@ final class SoftEtherClient: VPNTransport {
                         }
                     }
                     chunk = [UInt8](try await s.readChunk())
+                    touchRx()                           // reset idle clock on every received chunk
                 }
             } catch { self?.close(error) }
         }
@@ -196,8 +206,20 @@ final class SoftEtherClient: VPNTransport {
                 self.enqueue(Data(DataPhase.encodeKeepAlive(junk: [UInt8](junk))))
             }
         }
-        sendLock.lock(); tasks = [reader, keepAlive]; let alreadyClosed = closed; sendLock.unlock()
-        if alreadyClosed { reader.cancel(); keepAlive.cancel() }
+        // Read-idle watchdog: fires if no bytes (data or keepalive) arrive within timeoutMs.
+        let watchdog = Task.detached { [weak self] in
+            let pollNs = UInt64(max(timeoutMs, 1000)) * 1_000_000
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: pollNs)
+                guard !Task.isCancelled else { return }
+                if idleMs() >= Double(timeoutMs) {
+                    self?.close(StreamError.protocolError("Read idle timeout (\(timeoutMs) ms)"))
+                    return
+                }
+            }
+        }
+        sendLock.lock(); tasks = [reader, keepAlive, watchdog]; let alreadyClosed = closed; sendLock.unlock()
+        if alreadyClosed { reader.cancel(); keepAlive.cancel(); watchdog.cancel() }
     }
 
     /// Queue an Ethernet frame for the hub. Frames are batched into one write when the socket is busy.
