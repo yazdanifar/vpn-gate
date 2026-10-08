@@ -79,6 +79,7 @@ public struct DHCPMessage {
     public var router: UInt32?
     public var dns: [UInt32] = []
     public var leaseSeconds: UInt32?
+    public var mtu: UInt16?
 
     public init(type: DHCPType, xid: UInt32, mac: MAC) { self.type = type; self.xid = xid; self.mac = mac }
 
@@ -92,7 +93,7 @@ public struct DHCPMessage {
         b += [53, 1, type.rawValue]
         if let r = requestedIP { b += [50, 4] + be32(r) }
         if let s = serverID { b += [54, 4] + be32(s) }
-        b += [55, 4, 1, 3, 6, 51]
+        b += [55, 5, 1, 3, 6, 51, 26]                                  // parameter request list includes option 26 (MTU)
         b += [255]
         return b
     }
@@ -116,6 +117,7 @@ public struct DHCPMessage {
             case 3 where l >= 4: router = rd32(p, s)
             case 6 where l >= 4: dns = stride(from: 0, to: l - 3, by: 4).map { rd32(p, s + $0) }
             case 51 where l == 4: leaseSeconds = rd32(p, s)
+            case 26 where l == 2: mtu = UInt16(rd16(p, s))
             default: break
             }
             i = s + l
@@ -141,3 +143,90 @@ public enum UDP {
         return (rd16(p, 0), rd16(p, 2), Array(p[8..<len]))
     }
 }
+
+// MARK: - IPv6 & NDP Packets
+
+public enum IPv6 {
+    public static func header(src: [UInt8], dst: [UInt8], nextHeader: UInt8, payloadLen: Int, hopLimit: UInt8 = 64) -> [UInt8] {
+        var h = [UInt8]()
+        h.reserveCapacity(40)
+        // Version (6) + Traffic Class (0) + Flow Label (0) = 0x60000000
+        h += [0x60, 0x00, 0x00, 0x00]
+        h += be16(payloadLen)
+        h.append(nextHeader)
+        h.append(hopLimit)
+        h += src
+        h += dst
+        return h
+    }
+
+    public static func parse(_ p: [UInt8]) -> (nextHeader: UInt8, src: [UInt8], dst: [UInt8], payload: [UInt8])? {
+        guard p.count >= 40, (p[0] >> 4) == 6 else { return nil }
+        let payloadLen = min(rd16(p, 4), p.count - 40)
+        let nextHeader = p[6]
+        let src = Array(p[8..<24])
+        let dst = Array(p[24..<40])
+        let payload = Array(p[40..<40 + payloadLen])
+        return (nextHeader, src, dst, payload)
+    }
+
+    /// EUI-64 link-local address generation from 48-bit MAC: fe80::(mac with bit 1 flipped)
+    public static func linkLocal(mac: MAC) -> [UInt8] {
+        guard mac.count == 6 else { return [UInt8](repeating: 0, count: 16) }
+        var addr: [UInt8] = [0xfe, 0x80, 0, 0, 0, 0, 0, 0]
+        addr.append(mac[0] ^ 0x02) // invert universal/local bit
+        addr.append(mac[1])
+        addr.append(mac[2])
+        addr.append(0xff)
+        addr.append(0xfe)
+        addr.append(mac[3])
+        addr.append(mac[4])
+        addr.append(mac[5])
+        return addr
+    }
+
+    /// Solicited-node multicast address for IPv6: ff02::1:ffXX:XXXX
+    public static func solicitedNodeMulticast(ip: [UInt8]) -> [UInt8] {
+        guard ip.count == 16 else { return [UInt8](repeating: 0, count: 16) }
+        return [0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0xff, ip[13], ip[14], ip[15]]
+    }
+
+    /// Ethernet multicast MAC for IPv6: 33:33:XX:XX:XX:XX
+    public static func multicastMAC(ip: [UInt8]) -> MAC {
+        guard ip.count == 16 else { return [0x33, 0x33, 0, 0, 0, 0] }
+        return [0x33, 0x33, ip[12], ip[13], ip[14], ip[15]]
+    }
+}
+
+public enum ICMPv6 {
+    public static func checksum(src: [UInt8], dst: [UInt8], icmpPayload: [UInt8]) -> UInt16 {
+        var pseudo = src + dst + [0, 0] + be16(icmpPayload.count) + [0, 0, 0, 58] // next header 58
+        pseudo += icmpPayload
+        return VPNGateCore.checksum(pseudo)
+    }
+
+    /// Router Solicitation (Type 133)
+    public static func routerSolicitation(srcMAC: MAC, srcIP: [UInt8]) -> [UInt8] {
+        var icmp: [UInt8] = [133, 0, 0, 0, 0, 0, 0, 0] // Type, Code, Checksum (0), Reserved
+        // Option 1: Source Link-Layer Address (8 bytes: type 1, len 1, MAC 6 bytes)
+        icmp += [1, 1] + srcMAC
+        let dstIP: [UInt8] = [0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2] // all-routers
+        let c = checksum(src: srcIP, dst: dstIP, icmpPayload: icmp)
+        icmp[2] = UInt8(c >> 8); icmp[3] = UInt8(c & 0xff)
+        return icmp
+    }
+
+    /// Neighbor Advertisement (Type 136) in response to Neighbor Solicitation (Type 135)
+    public static func neighborAdvertisement(targetIP: [UInt8], targetMAC: MAC, srcIP: [UInt8], dstIP: [UInt8]) -> [UInt8] {
+        var icmp: [UInt8] = [136, 0, 0, 0] // Type, Code, Checksum
+        // Flags: Solicited (0x40) | Override (0x20) = 0x60, 3 reserved bytes
+        icmp += [0x60, 0, 0, 0]
+        icmp += targetIP
+        // Option 2: Target Link-Layer Address (type 2, len 1, MAC 6 bytes)
+        icmp += [2, 1] + targetMAC
+        let c = checksum(src: srcIP, dst: dstIP, icmpPayload: icmp)
+        icmp[2] = UInt8(c >> 8); icmp[3] = UInt8(c & 0xff)
+        return icmp
+    }
+}
+

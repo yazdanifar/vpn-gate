@@ -17,9 +17,13 @@ final class FDPacketReader {
     private var running = false
     private var stopped = DispatchSemaphore(value: 0)
     private var wake: (read: Int32, write: Int32) = (-1, -1)
+    var forwardIPv6: Bool = false
     var onPacket: (([UInt8]) -> Void)?
 
-    init(fd: Int32) { self.fd = fd }
+    init(fd: Int32, forwardIPv6: Bool = false) {
+        self.fd = fd
+        self.forwardIPv6 = forwardIPv6
+    }
 
     func startReading() {
         var p: [Int32] = [0, 0]
@@ -28,6 +32,7 @@ final class FDPacketReader {
         guard fd >= 0, !running else { lock.unlock(); Darwin.close(p[0]); Darwin.close(p[1]); return }
         running = true; wake = (p[0], p[1])
         let fd = self.fd
+        let forward6 = self.forwardIPv6
         lock.unlock()
         Thread.detachNewThread { [weak self] in
             var buf = [UInt8](repeating: 0, count: 65536)
@@ -41,8 +46,12 @@ final class FDPacketReader {
                 let n = read(fd, &buf, buf.count)
                 if n < 0 { if errno == EAGAIN || errno == EINTR { continue }; break loop }
                 if n <= 4 { continue }
-                // header is the AF; only forward IPv4
-                if buf[3] == 2, let self = self { self.onPacket?(Array(buf[4..<n])) }
+                // header is the AF: 2 = AF_INET (IPv4), 30 = AF_INET6 (IPv6)
+                if buf[3] == 2, let self = self {
+                    self.onPacket?(Array(buf[4..<n]))
+                } else if forward6 && buf[3] == 30, let self = self {
+                    self.onPacket?(Array(buf[4..<n]))
+                }
             }
             self?.stopped.signal()
         }
@@ -52,6 +61,13 @@ final class FDPacketReader {
         lock.lock(); defer { lock.unlock() }
         guard fd >= 0 else { return }
         let out: [UInt8] = [0, 0, 0, 2] + packet
+        _ = out.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, out.count) }
+    }
+
+    func write(ipv6 packet: [UInt8]) {
+        lock.lock(); defer { lock.unlock() }
+        guard fd >= 0 else { return }
+        let out: [UInt8] = [0, 0, 0, 30] + packet // 30 = AF_INET6 on macOS
         _ = out.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, out.count) }
     }
 
@@ -118,5 +134,6 @@ final class Utun: TunDevice {
 
     func startReading() { reader.startReading() }
     func write(ipv4 packet: [UInt8]) { reader.write(ipv4: packet) }
+    func write(ipv6 packet: [UInt8]) { reader.write(ipv6: packet) }
     func close() { reader.close() }
 }

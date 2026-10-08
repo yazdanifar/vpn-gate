@@ -21,7 +21,12 @@ protocol TunDevice: AnyObject {
     var onPacket: (([UInt8]) -> Void)? { get set }
     func startReading()
     func write(ipv4 packet: [UInt8])
+    func write(ipv6 packet: [UInt8])
     func close()
+}
+
+extension TunDevice {
+    func write(ipv6 packet: [UInt8]) {}
 }
 
 protocol CommandRunner {

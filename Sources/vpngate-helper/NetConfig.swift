@@ -105,7 +105,8 @@ final class NetConfig: NetConfiguring {
         state = st
         save()
 
-        runner.run("/sbin/ifconfig", [iface, "inet", ip, gw, "netmask", "255.255.255.255", "mtu", "1400", "up"])
+        let mtuVal = lease.mtu.map(String.init) ?? "1400"
+        runner.run("/sbin/ifconfig", [iface, "inet", ip, gw, "netmask", "255.255.255.255", "mtu", mtuVal, "up"])
         // Keep the tunnel's own transport outside the tunnel (never for loopback/link-local proxies).
         if !InputValidation.isLocalAddress(bypassHost), let o = orig {
             if let g = o.gateway { addRoute(["-host", bypassHost, g], undo: ["-host", bypassHost]) }

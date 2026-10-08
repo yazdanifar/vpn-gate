@@ -285,9 +285,11 @@ final class VPNSession: SessionControlling {
         let tun = try deps.makeTun()
         guard withResources(r, { $0.tun = tun }) else { tun.close(); throw CancellationError() }
         let bridge = EthernetBridge(timing: timing.bridge)
+        bridge.handleIPv6 = !config.blockIPv6
         guard withResources(r, { $0.bridge = bridge }) else { throw CancellationError() }
         bridge.sendFrame = { [weak client] in client?.sendFrame($0) }
         bridge.deliverIPv4 = { [weak tun] in tun?.write(ipv4: $0) }
+        bridge.deliverIPv6 = { [weak tun] in tun?.write(ipv6: $0) }
         bridge.onLeaseChanged = { [weak client] _ in client?.close(StreamError.protocolError("DHCP address changed")) }
         bridge.onLeaseLost = { [weak client] in client?.close(StreamError.protocolError("DHCP lease lost")) }
         client.onFrame = { [weak bridge] in bridge?.fromHub($0) }

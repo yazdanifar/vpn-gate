@@ -8,6 +8,7 @@ struct Lease: Equatable {
     var dns: [UInt32]
     var seconds: UInt32
     var serverID: UInt32
+    var mtu: UInt16?
 }
 
 struct BridgeTiming {
@@ -38,10 +39,14 @@ final class EthernetBridge {
 
     var sendFrame: (([UInt8]) -> Void)?       // to hub
     var deliverIPv4: (([UInt8]) -> Void)?     // to utun
+    var deliverIPv6: (([UInt8]) -> Void)?     // to utun
     var onLeaseChanged: ((Lease) -> Void)?    // renew returned a different address/router
     var onLeaseLost: (() -> Void)?            // renew got no answer or a NAK
     var now: () -> Date = Date.init
     private let timing: BridgeTiming
+    var handleIPv6: Bool = true
+    private(set) var ipv6Prefix: [UInt8]?
+    private(set) var routerIPv6: [UInt8]?
 
     init(timing: BridgeTiming = BridgeTiming()) {
         self.timing = timing
@@ -75,7 +80,8 @@ final class EthernetBridge {
                           router: reply.router ?? offer.router ?? 0,
                           dns: reply.dns.isEmpty ? offer.dns : reply.dns,
                           seconds: reply.leaseSeconds ?? 3600,
-                          serverID: reply.serverID ?? offer.serverID ?? 0)
+                          serverID: reply.serverID ?? offer.serverID ?? 0,
+                          mtu: reply.mtu ?? offer.mtu)
             setLease(l)
             return l
         }
@@ -160,14 +166,57 @@ final class EthernetBridge {
             }
             lock.lock(); let have = lease != nil; lock.unlock()
             if have { deliverIPv4?(payload) }
+        case 0x86DD:
+            guard handleIPv6, forUs else { return }
+            guard let v6 = IPv6.parse(payload) else { return }
+            // Handle ICMPv6
+            if v6.nextHeader == 58, v6.payload.count >= 4 {
+                let icmpType = v6.payload[0]
+                let myLinkLocal = IPv6.linkLocal(mac: mac)
+                if icmpType == 135 && v6.payload.count >= 24 { // Neighbor Solicitation
+                    let targetIP = Array(v6.payload[8..<24])
+                    if targetIP == myLinkLocal {
+                        // Respond with Neighbor Advertisement
+                        let na = ICMPv6.neighborAdvertisement(targetIP: targetIP, targetMAC: mac, srcIP: myLinkLocal, dstIP: v6.src)
+                        let ipPacket = IPv6.header(src: myLinkLocal, dst: v6.src, nextHeader: 58, payloadLen: na.count) + na
+                        let dstMAC = (v6.src[0] == 0xff) ? IPv6.multicastMAC(ip: v6.src) : dst
+                        sendFrame?(Ethernet.frame(dst: dstMAC, src: mac, type: 0x86DD, payload: ipPacket))
+                    }
+                } else if icmpType == 134 && v6.payload.count >= 16 { // Router Advertisement
+                    lock.lock()
+                    routerIPv6 = v6.src
+                    // Parse options for prefix information (Type 3)
+                    var optIdx = 16
+                    while optIdx + 8 <= v6.payload.count {
+                        let optType = v6.payload[optIdx]
+                        let optLen = Int(v6.payload[optIdx + 1]) * 8
+                        guard optLen > 0, optIdx + optLen <= v6.payload.count else { break }
+                        if optType == 3 && optLen >= 32 { // Prefix Information
+                            let prefixLen = v6.payload[optIdx + 2]
+                            if prefixLen == 64 {
+                                ipv6Prefix = Array(v6.payload[optIdx + 16..<optIdx + 32])
+                            }
+                        }
+                        optIdx += optLen
+                    }
+                    lock.unlock()
+                }
+            }
+            deliverIPv6?(payload)
         default:
-            break   // IPv6 and others are dropped to avoid leaks around the tunnel
+            break
         }
     }
 
     // MARK: host -> hub
 
     func fromHost(_ pkt: [UInt8]) {
+        guard !pkt.isEmpty else { return }
+        let version = pkt[0] >> 4
+        if version == 6 {
+            fromHostIPv6(pkt)
+            return
+        }
         guard pkt.count >= 20 else { return }
         let t = now()
         lock.lock()
@@ -203,10 +252,29 @@ final class EthernetBridge {
         }
     }
 
+    private func fromHostIPv6(_ pkt: [UInt8]) {
+        guard handleIPv6, pkt.count >= 40 else { return }
+        guard let v6 = IPv6.parse(pkt) else { return }
+        let dstMAC: MAC
+        if v6.dst[0] == 0xff { // Multicast
+            dstMAC = IPv6.multicastMAC(ip: v6.dst)
+        } else {
+            dstMAC = broadcastMAC
+        }
+        sendFrame?(Ethernet.frame(dst: dstMAC, src: mac, type: 0x86DD, payload: pkt))
+    }
+
     /// Announce ourselves so the hub learns our MAC/IP.
     func gratuitousARP() {
         guard let l = currentLease() else { return }
         let a = ARPPacket(op: 1, senderMAC: mac, senderIP: l.ip, targetMAC: [0,0,0,0,0,0], targetIP: l.ip)
         sendFrame?(Ethernet.frame(dst: broadcastMAC, src: mac, type: 0x0806, payload: a.encode()))
+        if handleIPv6 {
+            let myLinkLocal = IPv6.linkLocal(mac: mac)
+            let rs = ICMPv6.routerSolicitation(srcMAC: mac, srcIP: myLinkLocal)
+            let allRouters: [UInt8] = [0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]
+            let rsPacket = IPv6.header(src: myLinkLocal, dst: allRouters, nextHeader: 58, payloadLen: rs.count) + rs
+            sendFrame?(Ethernet.frame(dst: IPv6.multicastMAC(ip: allRouters), src: mac, type: 0x86DD, payload: rsPacket))
+        }
     }
 }
