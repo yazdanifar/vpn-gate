@@ -16,6 +16,7 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Connection") {
+                Toggle("Launch at login", isOn: $model.launchAtLogin)
                 Toggle("Reconnect automatically", isOn: $model.autoReconnect)
                 Toggle("Block IPv6 while connected (prevents leaks)", isOn: $model.blockIPv6)
                 Picker("Proxy", selection: $model.proxyKind) {

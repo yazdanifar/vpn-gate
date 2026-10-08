@@ -34,7 +34,7 @@ cat > "$STAGE/distribution.xml" <<XML
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
   <title>VPN Gate</title>
-  <options customize="never" require-scripts="false" hostArchitectures="arm64"/>
+  <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
   <choices-outline><line choice="default"/></choices-outline>
   <choice id="default" title="VPN Gate">
     <pkg-ref id="com.yazdanifar.VPNGateMac"/><pkg-ref id="com.yazdanifar.vpngate.helper"/>

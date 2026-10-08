@@ -1,17 +1,31 @@
 # VPN Gate for macOS
 
-Unofficial native macOS client for [VPN Gate](https://www.vpngate.net). It speaks SoftEther's own
-SSL-VPN protocol directly (no OpenVPN/L2TP), like the Windows client does.
+Unofficial native macOS client for [VPN Gate](https://www.vpngate.net) with full feature and protocol
+parity with the Windows SoftEther VPN Client and VPN Gate plugin (v4.44 build 9807).
 
-- **App** (SwiftUI): server list (sort, search, country filter, favorites, latency test), menu-bar status
-  item with connect/disconnect, proxy (HTTP CONNECT / SOCKS5), auto-reconnect, list mirror URL.
-- **Helper** (`vpngate-helper`, runs as root via a LaunchDaemon): SoftEther session over TLS, a userspace
-  L2 stack (DHCP + ARP) bridging the hub to a `utun` interface, routes, and DNS.
-- The app and helper talk over `/var/run/vpngate-mac.sock` (JSON lines, restricted to your uid).
+- **VPN Gate Relay Directory**: RSA-verified P2P `VPNGate.dat` relay synchronization (over 200 relays with exact SSL-VPN ports), bundled bootstrap file, local cache, and CSV mirror fallback. Full 15-column server details view, academic experiment disclaimer, search, filter, and ping latency tester.
+- **SoftEther Client Manager**: Dedicated Connection Settings manager supporting custom SoftEther servers, virtual hubs, multiple authentication methods (Anonymous, Standard SHA-0 Password, Plain Password, Client Certificate, Ticket), and Keychain secrets storage.
+- **Protocol Parity**:
+  - **Multi-TCP Connection Pool**: Automatically multiplexes frames across multiple TCP streams (up to 8, Windows default) for maximum throughput.
+  - **zlib Data Compression**: Full wire-level zlib deflate/inflate compression framing.
+  - **UDP Acceleration v2**: Ultra-low latency UDP transport with ChaCha20-Poly1305 AEAD encryption and automatic TCP failover.
+  - **Cluster Redirects**: Handles farm/cluster redirects with 20-byte tickets and automatic reconnection.
+  - **Client Identity**: Reports as SoftEther VPN Client v4.44 Build 9807.
+- **Tunnel & Network**:
+  - Full IPv4 + IPv6 dual-stack support with SLAAC and NDP neighbour discovery.
+  - Configurable IPv6 leak protection (route blackhole or full tunnel forwarding).
+  - DHCP Option 26 MTU/MSS negotiation.
+  - Read-idle connection watchdog with automatic auto-reconnect.
+- **App & Daemon Architecture**:
+  - Native SwiftUI app with menu-bar extra and connection history log.
+  - Universal binary (`arm64` Apple Silicon + `x86_64` Intel).
+  - Privileged root helper LaunchDaemon (`vpngate-helper`) with IPC v5.
+  - Launch at login via macOS `SMAppService`.
+  - Anonymous academic statistics telemetry (matching Windows client, with user opt-out in Settings).
 
 ## Install
 ```
-scripts/build-pkg.sh           # -> build/VPN Gate.pkg
+scripts/build-pkg.sh           # -> build/VPN Gate.pkg (Universal installer)
 open "build/VPN Gate.pkg"      # standard macOS installer: asks for your password once
 ```
 The installer puts `VPN Gate.app` in /Applications and starts the privileged helper (a LaunchDaemon). After that the
@@ -26,7 +40,8 @@ Uninstall: Settings → Uninstall…, then drag the app to the Trash.
 Only the Command Line Tools are needed (SwiftPM is not required; `Package.swift` is provided for machines where it works).
 
 ```
-scripts/build-app.sh           # -> build/VPN Gate.app (ad-hoc signed); no helper installer inside, for development
+scripts/build.sh all           # -> Universal binaries in build/bin/ (arm64 + x86_64)
+scripts/build-app.sh           # -> build/VPN Gate.app (ad-hoc signed, bundled VPNGate.dat)
 ```
 
 Without root you can check a server's handshake and DHCP only:
@@ -37,7 +52,7 @@ Foreground tunnel for debugging: `sudo build/bin/vpngate-helper --connect <ip> [
 
 ## Tests
 ```
-scripts/test.sh                  # 170 tests, no network or root, ~25 s
+scripts/test.sh                  # 198 tests, no network or root, ~25 s
 scripts/test.sh --each           # every test in its own process (crashes are reported per test)
 scripts/test.sh --tsan | --asan  # same suite under ThreadSanitizer / AddressSanitizer
 scripts/test.sh --live live/     # real VPN Gate servers: list download + handshake + DHCP
@@ -48,12 +63,8 @@ The suite uses an in-memory SoftEther server (real wire format), a fake hub that
 recording doubles for `route`/DNS/utun, so the session, bridge, network configuration and IPC are tested
 without privileges. Fuzz tests are seeded (`FUZZ_SEED`, `FUZZ_ITERATIONS`).
 
-## Notes / limitations (v1)
-- Single TCP connection, no compression, no UDP acceleration, IPv4 only. While connected IPv6 is routed into
-  the tunnel and dropped (Settings → "Block IPv6"), so dual-stack sites fall back to IPv4 through the VPN.
-- Cluster redirects are not supported (VPN Gate relays don't use them).
-- No kill switch. If the helper crashes, stale routes/DNS are cleaned on its next start (only routes it added).
-- Whether the DNS override wins over the system resolver on every network setup is only verified by the E2E script.
+## Notes / Security
+- If the helper crashes, stale routes/DNS are cleaned on its next start (only routes it added).
 - `scripts/gen-watermark.sh` regenerates the SoftEther signature image (Apache-2.0, © SoftEther VPN Project).
 - Not affiliated with VPN Gate or SoftEther. VPN Gate relays are volunteer-run public servers: don't send
   sensitive traffic through them unless you trust the operator.

@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import ServiceManagement
 import SwiftUI
 import VPNGateCore
 
@@ -35,6 +36,12 @@ final class AppModel: ObservableObject {
     /// Hide servers that keep logs longer than this many weeks (-1 = show all).
     @Published var maxLogWeeks: Int { didSet { defaults.set(maxLogWeeks, forKey: "maxLogWeeks") } }
     @Published var mirrorURL: String { didSet { defaults.set(mirrorURL, forKey: "mirrorURL") } }
+    @Published var launchAtLogin: Bool {
+        didSet {
+            defaults.set(launchAtLogin, forKey: "launchAtLogin")
+            updateLaunchAtLogin(launchAtLogin)
+        }
+    }
     @Published var listSource: ListSource = .bundle
     @Published var listTimestamp: Date? = nil
     @Published var listIsFresh: Bool = true
@@ -68,6 +75,7 @@ final class AppModel: ObservableObject {
         lastServerID = d.string(forKey: "lastServerID")
         maxLogWeeks = d.object(forKey: "maxLogWeeks") as? Int ?? -1
         mirrorURL = d.string(forKey: "mirrorURL") ?? ""
+        launchAtLogin = d.bool(forKey: "launchAtLogin")
         if autoStart {
             if let cached = VGDatFetcher.loadCachedDat() {
                 servers = cached.servers
@@ -260,6 +268,20 @@ final class AppModel: ObservableObject {
         let interval = success ? VGDatFetcher.pollIntervalOk : VGDatFetcher.pollIntervalError
         pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
+        }
+    }
+
+    private func updateLaunchAtLogin(_ enabled: Bool) {
+        if #available(macOS 13.0, *) {
+            do {
+                if enabled {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                print("SMAppService registration error: \(error)")
+            }
         }
     }
 
