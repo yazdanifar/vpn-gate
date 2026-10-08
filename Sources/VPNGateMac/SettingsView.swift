@@ -34,6 +34,14 @@ struct SettingsView: View {
                 TextField("Mirror URL (optional)", text: $model.mirrorURL)
                 Text("Used first when set, e.g. if vpngate.net is blocked.").font(.caption).foregroundStyle(.secondary)
             }
+            Section("Academic Research & Telemetry") {
+                Toggle("Send anonymous usage statistics", isOn: $model.statistics.isEnabled)
+                Text("VPN Gate is an academic research experiment. Transmits client build number, OS name, and an anonymous host hash every 10 minutes. No personal info or traffic contents are ever collected.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let status = model.statistics.lastStatus {
+                    Text(status).font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Section("Log") {
                 ScrollView {
                     Text(model.logLines.joined(separator: "\n")).font(.system(.caption, design: .monospaced))

@@ -39,6 +39,7 @@ final class AppModel: ObservableObject {
     @Published var listTimestamp: Date? = nil
     @Published var listIsFresh: Bool = true
     @Published var activeAccount: ClientAccount? = nil
+    @ObservedObject public var statistics = VGStatistics()
     public let accountManager = AccountManager()
 
     private let helper: HelperClient

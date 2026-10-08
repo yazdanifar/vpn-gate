@@ -7,6 +7,9 @@ final class ListState: ObservableObject {
     @Published var favoritesOnly = false
     @Published var selection: VPNServer.ID?
     @Published var sortOrder = [KeyPathComparator(\VPNServer.score, order: .reverse)]
+    @Published var showingDetails = false
+    @Published var showingDisclaimer = false
+    @Published var selectedServerForDetails: VPNServer? = nil
 }
 
 private let logChoices: [(label: String, weeks: Int)] = [("Any logging", -1), ("≤ 2 weeks", 2), ("≤ 1 month", 5), ("No logs", 0)]
@@ -64,18 +67,28 @@ struct ServerListView: View {
     /// One button for both directions: Connect (to the selected server) when disconnected, otherwise
     /// Disconnect — or Cancel while a connection is still being established.
     @ViewBuilder private var connectionButton: some View {
-        switch model.event.state {
-        case .disconnected:
-            Button("Connect") { if let s = selected { model.connect(s) } }
-                .keyboardShortcut(.defaultAction)
-                .disabled(selected == nil)
-                .help(selected == nil ? "Select a server first" : "Connect to the selected server")
-        case .connected:
-            Button("Disconnect") { model.disconnect() }
-                .keyboardShortcut(.defaultAction)
-        default:
-            Button("Cancel") { model.disconnect() }
-                .keyboardShortcut(.defaultAction)
+        HStack(spacing: 8) {
+            Button("Details") {
+                if let s = selected {
+                    ui.selectedServerForDetails = s
+                    ui.showingDetails = true
+                }
+            }
+            .disabled(selected == nil)
+
+            switch model.event.state {
+            case .disconnected:
+                Button("Connect") { if let s = selected { model.connect(s) } }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(selected == nil)
+                    .help(selected == nil ? "Select a server first" : "Connect to the selected server")
+            case .connected:
+                Button("Disconnect") { model.disconnect() }
+                    .keyboardShortcut(.defaultAction)
+            default:
+                Button("Cancel") { model.disconnect() }
+                    .keyboardShortcut(.defaultAction)
+            }
         }
     }
 
@@ -131,7 +144,7 @@ struct ServerListView: View {
                 }.width(100)
                 TableColumn("Operator / Logs", value: \.operatorName) { s in
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(s.operatorName).lineLimit(1)
+                        Text(s.operatorName.isEmpty ? "Anonymous" : s.operatorName).lineLimit(1)
                         Text("logs: \(s.logType)").font(.caption).foregroundStyle(.secondary)
                     }
                 }.width(min: 140)
@@ -139,6 +152,10 @@ struct ServerListView: View {
             .contextMenu(forSelectionType: VPNServer.ID.self) { ids in
                 if let s = model.servers.first(where: { ids.contains($0.id) }) {
                     if model.event.state == .disconnected { Button("Connect") { model.connect(s) } }
+                    Button("View Details…") {
+                        ui.selectedServerForDetails = s
+                        ui.showingDetails = true
+                    }
                     Button(model.favorites.contains(s.id) ? "Remove favorite" : "Add favorite") { model.toggleFavorite(s) }
                 }
             } primaryAction: { ids in
@@ -154,13 +171,128 @@ struct ServerListView: View {
             }.padding(8)
         }
         .frame(minWidth: 980, minHeight: 520)
+        .sheet(isPresented: $ui.showingDetails) {
+            if let s = ui.selectedServerForDetails {
+                ServerDetailsSheet(server: s)
+            }
+        }
+        .sheet(isPresented: $ui.showingDisclaimer) {
+            AcademicDisclaimerSheet(isPresented: $ui.showingDisclaimer)
+        }
         .alert(setupTitle, isPresented: Binding(get: { model.setupPrompt != nil }, set: { if !$0 { model.cancelSetup() } })) {
             Button("Continue") { model.beginSetup() }
             Button("Not Now", role: .cancel) { model.cancelSetup() }
         } message: {
             Text("VPN Gate needs a small background component to create the VPN connection. macOS will open its standard installer and ask for your password once. After that, VPN Gate connects by itself.")
         }
-        .onAppear { if model.servers.isEmpty { model.refresh() } }
+        .onAppear {
+            if !UserDefaults.standard.bool(forKey: "hasAgreedToDisclaimer") {
+                ui.showingDisclaimer = true
+            }
+            if model.servers.isEmpty { model.refresh() }
+        }
+    }
+}
+
+struct DetailRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(title).font(.subheadline).foregroundColor(.secondary).frame(width: 140, alignment: .leading)
+            Text(value).font(.subheadline).textSelection(.enabled)
+            Spacer()
+        }
+    }
+}
+
+struct ServerDetailsSheet: View {
+    let server: VPNServer
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("\(server.flag) \(server.hostName)")
+                    .font(.title2).bold()
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    DetailRow(title: "DDNS Hostname:", value: server.fqdn)
+                    DetailRow(title: "IP Address:", value: server.ip)
+                    DetailRow(title: "Country:", value: "\(server.countryLong) (\(server.countryShort))")
+                    DetailRow(title: "Line Speed:", value: Fmt.speed(server.speed))
+                    DetailRow(title: "Score:", value: "\(server.score)")
+                    DetailRow(title: "Ping to Japan:", value: "\(server.ping) ms")
+                    DetailRow(title: "SSL-VPN Ports:", value: server.sslPorts.isEmpty ? "Default (443)" : server.sslPorts.map(String.init).joined(separator: ", "))
+                    DetailRow(title: "OpenVPN UDP Ports:", value: server.openVpnUdpPorts.isEmpty ? "None" : server.openVpnUdpPorts.map(String.init).joined(separator: ", "))
+                    DetailRow(title: "L2TP / IPsec:", value: server.l2tp ? "Supported" : "Not supported")
+                    DetailRow(title: "Logging Policy:", value: server.logType)
+                    DetailRow(title: "Operator / Owner:", value: server.operatorName.isEmpty ? "Anonymous" : server.operatorName)
+                    if let abuse = server.abuse, !abuse.isEmpty {
+                        DetailRow(title: "Abuse Contact:", value: abuse)
+                    }
+                    if let os = server.os {
+                        DetailRow(title: "Operating System:", value: os)
+                    }
+                    if let build = server.build {
+                        DetailRow(title: "SoftEther Build:", value: "\(build)")
+                    }
+                    if !server.message.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Server Message:").font(.headline).padding(.top, 4)
+                            Text(server.message)
+                                .font(.body)
+                                .textSelection(.enabled)
+                                .padding(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color(NSColor.controlBackgroundColor))
+                                .cornerRadius(6)
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 480, minHeight: 460)
+    }
+}
+
+struct AcademicDisclaimerSheet: View {
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "graduationcap.fill")
+                .font(.system(size: 44))
+                .foregroundColor(.accentColor)
+            Text("VPN Gate Academic Experiment Service")
+                .font(.title2).bold()
+            Text("VPN Gate is an academic research project of the Graduate School of University of Tsukuba, Japan.\n\nPublic VPN relay servers are hosted by volunteers around the world. Anyone can connect through these servers to achieve anonymity and bypass censorship.\n\nBy clicking “Agree and Continue”, you confirm that you will use this service in compliance with local laws.")
+                .font(.body)
+                .multilineTextAlignment(.center)
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
+            Divider()
+            HStack {
+                Button("Disagree & Quit") {
+                    NSApplication.shared.terminate(nil)
+                }
+                Spacer()
+                Button("Agree and Continue") {
+                    UserDefaults.standard.set(true, forKey: "hasAgreedToDisclaimer")
+                    isPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 480, height: 320)
     }
 }
 
@@ -183,6 +315,20 @@ struct StatusBar: View {
                 }
             }
             Spacer()
+            // Server list age and source status
+            HStack(spacing: 6) {
+                Text(model.listSource.rawValue)
+                    .font(.caption)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.15))
+                    .cornerRadius(4)
+                if let ts = model.listTimestamp {
+                    Text(ts, style: .relative)
+                        .font(.caption)
+                        .foregroundColor(model.listIsFresh ? .secondary : .orange)
+                }
+            }
             if let n = model.notice { Text(n).font(.caption).foregroundStyle(.red).lineLimit(1) }
         }.padding(10)
     }

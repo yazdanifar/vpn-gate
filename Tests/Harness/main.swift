@@ -2,7 +2,7 @@ import Foundation
 
 setvbuf(stdout, nil, _IOLBF, 0)
 let allRegistrars: [() -> Void] = [
-    registerPackTests, registerPacketTests, registerServerListTests, registerVGDatTests, registerAccountTests, registerDataPhaseTests,
+    registerPackTests, registerPacketTests, registerServerListTests, registerVGDatTests, registerAccountTests, registerTelemetryTests, registerDataPhaseTests,
     registerValidationTests, registerBridgeTests, registerHandshakeTests, registerSessionTests,
     registerNetConfigTests, registerIPCTests, registerDaemonTests, registerFuzzTests, registerSystemTests, registerPackagingTests, registerAppModelTests, registerLiveTests,
 ]
