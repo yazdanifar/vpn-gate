@@ -51,6 +51,8 @@ final class AppModel: ObservableObject {
     private var pendingAfterAgreement: (() -> Void)?
     @Published var listSource: ListSource = .bundle
     @Published var listTimestamp: Date? = nil
+    /// When a refresh last succeeded in downloading a list (not a cached/built-in fallback); kept across launches.
+    @Published var listFetchedAt: Date? = nil
     @Published var listIsFresh: Bool = true
     @Published var activeAccount: ClientAccount? = nil
     /// Opt-in, Mac-only diagnostics (off until the user turns it on).
@@ -111,6 +113,7 @@ final class AppModel: ObservableObject {
         proxyUsername = d.string(forKey: "proxyUsername") ?? ""
         proxyPassword = autoStart ? (Keychain.get("proxy") ?? "") : ""
         blockIPv6 = d.object(forKey: "blockIPv6") as? Bool ?? true
+        listFetchedAt = d.object(forKey: "listFetchedAt") as? Date
         lastServerID = d.string(forKey: "lastServerID")
         maxLogWeeks = d.object(forKey: "maxLogWeeks") as? Int ?? -1
         mirrorURL = d.string(forKey: "mirrorURL") ?? ""
@@ -405,6 +408,10 @@ final class AppModel: ObservableObject {
                 listSource = res.source
                 listTimestamp = res.timestamp
                 listIsFresh = res.isFresh
+                if res.source != .cache && res.source != .bundle {
+                    listFetchedAt = Date()
+                    if persistsServerCache { defaults.set(listFetchedAt, forKey: "listFetchedAt") }
+                }
                 migrateFavorites()
                 if persistsServerCache { Self.saveCache(res.servers) }
             } else if servers.isEmpty {
