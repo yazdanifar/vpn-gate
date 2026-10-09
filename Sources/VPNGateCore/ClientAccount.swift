@@ -28,7 +28,9 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
     /// "Disable QoS" of the SoftEther Client Manager; false (default) = QoS on, as the stock client.
     public var disableQoS: Bool
     public var autoReconnect: Bool
-    /// Reserved, like `halfConnection`: the helper uses its own reconnect timing and ignores these.
+    /// Seconds between reconnect attempts, and how many consecutive failures before giving up, for this
+    /// connection (the SoftEther Client Manager's own per-setting policy). VPN Gate connections ignore both:
+    /// the app retries those itself, forever, every 15 s (AppModel.considerReconnect).
     public var reconnectInterval: TimeInterval
     public var reconnectCount: Int
     public var virtualMacAddress: String?
@@ -168,6 +170,8 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
             useUdpAccel: udpAcceleration,
             disableQoS: disableQoS,
             autoReconnect: autoReconnect,
+            reconnectInterval: reconnectInterval,
+            reconnectCount: reconnectCount,
             blockIPv6: blockIPv6,
             checkServerCert: checkServerCert,
             serverCertFingerprint: serverCertFingerprint,

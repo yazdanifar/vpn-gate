@@ -100,9 +100,14 @@ generated on this Mac, resettable in Settings; not derived from the machine name
 the original). Settings lists the exact fields. No traffic, addresses or personal data are sent.
 
 ### Settings that are stored but not used
-`halfConnection`, `reconnectInterval`, `reconnectCount`, `virtualMacAddress` and `mtu` exist in the account file for
-SoftEther compatibility but the helper ignores them (the MTU comes from DHCP option 26). They are not shown in the
-editor. (An older `hideFromVpnGateList` key, which the Windows client never had, is ignored on load and no longer written.)
+`halfConnection`, `virtualMacAddress` and `mtu` exist in the account file for SoftEther compatibility but the helper
+ignores them (the tunnel MTU comes from DHCP option 26). They are not shown in the editor. (An older
+`hideFromVpnGateList` key, which the Windows client never had, is ignored on load and no longer written.)
+
+Each connection setting's own `reconnectInterval` (default 3 s) and `reconnectCount` (default 8), editable in the
+account editor, control the helper's own retry loop — matching the stock Client Manager's per-connection retry
+policy. VPN Gate connections ignore both: the app retries those itself, forever, every 15 s, like the real VPN Gate
+account does.
 
 ### First-run disclaimer
 The academic-use disclaimer must be accepted before any connection starts, from any screen (server list, Client Manager,

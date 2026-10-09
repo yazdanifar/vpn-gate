@@ -189,6 +189,19 @@ func registerAppFixTests() {
         expectEqual(out.reconnectInterval, 9); expectEqual(out.reconnectCount, 3)
         expectEqual(out.maxConnection, 4); expectEqual(out.authType, .plainPassword)
     }
+    test("editor/reconnect-interval-and-count-are-editable-and-clamped") {
+        let base = ClientAccount(name: "Lab", host: "vpn.example.com", autoReconnect: true,
+                                 reconnectInterval: 3, reconnectCount: 8)
+        let ui = AccountEditorState(account: base)
+        expectEqual(ui.reconnectIntervalSeconds, 3); expectEqual(ui.reconnectCount, 8)
+        ui.reconnectIntervalSeconds = 20; ui.reconnectCount = 2
+        let out = ui.makeAccount(base: base)
+        expectEqual(out.reconnectInterval, 20); expectEqual(out.reconnectCount, 2)
+        // Zero/negative must not reach the helper as an infinite-fast loop or a give-up-immediately policy.
+        ui.reconnectIntervalSeconds = 0; ui.reconnectCount = 0
+        let clamped = ui.makeAccount(base: base)
+        expect(clamped.reconnectInterval >= 1); expect(clamped.reconnectCount >= 1)
+    }
     test("editor/fingerprint-is-validated-and-normalised") {
         let ui = AccountEditorState(account: ClientAccount(name: "a", host: "1.2.3.4"))
         ui.fingerprint = "zz"

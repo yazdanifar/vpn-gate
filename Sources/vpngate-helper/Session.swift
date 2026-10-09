@@ -237,13 +237,17 @@ final class VPNSession: SessionControlling {
             } else if !config.autoReconnect {
                 set(gen, .disconnected, error: "Connection lost"); return
             }
-            guard attempt < timing.maxAttempts else {
+            // A custom account's own policy wins when it set one; VPN Gate connections never do (the app retries
+            // those itself), so they keep the session's built-in default.
+            let maxAttempts = config.reconnectCount ?? timing.maxAttempts
+            let reconnectDelay = config.reconnectInterval ?? timing.reconnectDelay
+            guard attempt < maxAttempts else {
                 set(gen, .disconnected, error: "Gave up reconnecting"); return
             }
             attempt += 1
-            set(gen, .reconnecting, server: config.host, log: "Reconnecting in \(Int(timing.reconnectDelay.rounded(.up)))s (attempt \(attempt))",
+            set(gen, .reconnecting, server: config.host, log: "Reconnecting in \(Int(reconnectDelay.rounded(.up)))s (attempt \(attempt))",
                 error: failure?.localizedDescription)
-            try? await Task.sleep(nanoseconds: UInt64(timing.reconnectDelay * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(reconnectDelay * 1_000_000_000))
         }
     }
 

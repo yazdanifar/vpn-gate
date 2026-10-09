@@ -39,6 +39,11 @@ public struct ConnectConfig: Codable, Equatable {
     /// the VPN Gate server-connect path sets it (the real VPN Gate client does).
     public var disableQoS: Bool
     public var autoReconnect: Bool
+    /// Seconds between reconnect attempts; nil keeps the helper's own default (3 s, the stock Client Manager's
+    /// setting). VPN Gate connections never set this: the app does their retrying itself (see AppModel).
+    public var reconnectInterval: TimeInterval?
+    /// How many consecutive failures before giving up; nil keeps the helper's own default (8).
+    public var reconnectCount: Int?
     public var blockIPv6: Bool
     public var checkServerCert: Bool
     public var serverCertFingerprint: String?
@@ -60,6 +65,8 @@ public struct ConnectConfig: Codable, Equatable {
         useUdpAccel: Bool = true,
         disableQoS: Bool = false,
         autoReconnect: Bool = true,
+        reconnectInterval: TimeInterval? = nil,
+        reconnectCount: Int? = nil,
         blockIPv6: Bool = true,
         checkServerCert: Bool = false,
         serverCertFingerprint: String? = nil,
@@ -80,6 +87,8 @@ public struct ConnectConfig: Codable, Equatable {
         self.useUdpAccel = useUdpAccel
         self.disableQoS = disableQoS
         self.autoReconnect = autoReconnect
+        self.reconnectInterval = reconnectInterval
+        self.reconnectCount = reconnectCount
         self.blockIPv6 = blockIPv6
         self.checkServerCert = checkServerCert
         self.serverCertFingerprint = serverCertFingerprint
@@ -105,6 +114,8 @@ public struct ConnectConfig: Codable, Equatable {
             useUdpAccel: try c.decodeIfPresent(Bool.self, forKey: .useUdpAccel) ?? true,
             disableQoS: try c.decodeIfPresent(Bool.self, forKey: .disableQoS) ?? false,
             autoReconnect: try c.decodeIfPresent(Bool.self, forKey: .autoReconnect) ?? true,
+            reconnectInterval: try c.decodeIfPresent(TimeInterval.self, forKey: .reconnectInterval),
+            reconnectCount: try c.decodeIfPresent(Int.self, forKey: .reconnectCount),
             blockIPv6: try c.decodeIfPresent(Bool.self, forKey: .blockIPv6) ?? true,
             checkServerCert: try c.decodeIfPresent(Bool.self, forKey: .checkServerCert) ?? false,
             serverCertFingerprint: try c.decodeIfPresent(String.self, forKey: .serverCertFingerprint),

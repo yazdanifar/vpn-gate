@@ -61,6 +61,10 @@ struct AccountEditor: View {
                     Text("A fingerprint is enforced whenever it is set. Without one, “Verify Server Certificate” uses the system trust store.")
                         .font(.caption).foregroundStyle(.secondary)
                     Toggle("Auto Reconnect on disconnect", isOn: $ui.autoReconnect)
+                    if ui.autoReconnect {
+                        Stepper("Retry every \(ui.reconnectIntervalSeconds) s", value: $ui.reconnectIntervalSeconds, in: 1...300)
+                        Stepper("Give up after \(ui.reconnectCount) attempts", value: $ui.reconnectCount, in: 1...1000)
+                    }
                 }
             }
             .formStyle(.grouped)

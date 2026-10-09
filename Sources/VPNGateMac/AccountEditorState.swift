@@ -17,6 +17,8 @@ final class AccountEditorState: ObservableObject {
     @Published var udpAcceleration: Bool
     @Published var useQoS: Bool
     @Published var autoReconnect: Bool
+    @Published var reconnectIntervalSeconds: Int
+    @Published var reconnectCount: Int
     @Published var checkServerCert: Bool
     @Published var fingerprint: String
 
@@ -40,6 +42,8 @@ final class AccountEditorState: ObservableObject {
         self.udpAcceleration = account?.udpAcceleration ?? true
         self.useQoS = !(account?.disableQoS ?? false)
         self.autoReconnect = account?.autoReconnect ?? true
+        self.reconnectIntervalSeconds = Int((account?.reconnectInterval ?? 3).rounded())
+        self.reconnectCount = account?.reconnectCount ?? 8
         self.checkServerCert = account?.checkServerCert ?? false
         self.fingerprint = account?.serverCertFingerprint ?? ""
         self.hasStoredIdentity = hasStoredIdentity
@@ -85,6 +89,8 @@ final class AccountEditorState: ObservableObject {
         acc.udpAcceleration = udpAcceleration
         acc.disableQoS = !useQoS
         acc.autoReconnect = autoReconnect
+        acc.reconnectInterval = TimeInterval(max(1, reconnectIntervalSeconds))
+        acc.reconnectCount = max(1, reconnectCount)
         return acc
     }
 }

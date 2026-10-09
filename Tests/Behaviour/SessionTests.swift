@@ -124,6 +124,31 @@ func registerSessionTests() {
         expectEqual(r.last?.error, "Gave up reconnecting")
         expectEqual(h.transports.value.count, 4 * 3, "3 attempts × 4 default ports")
     }
+    test("session/custom-accounts-reconnectCount-and-reconnectInterval-override-the-defaults") {
+        // Session's own default (fastTiming) is maxAttempts large with a short delay; a custom account's
+        // reconnectCount/reconnectInterval (from ConnectConfig, as ClientAccount.toConnectConfig sends them)
+        // must win instead, independent of the session-wide default.
+        let h = SessionHarness(); h.connectErrorFor = { _, _ in TestError() }
+        let s = VPNSession(deps: h.deps(), timing: h.fastTiming); let r = Recorder(); r.attach(s)
+        let cfg = ConnectConfig(host: "1.2.3.4", authType: "anonymous", autoReconnect: true,
+                                 reconnectInterval: 0.01, reconnectCount: 3)
+        s.connect(config: cfg)
+        await expectA(await s.waitUntilIdle(timeout: 5), "states \(r.states)")
+        expectEqual(r.last?.error, "Gave up reconnecting")
+        expectEqual(h.transports.value.count, 4 * 4, "reconnectCount=3 means 4 establishes × 4 default ports, not the session default")
+    }
+    test("session/custom-account-without-its-own-policy-keeps-the-session-default") {
+        // reconnectInterval/reconnectCount absent (nil, as VPN Gate connections always send) -> the session's
+        // own timing.maxAttempts is still what decides when to give up.
+        let h = SessionHarness(); h.connectErrorFor = { _, _ in TestError() }
+        var t = h.fastTiming; t.maxAttempts = 2
+        let s = VPNSession(deps: h.deps(), timing: t); let r = Recorder(); r.attach(s)
+        let cfg = ConnectConfig(host: "1.2.3.4", authType: "anonymous", autoReconnect: true)
+        s.connect(config: cfg)
+        await expectA(await s.waitUntilIdle(timeout: 5), "states \(r.states)")
+        expectEqual(r.last?.error, "Gave up reconnecting")
+        expectEqual(h.transports.value.count, 4 * 3, "maxAttempts=2 means 3 establishes × 4 default ports (session default)")
+    }
     test("session/user-disconnect-stops-reconnect-loop") {
         let h = SessionHarness(); h.connectErrorFor = { _, _ in TestError() }
         let s = VPNSession(deps: h.deps(), timing: h.fastTiming)
