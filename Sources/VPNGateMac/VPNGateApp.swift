@@ -7,27 +7,29 @@ struct VPNGateApp: App {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        Window("VPN Gate", id: "main") {
-            TabView {
-                ServerListView()
-                    .tabItem {
-                        Label("VPN Gate Relays", systemImage: "globe")
-                    }
-                AccountsView(appModel: model, accountManager: model.accountManager)
-                    .tabItem {
-                        Label("Client Manager", systemImage: "network")
-                    }
-                HistoryView()
-                    .tabItem {
-                        Label("History", systemImage: "clock")
-                    }
-            }
-            .environmentObject(model)
-            .sheet(isPresented: $model.showingDisclaimer) {
-                AcademicDisclaimerSheet().environmentObject(model)
-            }
-            .onAppear { if !model.hasAgreedToDisclaimer { model.showingDisclaimer = true } }
+        // The VPN Gate relay list is the app's main window, as in the Windows client's plug-in.
+        Window("VPN Gate Public VPN Relay Servers", id: "main") {
+            ServerListView()
+                .environmentObject(model)
+                .sheet(isPresented: $model.showingDisclaimer) {
+                    AcademicDisclaimerSheet().environmentObject(model)
+                }
+                .onAppear { if !model.hasAgreedToDisclaimer { model.showingDisclaimer = true } }
         }
+        .commands { AppCommands(model: model) }
+
+        // The SoftEther Client Manager (connection settings for your own servers) is a separate, optional window.
+        Window("VPN Connection Settings", id: "accounts") {
+            AccountsView(appModel: model, accountManager: model.accountManager)
+                .environmentObject(model)
+        }
+        .defaultSize(width: 760, height: 420)
+
+        Window("Connection History", id: "history") {
+            HistoryView().environmentObject(model)
+        }
+        .defaultSize(width: 720, height: 380)
+
         Settings { SettingsView().environmentObject(model) }
 
         MenuBarExtra {
@@ -52,14 +54,37 @@ struct VPNGateApp: App {
                 Button("Disconnect") { model.disconnect() }
                 if model.lastServer != nil { Button("Reconnect") { model.reconnect() } }
             }
-            Button("Open VPN Gate") {
+            Button("Show VPN Gate") {
                 openWindow(id: "main"); NSApp.activate(ignoringOtherApps: true)
+            }
+            Button("VPN Connection Settings…") {
+                openWindow(id: "accounts"); NSApp.activate(ignoringOtherApps: true)
             }
             SettingsLink { Text("Settings…") }
             Divider()
             Button("Quit") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
         } label: {
             Image(systemName: model.event.state.symbol)
+        }
+    }
+}
+
+/// Menu bar commands: window openers and the actions that do not depend on the list selection.
+struct AppCommands: Commands {
+    @ObservedObject var model: AppModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Button("Refresh List") { model.refresh() }.keyboardShortcut("r").disabled(model.loading)
+            Button("Disconnect") { model.disconnect() }.keyboardShortcut("d")
+                .disabled(model.event.state == .disconnected)
+        }
+        CommandGroup(after: .windowArrangement) {
+            Divider()
+            Button("VPN Gate Public VPN Relay Servers") { openWindow(id: "main") }.keyboardShortcut("1")
+            Button("VPN Connection Settings") { openWindow(id: "accounts") }.keyboardShortcut("m", modifiers: [.command, .shift])
+            Button("Connection History") { openWindow(id: "history") }.keyboardShortcut("y")
         }
     }
 }

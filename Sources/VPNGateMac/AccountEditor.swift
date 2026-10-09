@@ -50,25 +50,11 @@ struct AccountEditor: View {
                     if ui.authType == .certificate { certificateSection }
                 }
 
-                Section("Advanced Options") {
-                    Stepper("Max TCP Connections: \(ui.maxConnection)", value: $ui.maxConnection, in: 1...32)
-                    Toggle("Use Data Compression", isOn: $ui.compression)
-                    Toggle("Use UDP Acceleration (Fastest)", isOn: $ui.udpAcceleration)
-                    Toggle("Use QoS", isOn: $ui.useQoS)
-                    Toggle("Use Half Connection (separate send/receive sockets)", isOn: $ui.halfConnection)
-                    TextField("MTU (blank = automatic):", text: $ui.mtuString)
-                    if let e = ui.mtuError { Text(e).font(.caption).foregroundStyle(.red) }
-                    TextField("Virtual MAC address (blank = random):", text: $ui.macString)
-                    if let e = ui.macError { Text(e).font(.caption).foregroundStyle(.red) }
-                    Toggle("Verify Server Certificate", isOn: $ui.checkServerCert)
-                    TextField("Server certificate fingerprint (SHA-1 / SHA-256, optional):", text: $ui.fingerprint)
-                    if let e = ui.fingerprintError { Text(e).font(.caption).foregroundStyle(.red) }
-                    Text("A fingerprint is enforced whenever it is set. Without one, “Verify Server Certificate” uses the system trust store.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Toggle("Auto Reconnect on disconnect", isOn: $ui.autoReconnect)
-                    if ui.autoReconnect {
-                        Stepper("Retry every \(ui.reconnectIntervalSeconds) s", value: $ui.reconnectIntervalSeconds, in: 1...300)
-                        Stepper("Give up after \(ui.reconnectCount) attempts", value: $ui.reconnectCount, in: 1...1000)
+                Section {
+                    DisclosureGroup("Advanced Options", isExpanded: $ui.showAdvanced) { advancedOptions }
+                    if !ui.showAdvanced && (ui.mtuError != nil || ui.macError != nil || ui.fingerprintError != nil) {
+                        Text("Something in the Advanced Options needs fixing before you can save.")
+                            .font(.caption).foregroundStyle(.red)
                     }
                 }
             }
@@ -91,6 +77,30 @@ struct AccountEditor: View {
             .padding(16)
         }
         .frame(minWidth: 480, minHeight: 520)
+    }
+
+    @ViewBuilder private var advancedOptions: some View {
+        Group {
+        Stepper("Max TCP Connections: \(ui.maxConnection)", value: $ui.maxConnection, in: 1...32)
+                    Toggle("Use Data Compression", isOn: $ui.compression)
+                    Toggle("Use UDP Acceleration (Fastest)", isOn: $ui.udpAcceleration)
+                    Toggle("Use QoS", isOn: $ui.useQoS)
+                    Toggle("Use Half Connection (separate send/receive sockets)", isOn: $ui.halfConnection)
+                    TextField("MTU (blank = automatic):", text: $ui.mtuString)
+                    if let e = ui.mtuError { Text(e).font(.caption).foregroundStyle(.red) }
+                    TextField("Virtual MAC address (blank = random):", text: $ui.macString)
+                    if let e = ui.macError { Text(e).font(.caption).foregroundStyle(.red) }
+                    Toggle("Verify Server Certificate", isOn: $ui.checkServerCert)
+                    TextField("Server certificate fingerprint (SHA-1 / SHA-256, optional):", text: $ui.fingerprint)
+                    if let e = ui.fingerprintError { Text(e).font(.caption).foregroundStyle(.red) }
+                    Text("A fingerprint is enforced whenever it is set. Without one, “Verify Server Certificate” uses the system trust store.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Toggle("Auto Reconnect on disconnect", isOn: $ui.autoReconnect)
+                    if ui.autoReconnect {
+                        Stepper("Retry every \(ui.reconnectIntervalSeconds) s", value: $ui.reconnectIntervalSeconds, in: 1...300)
+                        Stepper("Give up after \(ui.reconnectCount) attempts", value: $ui.reconnectCount, in: 1...1000)
+                    }
+        }
     }
 
     @ViewBuilder private var certificateSection: some View {

@@ -11,6 +11,8 @@ final class AccountEditorState: ObservableObject {
     @Published var username: String
     @Published var authType: AccountAuthType
     @Published var password: String
+    /// The rarely needed options are folded away until asked for.
+    @Published var showAdvanced = false
 
     @Published var maxConnection: Int
     @Published var compression: Bool

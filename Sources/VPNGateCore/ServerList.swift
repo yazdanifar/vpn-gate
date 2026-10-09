@@ -42,6 +42,9 @@ public struct VPNServer: Identifiable, Codable, Hashable {
     public var sendSize: UInt64
     public var recvSize: UInt64
     public var isKernelModeNAT: Bool
+    /// Not stored or sent anywhere: the "Test from this Mac" result as a sort key (see `ProbeOutcome.sortRank`),
+    /// filled in by the list view just before sorting.
+    public var testRank = 0
 
     public init(hostName: String, ip: String, score: Int = 0, ping: Int = 0, speed: Int = 0,
                 countryLong: String = "", countryShort: String = "", sessions: Int = 0,
@@ -234,13 +237,33 @@ public enum ServerList {
 /// status line, 149575-149860).
 public enum ListFormat {
     /// Uptime: up to 1 h in minutes, up to 24 h in hours, beyond that in days. The cut-offs are the original's
-    /// `< 3,600,001 ms` and `< 86,400,001 ms`. The English words are not in the decompile (they come from the
-    /// client's external string table: VGC_UPTIME_MIN / _HOUR / _DAY), so these are this app's own.
+    /// `< 3,600,001 ms` and `< 86,400,001 ms`; the words are the client string table's VGC_UPTIME_MIN / _HOUR / _DAY
+    /// ("%u mins" / "%u hours" / "%u days"), with the singular for exactly one.
     public static func uptime(ms: Int) -> String {
         let ms = max(0, ms)
-        if ms < 3_600_001 { return "\(ms / 60_000) min" }
-        if ms < 86_400_001 { return "\(ms / 3_600_000) h" }
-        return "\(ms / 86_400_000) d"
+        func unit(_ n: Int, _ word: String) -> String { "\(n) \(word)\(n == 1 ? "" : "s")" }
+        if ms < 3_600_001 { return unit(ms / 60_000, "min") }
+        if ms < 86_400_001 { return unit(ms / 3_600_000, "hour") }
+        return unit(ms / 86_400_000, "day")
+    }
+
+    /// VGC_NUM_VPN: "%u sessions".
+    public static func sessions(_ n: Int) -> String { "\(n) session\(n == 1 ? "" : "s")" }
+
+    /// VGC_NUM_LOGIN: "%S logins" (the count is printed with thousands separators).
+    public static func logins(_ n: Int) -> String {
+        let f = NumberFormatter(); f.numberStyle = .decimal; f.locale = Locale(identifier: "en_US")
+        return "\(f.string(from: NSNumber(value: n)) ?? String(n)) login\(n == 1 ? "" : "s")"
+    }
+
+    /// Logging policy column: VGC_LOG_PERMANENT / VGC_LOG_2WEEKS / VGC_LOG_NONE ("Permanent" / "2 Weeks" / "No Logs").
+    /// Anything the list does not classify is shown as the server sent it.
+    public static func logging(_ logType: String) -> String {
+        let t = logType.lowercased()
+        if t.hasPrefix("no") { return "No Logs" }
+        if t.contains("2") && t.contains("week") { return "2 Weeks" }
+        if t.hasPrefix("perm") { return "Permanent" }
+        return logType.isEmpty ? "-" : logType
     }
 
     /// "<PingToGoogle>, <PingToJapan>", each as "<n> ms" or "-" when 0 (the original prints "-" for 0).
@@ -249,8 +272,8 @@ public enum ListFormat {
         return "\(one(google)), \(one(japan))"
     }
 
-    /// UDP column: the original shows a localized "yes" when UdpPort != 0, else "-".
-    public static func udp(_ port: UInt16?) -> String { port == nil ? "-" : "Yes" }
+    /// UDP column: VGC_UDP_AVAILABLE ("UDP OK") when the host has a UDP port, else "-".
+    public static func udp(_ port: UInt16?) -> String { port == nil ? "-" : "UDP OK" }
 
     /// List age as the original's status line classifies it: within 24 h (inclusive of the original's
     /// `< 86,400,001 ms`) the list is OK, older it is "stale". (Accepting a download uses 36 h; the UI uses 24 h.)

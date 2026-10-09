@@ -28,5 +28,6 @@ struct HistoryView: View {
                 }
             }
         }
+        .frame(minWidth: 620, minHeight: 280)
     }
 }

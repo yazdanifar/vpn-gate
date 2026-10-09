@@ -14,7 +14,8 @@ final class AppModel: ObservableObject {
     @Published var helperRunning = false
     @Published var helperInstalled = HelperInstaller.isInstalled
     @Published var logLines: [String] = []
-    @Published var pings: [String: Int] = [:]          // measured TCP connect time, ms
+    @Published var probes: [String: ProbeOutcome] = [:]   // connectivity test results from this Mac
+    private var probeTask: Task<Void, Never>?
     @Published var connectedAt: Date?
     @Published var notice: String?
     /// Set when Connect needs the helper installed or updated; the window shows a one-time setup alert.
@@ -462,30 +463,40 @@ final class AppModel: ObservableObject {
         favorites = migrated
     }
 
-    /// Measures TCP connect latency to the servers' SSL-VPN port.
+    /// Tests every given server (all rows of the current view, in order) from this Mac with a real SoftEther handshake (not just a ping or a TCP connect),
+    /// a few at a time. Results land in `probes`; a new run replaces earlier results for the same servers.
     func measure(_ list: [VPNServer]) {
-        for s in list.prefix(60) {
-            let port = NWEndpoint.Port(rawValue: UInt16(s.connectPort ?? 443))!
-            let conn = NWConnection(host: NWEndpoint.Host(s.ip), port: port, using: .tcp)
-            let start = Date()
-            let ip = s.id
-            let done = Flag()
-            conn.stateUpdateHandler = { [weak self] (st: NWConnection.State) in
-                switch st {
-                case .ready:
-                    if done.set() {
-                        let ms = Int(Date().timeIntervalSince(start) * 1000)
-                        Task { @MainActor in self?.pings[ip] = ms }
+        probeTask?.cancel()
+        let targets = list
+        for s in targets { probes[s.id] = .queued }
+        let proxy = currentProxy
+        probeTask = Task { [weak self] in
+            await withTaskGroup(of: Void.self) { group in
+                var next = 0
+                func launch() {
+                    guard next < targets.count else { return }
+                    let s = targets[next]; next += 1
+                    group.addTask {
+                        await MainActor.run { [weak self] in if !Task.isCancelled { self?.probes[s.id] = .testing } }
+                        let r = await ServerProbe.run(host: s.ip, ports: ServerProbe.ports(for: s), proxy: proxy) { h, p, px in
+                            TLSStream(host: h, port: p, proxy: px)
+                        }
+                        await MainActor.run { [weak self] in
+                            // A cancelled run must not overwrite the state of a newer one.
+                            if !Task.isCancelled { self?.probes[s.id] = r }
+                        }
                     }
-                    conn.cancel()
-                case .failed, .waiting:
-                    if done.set() { Task { @MainActor in self?.pings[ip] = -1 } }
-                    conn.cancel()
-                default: break
+                }
+                for _ in 0..<8 { launch() }
+                while await group.next() != nil { if Task.isCancelled { group.cancelAll() } else { launch() } }
+            }
+            // Nothing may stay "queued"/"testing" once the run is over (a new run has replaced them if cancelled).
+            guard !Task.isCancelled else { return }
+            await MainActor.run { [weak self] in
+                for s in targets where self?.probes[s.id] == .queued || self?.probes[s.id] == .testing {
+                    self?.probes[s.id] = .failed("Test did not finish")
                 }
             }
-            conn.start(queue: .global())
-            DispatchQueue.global().asyncAfter(deadline: .now() + 4) { conn.cancel() }
         }
     }
 
