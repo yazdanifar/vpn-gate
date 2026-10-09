@@ -7,6 +7,16 @@ func registerValidationTests() {
         for p in [0, -1, 65536, 70000, Int.max] { expect(!InputValidation.isValidPort(p), "\(p)") }
         expect(!InputValidation.isValidPort(nil))
     }
+    test("validation/mac-addresses") {
+        expectEqual(InputValidation.parseMacAddress("00:AC:DE:12:34:56"), [0x00, 0xAC, 0xDE, 0x12, 0x34, 0x56])
+        expectEqual(InputValidation.parseMacAddress("00-AC-DE-12-34-56"), [0x00, 0xAC, 0xDE, 0x12, 0x34, 0x56])
+        expectEqual(InputValidation.parseMacAddress("ff:ff:ff:ff:ff:ff"), [UInt8](repeating: 0xFF, count: 6))
+        expectEqual(InputValidation.parseMacAddress("0:a:b:c:d:e"), [0x00, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E],
+                    "single hex digits are accepted leniently")
+        for bad in ["", "00:AC:DE:12:34", "00:AC:DE:12:34:56:78", "GG:AC:DE:12:34:56", "00AC.DE12.3456"] {
+            expect(InputValidation.parseMacAddress(bad) == nil, bad)
+        }
+    }
     test("validation/hosts") {
         for h in ["1.2.3.4", "219.100.37.7", "vpn927125019.opengw.net", "a", "my-host.example.com"] {
             expect(InputValidation.isValidHost(h), h)

@@ -664,6 +664,70 @@ func registerProtocolFixTests() {
         expect(s.lastStream?.isCancelled == true, "second stream leaked")
     }
 
+    // MARK: half connection
+
+    test("halfconnect/login-requests-it-and-asks-for-at-least-4-connections") {
+        let off = SoftEtherClient(host: "1.2.3.4", port: 443, proxy: ProxySettings(), maxConnections: 1, halfConnection: false)
+        expectEqual(off.loginPack().int("half_connection"), 0)
+
+        let on = SoftEtherClient(host: "1.2.3.4", port: 443, proxy: ProxySettings(), maxConnections: 1, halfConnection: true)
+        expectEqual(on.loginPack().int("half_connection"), 1)
+        // maxConnections: 1 must be raised to the half-connection minimum, not kept at 1.
+        expectEqual(on.loginPack().int("max_connection"), 4)
+    }
+
+    test("halfconnect/directions-are-applied-end-to-end") {
+        // Primary = client-to-server (our own rule); 3 additional connections get server assigned directions:
+        // client-to-server, server-to-client, and "both" (an empty/omitted reply, same as a normal connection).
+        let s = FakeSoftEtherServer(); s.maxConnections = 4
+        s.additionalConnectDirections = [2, 1, 0]
+        let c = SoftEtherClient(host: "1.2.3.4", port: 443, proxy: ProxySettings(), maxConnections: 4,
+                                 useUdpAccel: false, halfConnection: true, makeStream: s.factory)
+        c.replenishInterval = 0.05
+        let frames = Locked([[UInt8]]())
+        c.onFrame = { frame in frames.update { $0.append(frame) } }
+        _ = try await c.connect { _ in }
+        await expectA(await eventually(5) { c.activeConnectionCount == 4 }, "pool did not fill: \(c.activeConnectionCount)")
+        let streams = s.streams
+        expectEqual(streams.count, 4)
+        // Identify each stream by what it was actually told, not by array position (additional connections are
+        // opened one at a time, but nothing here should depend on assuming that stays true).
+        guard let stcAdditional = streams.first(where: { $0.assignedDirection == 1 }) else {
+            expect(false, "no stream was ever assigned direction=1 (server-to-client)"); return
+        }
+        let sendCapable = streams.filter { $0.assignedDirection != 1 }   // primary (nil) + direction 2 and 0
+        expectEqual(sendCapable.count, 3)
+
+        // 1. Send-side: sending many frames must never land on the server-to-client-only socket.
+        for i in 0..<40 { c.sendFrame([UInt8](repeating: UInt8(i % 256), count: 64)) }
+        await expectA(await eventually(3) { sendCapable.reduce(0) { $0 + $1.bytesReceivedFromClient } > 0 })
+        try? await Task.sleep(nanoseconds: 100_000_000)   // let any stray send settle before asserting zero
+        expectEqual(stcAdditional.bytesReceivedFromClient, 0, "nothing must be sent on the server-to-client-only socket")
+
+        // 2. Receive-side: data delivered on the server-to-client socket must still reach onFrame normally.
+        let probe = try DataPhase.encode(frames: [[UInt8](repeating: 0xAB, count: 10)], useCompress: false)
+        stcAdditional.deliver([UInt8](probe))
+        await expectA(await eventually(3) { frames.value.contains { $0 == [UInt8](repeating: 0xAB, count: 10) } },
+                      "frame delivered on the server-to-client socket never reached onFrame")
+
+        c.close(nil)
+    }
+
+    test("halfconnect/client-to-server-only-socket-is-not-torn-down-for-never-receiving") {
+        // A send-only socket is NEVER expected to receive application data; the per-socket idle-read watchdog
+        // must not fire for it just because nothing ever arrives.
+        let s = FakeSoftEtherServer(); s.maxConnections = 2; s.welcomeTimeoutMs = 500   // clamped to the 500ms floor anyway
+        s.additionalConnectDirections = [2]   // the one additional connection is client-to-server-only
+        let c = SoftEtherClient(host: "1.2.3.4", port: 443, proxy: ProxySettings(), maxConnections: 2,
+                                 useUdpAccel: false, halfConnection: true, makeStream: s.factory)
+        c.replenishInterval = 0.05
+        _ = try await c.connect { _ in }
+        await expectA(await eventually(5) { c.activeConnectionCount == 2 })
+        try? await Task.sleep(nanoseconds: 900_000_000)   // well past the 500ms idle-read timeout
+        expectEqual(c.activeConnectionCount, 2, "the send-only socket must survive despite never receiving anything")
+        c.close(nil)
+    }
+
     // MARK: 12 additional connections
 
     test("pool/additional-connection-is-replaced-after-a-socket-dies") {

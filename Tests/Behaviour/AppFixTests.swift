@@ -189,6 +189,30 @@ func registerAppFixTests() {
         expectEqual(out.reconnectInterval, 9); expectEqual(out.reconnectCount, 3)
         expectEqual(out.maxConnection, 4); expectEqual(out.authType, .plainPassword)
     }
+    test("editor/half-connection-toggle-is-editable") {
+        let base = ClientAccount(name: "Lab", host: "vpn.example.com", halfConnection: false)
+        let ui = AccountEditorState(account: base)
+        expect(!ui.halfConnection)
+        ui.halfConnection = true
+        expect(ui.makeAccount(base: base).halfConnection)
+    }
+    test("editor/mtu-and-mac-override-are-editable-and-validated") {
+        let base = ClientAccount(name: "Lab", host: "vpn.example.com", virtualMacAddress: nil, mtu: nil)
+        let ui = AccountEditorState(account: base)
+        expectEqual(ui.mtuString, ""); expectEqual(ui.macString, "")
+        expect(ui.makeAccount(base: base).mtu == nil, "blank must mean automatic, not 0")
+        expect(ui.makeAccount(base: base).virtualMacAddress == nil, "blank must mean random, not an empty string")
+
+        ui.mtuString = "1300"; ui.macString = "00:AC:DE:12:34:56"
+        expect(ui.mtuError == nil); expect(ui.macError == nil); expect(ui.canSave)
+        let out = ui.makeAccount(base: base)
+        expectEqual(out.mtu, 1300); expectEqual(out.virtualMacAddress, "00:AC:DE:12:34:56")
+
+        ui.mtuString = "100"   // below 576
+        expect(ui.mtuError != nil); expect(!ui.canSave)
+        ui.mtuString = ""; ui.macString = "not-a-mac"
+        expect(ui.macError != nil); expect(!ui.canSave)
+    }
     test("editor/reconnect-interval-and-count-are-editable-and-clamped") {
         let base = ClientAccount(name: "Lab", host: "vpn.example.com", autoReconnect: true,
                                  reconnectInterval: 3, reconnectCount: 8)

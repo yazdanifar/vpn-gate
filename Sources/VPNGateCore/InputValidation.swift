@@ -47,6 +47,16 @@ public enum InputValidation {
         return hex
     }
 
+    /// A "Virtual Network Adapter" MAC address: 6 hex byte pairs, ':' or '-' separated. Returns the 6 bytes,
+    /// or nil when the text is not such an address. The locally-administered bit (the account editor should set
+    /// it) is not enforced here; whatever the user typed is passed through as-is.
+    public static func parseMacAddress(_ s: String) -> [UInt8]? {
+        let parts = s.split(whereSeparator: { $0 == ":" || $0 == "-" })
+        guard parts.count == 6 else { return nil }
+        let bytes = parts.compactMap { UInt8($0, radix: 16) }
+        return bytes.count == 6 ? bytes : nil
+    }
+
     /// hub and user names travel in the SoftEther handshake: at most 255 bytes, no NUL.
     public static func isValidIdentityField(_ s: String) -> Bool {
         s.utf8.count <= 255 && !s.utf8.contains(0)

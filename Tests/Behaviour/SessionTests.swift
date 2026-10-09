@@ -201,6 +201,20 @@ func registerSessionTests() {
             s.disconnect()
         }
     }
+    test("session/custom-accounts-mtu-override-reaches-the-network-config") {
+        let h = SessionHarness(); let s = VPNSession(deps: h.deps(), timing: h.fastTiming); let r = Recorder(); r.attach(s)
+        s.connect(config: ConnectConfig(host: "1.2.3.4", authType: "anonymous", mtu: 1300))
+        await expectA(await r.waitFor(.connected))
+        expectEqual(h.nets.value[0].mtuOverrides, [1300])
+        s.disconnect()
+    }
+    test("session/no-mtu-override-lets-the-dhcp-lease-decide") {
+        let h = SessionHarness(); let s = VPNSession(deps: h.deps(), timing: h.fastTiming); let r = Recorder(); r.attach(s)
+        s.connect(config: ConnectConfig(host: "1.2.3.4", authType: "anonymous"))
+        await expectA(await r.waitFor(.connected))
+        expectEqual(h.nets.value[0].mtuOverrides, [nil])
+        s.disconnect()
+    }
     test("session/ipv6-is-forwarded-and-addressed-only-when-not-blocked") {              // review 7
         for block in [true, false] {
             let h = SessionHarness(); let s = VPNSession(deps: h.deps(), timing: h.fastTiming); let r = Recorder(); r.attach(s)

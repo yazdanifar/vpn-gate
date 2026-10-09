@@ -21,7 +21,9 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
     public var checkServerCert: Bool
     public var serverCertFingerprint: String?
     public var maxConnection: Int
-    /// Reserved: stored for compatibility with SoftEther account files but not used by the helper (not shown in the UI).
+    /// Splits send and receive onto separate TCP sockets (Protocol.c half_connection). The helper requests at
+    /// least 4 connections when this is on and marks the primary socket client-to-server; the server assigns a
+    /// direction to each additional one.
     public var halfConnection: Bool
     public var compression: Bool
     public var udpAcceleration: Bool
@@ -33,8 +35,11 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
     /// the app retries those itself, forever, every 15 s (AppModel.considerReconnect).
     public var reconnectInterval: TimeInterval
     public var reconnectCount: Int
+    /// "Virtual Network Adapter" MAC override ("aa:bb:cc:dd:ee:ff"); nil (the default) uses a random one, like
+    /// the stock client's "Generate a new MAC address" default.
     public var virtualMacAddress: String?
-    /// Reserved: the tunnel MTU comes from the DHCP lease (option 26), not from here.
+    /// "Virtual Network Adapter" MTU override; nil (the default) means automatic — the tunnel MTU then comes
+    /// entirely from the DHCP lease (option 26). An explicit value here wins over the lease.
     public var mtu: Int?
     public var createdAt: Date
     public var updatedAt: Date
@@ -59,7 +64,7 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
         reconnectInterval: TimeInterval = 3.0,
         reconnectCount: Int = 8,
         virtualMacAddress: String? = nil,
-        mtu: Int? = 1500,
+        mtu: Int? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -121,7 +126,7 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
             reconnectInterval: try c.decodeIfPresent(TimeInterval.self, forKey: .reconnectInterval) ?? 3.0,
             reconnectCount: try c.decodeIfPresent(Int.self, forKey: .reconnectCount) ?? 8,
             virtualMacAddress: try c.decodeIfPresent(String.self, forKey: .virtualMacAddress),
-            mtu: try c.decodeIfPresent(Int.self, forKey: .mtu) ?? 1500,
+            mtu: try c.decodeIfPresent(Int.self, forKey: .mtu),
             createdAt: try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? now,
             updatedAt: try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? now
         )
@@ -169,13 +174,15 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
             useCompress: compression,
             useUdpAccel: udpAcceleration,
             disableQoS: disableQoS,
+            halfConnection: halfConnection,
             autoReconnect: autoReconnect,
             reconnectInterval: reconnectInterval,
             reconnectCount: reconnectCount,
             blockIPv6: blockIPv6,
             checkServerCert: checkServerCert,
             serverCertFingerprint: serverCertFingerprint,
-            mtu: mtu
+            mtu: mtu,
+            virtualMacAddress: virtualMacAddress
         )
     }
 }

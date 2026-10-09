@@ -16,11 +16,16 @@ final class AccountEditorState: ObservableObject {
     @Published var compression: Bool
     @Published var udpAcceleration: Bool
     @Published var useQoS: Bool
+    @Published var halfConnection: Bool
     @Published var autoReconnect: Bool
     @Published var reconnectIntervalSeconds: Int
     @Published var reconnectCount: Int
     @Published var checkServerCert: Bool
     @Published var fingerprint: String
+    /// "Automatic" (DHCP-provided) when empty, otherwise the "Virtual Network Adapter" MTU override.
+    @Published var mtuString: String
+    /// Random when empty, otherwise the "Virtual Network Adapter" MAC override.
+    @Published var macString: String
 
     /// Certificate login: freshly imported material (nil = keep what is stored) and whether something is stored already.
     @Published var certDer: Data?
@@ -41,11 +46,14 @@ final class AccountEditorState: ObservableObject {
         self.compression = account?.compression ?? false
         self.udpAcceleration = account?.udpAcceleration ?? true
         self.useQoS = !(account?.disableQoS ?? false)
+        self.halfConnection = account?.halfConnection ?? false
         self.autoReconnect = account?.autoReconnect ?? true
         self.reconnectIntervalSeconds = Int((account?.reconnectInterval ?? 3).rounded())
         self.reconnectCount = account?.reconnectCount ?? 8
         self.checkServerCert = account?.checkServerCert ?? false
         self.fingerprint = account?.serverCertFingerprint ?? ""
+        self.mtuString = account?.mtu.map(String.init) ?? ""
+        self.macString = account?.virtualMacAddress ?? ""
         self.hasStoredIdentity = hasStoredIdentity
     }
 
@@ -63,10 +71,22 @@ final class AccountEditorState: ObservableObject {
 
     var certificateReady: Bool { authType != .certificate || certDer != nil && privateKeyDer != nil || hasStoredIdentity }
 
+    var trimmedMtu: String { mtuString.trimmingCharacters(in: .whitespaces) }
+    var mtuError: String? {
+        trimmedMtu.isEmpty || (Int(trimmedMtu).map { (576...1500).contains($0) } ?? false)
+            ? nil : "MTU must be 576–1500, or blank for automatic."
+    }
+
+    var trimmedMac: String { macString.trimmingCharacters(in: .whitespaces) }
+    var macError: String? {
+        trimmedMac.isEmpty || InputValidation.parseMacAddress(trimmedMac) != nil
+            ? nil : "MAC must be 6 hex byte pairs, e.g. 00:AC:DE:12:34:56."
+    }
+
     var canSave: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty && !host.trimmingCharacters(in: .whitespaces).isEmpty
             && InputValidation.isValidHost(host.trimmingCharacters(in: .whitespaces))
-            && fingerprintError == nil && certificateReady
+            && fingerprintError == nil && certificateReady && mtuError == nil && macError == nil
             && InputValidation.isValidIdentityField(hub) && InputValidation.isValidIdentityField(username)
     }
 
@@ -88,9 +108,12 @@ final class AccountEditorState: ObservableObject {
         acc.compression = compression
         acc.udpAcceleration = udpAcceleration
         acc.disableQoS = !useQoS
+        acc.halfConnection = halfConnection
         acc.autoReconnect = autoReconnect
         acc.reconnectInterval = TimeInterval(max(1, reconnectIntervalSeconds))
         acc.reconnectCount = max(1, reconnectCount)
+        acc.mtu = trimmedMtu.isEmpty ? nil : Int(trimmedMtu)
+        acc.virtualMacAddress = trimmedMac.isEmpty ? nil : trimmedMac
         return acc
     }
 }

@@ -186,7 +186,9 @@ func registerVGDatTests() {
     final class RelayStream: ByteStream {
         var buffer = ByteBuffer()
         var sentData = [Data]()
-        var isCancelled = false
+        // Written by cancel() (the watchdog's task) and polled by readChunk() (the stream's own task): needs a lock.
+        private let _isCancelled = Locked(false)
+        var isCancelled: Bool { _isCancelled.value }
         private var served = false
         let payload: Data
         let hangAfterStart: Bool
@@ -207,7 +209,7 @@ func registerVGDatTests() {
             resp.append(payload)
             return resp
         }
-        func cancel() { isCancelled = true }
+        func cancel() { _isCancelled.update { $0 = true } }
     }
 
     test("vgdat/fetcher-relay-download-with-ack-handshake") {

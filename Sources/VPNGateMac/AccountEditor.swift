@@ -55,6 +55,11 @@ struct AccountEditor: View {
                     Toggle("Use Data Compression", isOn: $ui.compression)
                     Toggle("Use UDP Acceleration (Fastest)", isOn: $ui.udpAcceleration)
                     Toggle("Use QoS", isOn: $ui.useQoS)
+                    Toggle("Use Half Connection (separate send/receive sockets)", isOn: $ui.halfConnection)
+                    TextField("MTU (blank = automatic):", text: $ui.mtuString)
+                    if let e = ui.mtuError { Text(e).font(.caption).foregroundStyle(.red) }
+                    TextField("Virtual MAC address (blank = random):", text: $ui.macString)
+                    if let e = ui.macError { Text(e).font(.caption).foregroundStyle(.red) }
                     Toggle("Verify Server Certificate", isOn: $ui.checkServerCert)
                     TextField("Server certificate fingerprint (SHA-1 / SHA-256, optional):", text: $ui.fingerprint)
                     if let e = ui.fingerprintError { Text(e).font(.caption).foregroundStyle(.red) }

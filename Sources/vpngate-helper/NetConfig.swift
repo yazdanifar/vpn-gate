@@ -104,7 +104,9 @@ final class NetConfig: NetConfiguring {
         else { addRoute(["-host", host, "-interface", o.iface], undo: ["-host", host]) }
     }
 
-    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool = true) throws {
+    /// `mtuOverride` is the account's own "Virtual Network Adapter" MTU setting (SoftEther Client Manager), when
+    /// the user set one explicitly; it wins over whatever the DHCP lease offers, matching the real client.
+    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool = true, mtuOverride: Int? = nil) throws {
         let ip = ipString(lease.ip), gw = ipString(lease.router)
         let orig = Self.defaultRoute(runner)
         originalRoute = orig
@@ -113,8 +115,10 @@ final class NetConfig: NetConfiguring {
         state = st
         save()
 
-        // The DHCP parser already ignores out-of-range option 26 values; check again for leases built elsewhere.
-        let mtuVal = lease.mtu.flatMap { (576...1500).contains($0) ? String($0) : nil } ?? "1400"
+        // The account's own MTU setting wins when valid; otherwise fall back to the DHCP lease's option 26 (the
+        // parser already ignores out-of-range values there; checked again here for leases built elsewhere).
+        func validMtu(_ v: Int?) -> String? { v.flatMap { (576...1500).contains($0) ? String($0) : nil } }
+        let mtuVal = validMtu(mtuOverride) ?? validMtu(lease.mtu.map(Int.init)) ?? "1400"
         runner.run("/sbin/ifconfig", [iface, "inet", ip, gw, "netmask", "255.255.255.255", "mtu", mtuVal, "up"])
         // Keep the tunnel's own transport outside the tunnel (never for loopback/link-local proxies).
         if !InputValidation.isLocalAddress(bypassHost), let o = orig { addBypassRoute(bypassHost, via: o) }

@@ -4,9 +4,29 @@ import VPNGateCore
 /// Manages multiple TCP connections for a single SoftEther session (Protocol.c ConnectionPool).
 /// Sockets multiplex received Ethernet frames and balance outgoing frame batches.
 final class ConnectionPool {
+    /// Which way a half-connection socket may carry application data (Connection.c:109-113's IsSendDirection /
+    /// IsRecvDirection, from the client's point of view). A normal (non-half-connection) session only ever uses
+    /// `.both`, which keeps every socket eligible to send and receive exactly as before this existed.
+    enum SocketDirection {
+        case both, serverToClient, clientToServer
+        var canSend: Bool { self == .both || self == .clientToServer }
+        var canReceive: Bool { self == .both || self == .serverToClient }
+
+        /// The server's `direction` field on an additional_connect reply (0 both, 1 server->client, 2 client->server,
+        /// Protocol.c:5257); anything else (including absent, the normal case) is `.both`.
+        init(wireValue: UInt32?) {
+            switch wireValue {
+            case 1: self = .serverToClient
+            case 2: self = .clientToServer
+            default: self = .both
+            }
+        }
+    }
+
     struct SocketEntry {
         let id: Int
         let stream: ByteStream
+        let direction: SocketDirection
         var bytesOut: UInt64 = 0
         var readerTask: Task<Void, Never>?
     }
@@ -28,8 +48,10 @@ final class ConnectionPool {
         return sockets.count
     }
 
-    /// Adds an established socket to the pool and starts reading frames from it.
-    func add(stream: ByteStream, useCompress: Bool, timeoutMs: Int) {
+    /// Adds an established socket to the pool and starts reading frames from it. `direction` is `.both` for a
+    /// normal session; under half connection, a client-to-server-only socket is never expected to receive
+    /// application data, so the idle-read watchdog is skipped for it (silence there is correct, not a stall).
+    func add(stream: ByteStream, useCompress: Bool, timeoutMs: Int, direction: SocketDirection = .both) {
         lock.lock()
         if isClosed {
             lock.unlock()
@@ -38,7 +60,7 @@ final class ConnectionPool {
         }
         let id = nextId
         nextId += 1
-        var entry = SocketEntry(id: id, stream: stream)
+        var entry = SocketEntry(id: id, stream: stream, direction: direction)
 
         let rxLock = NSLock()
         var lastRxDate = Date()
@@ -65,6 +87,7 @@ final class ConnectionPool {
         }
 
         let watchdog = Task.detached { [weak self] in
+            guard direction.canReceive else { return }   // send-only: never receiving is expected, not a timeout
             let pollNs = UInt64(max(timeoutMs / 2, 50)) * 1_000_000
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: pollNs)
@@ -85,12 +108,12 @@ final class ConnectionPool {
         lock.unlock()
     }
 
-    /// Selects the least-loaded socket and sends the encoded data.
+    /// Selects the least-loaded socket eligible to send (every socket, in a normal session) and sends the data.
     func send(data: Data, byteCount: Int) async throws {
         let stream: ByteStream? = lock.withLock {
             guard !isClosed, !sockets.isEmpty else { return nil }
-            // Pick least-loaded by bytesOut
-            let sorted = sockets.values.sorted { $0.bytesOut < $1.bytesOut }
+            // Pick least-loaded by bytesOut, among sockets this direction allows us to send on.
+            let sorted = sockets.values.filter { $0.direction.canSend }.sorted { $0.bytesOut < $1.bytesOut }
             guard let chosen = sorted.first else { return nil }
             sockets[chosen.id]?.bytesOut += UInt64(byteCount)
             return chosen.stream
@@ -104,11 +127,12 @@ final class ConnectionPool {
         onByteCount?(0, byteCount)
     }
 
-    /// Broadcasts a keep-alive packet to all active sockets.
+    /// Broadcasts a keep-alive packet to every socket eligible to send (receive-only sockets never send anything,
+    /// Connection.c's keepalive loop is itself gated by IsSendDirection).
     func broadcastKeepAlive(_ data: Data) async {
         let list: [ByteStream] = lock.withLock {
             guard !isClosed else { return [] }
-            return sockets.values.map(\.stream)
+            return sockets.values.filter { $0.direction.canSend }.map(\.stream)
         }
         for s in list {
             try? await s.send(data)

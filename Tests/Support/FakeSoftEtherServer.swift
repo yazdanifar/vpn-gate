@@ -21,6 +21,9 @@ final class FakeSoftEtherServer {
     var welcomeOverride: Pack?
     /// The next N additional_connect requests are answered with an error.
     var failAdditionalConnects = 0
+    /// Queue of `direction` values (0 both, 1 server->client, 2 client->server) handed out to successive
+    /// additional_connect requests, in order; once empty, replies carry no `direction` (plain "both").
+    var additionalConnectDirections: [UInt32] = []
     var useCompress = false
     var maxConnections: UInt32 = 1
     var sessionKey = Data(repeating: 0x11, count: 20)
@@ -56,6 +59,8 @@ final class FakeSoftEtherServer {
     var keepAlivesReceived: Int { lock.lock(); defer { lock.unlock() }; return _keepAlives }
     var streamsCreated: Int { lock.lock(); defer { lock.unlock() }; return _streams.count }
     var lastStream: FakeStream? { lock.lock(); defer { lock.unlock() }; return _streams.last }
+    /// Every stream in creation order (index 0 is the primary connection, 1+ are additional connections).
+    var streams: [FakeStream] { lock.lock(); defer { lock.unlock() }; return _streams }
 
     var factory: StreamFactory {
         { [unowned self] _, _, _ in
@@ -76,6 +81,10 @@ final class FakeSoftEtherServer {
         lock.lock(); defer { lock.unlock() }
         if failAdditionalConnects > 0 { failAdditionalConnects -= 1; return true }
         return false
+    }
+    fileprivate func takeNextDirection() -> UInt32? {
+        lock.lock(); defer { lock.unlock() }
+        return additionalConnectDirections.isEmpty ? nil : additionalConnectDirections.removeFirst()
     }
     fileprivate func recordKeepAlive() { lock.lock(); _keepAlives += 1; lock.unlock() }
 
@@ -131,6 +140,16 @@ final class FakeStream: ByteStream {
     private let lock = NSLock()
     private(set) var cancelled = false
     private enum Mode { case http, data }
+    /// Total bytes this specific socket has carried client->server, so a test can tell which physical
+    /// connection a send actually went out on (the aggregate server-level frame log doesn't say). Written
+    /// under `lock` (from `send`/`process`/`respond`, all on the same socket's own task); the public accessor
+    /// below locks too, since a test typically polls this from a different task than the one driving the socket.
+    private var _bytesReceivedFromClient = 0
+    var bytesReceivedFromClient: Int { lock.lock(); defer { lock.unlock() }; return _bytesReceivedFromClient }
+    /// The `direction` this specific socket was handed on its additional_connect reply (nil for the primary
+    /// connection, which never sends that request at all). Recorded on the stream itself so a test never has to
+    /// guess which array index corresponds to which assignment.
+    private(set) var assignedDirection: UInt32?
 
     init(server: FakeSoftEtherServer) { self.server = server }
 
@@ -162,6 +181,7 @@ final class FakeStream: ByteStream {
         if isCancelled { throw StreamError.closed }
         lock.lock()
         rx.append(contentsOf: data)
+        _bytesReceivedFromClient += data.count
         lock.unlock()
         process()
     }
@@ -223,8 +243,11 @@ final class FakeStream: ByteStream {
                     deliver(FakeSoftEtherServer.http(200, [UInt8](e.serialize()))); return
                 }
                 decoder.useCompress = server.useCompress
-                deliver(FakeSoftEtherServer.http(200, [UInt8](Pack().serialize())))
+                var reply = Pack()
+                if let d = server.takeNextDirection() { reply.addInt("direction", d); assignedDirection = d }
+                deliver(FakeSoftEtherServer.http(200, [UInt8](reply.serialize())))
                 mode = .data
+                _bytesReceivedFromClient = 0   // only count application-data-phase bytes, not the handshake
                 return
             }
 
@@ -237,7 +260,7 @@ final class FakeStream: ByteStream {
             }
             decoder.useCompress = server.useCompress
             deliver(FakeSoftEtherServer.http(200, [UInt8](server.welcomePack().serialize())) + server.trailingAfterWelcome)
-            if server.loginError == 0 && !server.redirect { mode = .data }
+            if server.loginError == 0 && !server.redirect { mode = .data; _bytesReceivedFromClient = 0 }
         default:
             deliver(Array("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".utf8))
         }

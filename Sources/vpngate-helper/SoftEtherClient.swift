@@ -94,6 +94,10 @@ final class SoftEtherClient: VPNTransport {
     private let useCompressConfig: Bool
     private let useUdpAccelConfig: Bool
     private let disableQoS: Bool
+    /// Whether we requested half connection in the login pack (Protocol.c: half_connection in the login Pack,
+    /// read verbatim by the server, no negotiation). Only additional connections can be assigned a one-way
+    /// direction; the primary connection is always client-to-server when this is on (Protocol.c:4172-4176).
+    private let halfConnectionConfig: Bool
     private let loginUniqueId: Data                 // 20 bytes, stable per install
     private let nodeUniqueId: Data                  // 16 bytes
     /// Set when the server rejected the watermark upload and the plain one was used; additional connections then match.
@@ -149,6 +153,7 @@ final class SoftEtherClient: VPNTransport {
         useCompress: Bool = false,
         useUdpAccel: Bool = true,
         disableQoS: Bool = false,
+        halfConnection: Bool = false,
         uniqueId: HostUniqueId? = nil,
         serverCertPolicy: ServerCertPolicy = .acceptAny,
         makeStream: StreamFactory? = nil
@@ -159,10 +164,12 @@ final class SoftEtherClient: VPNTransport {
         self.userName = userName
         self.auth = auth
         self.proxy = proxy
-        self.maxConnectionsConfig = max(1, min(maxConnections, 32))
+        // Half connection needs separate send/receive sockets; request at least 4 (upstream's own minimum, Protocol.c:6022).
+        self.maxConnectionsConfig = max(halfConnection ? 4 : 1, min(maxConnections, 32))
         self.useCompressConfig = useCompress
         self.useUdpAccelConfig = useUdpAccel
         self.disableQoS = disableQoS
+        self.halfConnectionConfig = halfConnection
         let uid = uniqueId ?? HostUniqueId(key: HostUniqueId.secureRandom(32))
         self.loginUniqueId = uid.loginId
         self.nodeUniqueId = uid.nodeId
@@ -390,7 +397,10 @@ final class SoftEtherClient: VPNTransport {
         // Add main stream to ConnectionPool
         handedOff = true
         setConnectedIPv4(activeStream.remoteIPv4)
-        pool.add(stream: activeStream, useCompress: useCompress, timeoutMs: timeoutMs)
+        // The primary connection is always client-to-server when half connection is on (Protocol.c:4172-4176);
+        // the server-to-client direction is only ever assigned to an additional connection.
+        pool.add(stream: activeStream, useCompress: useCompress, timeoutMs: timeoutMs,
+                 direction: halfConnectionConfig ? .clientToServer : .both)
         return (wel, nil)
     }
 
@@ -542,7 +552,7 @@ final class SoftEtherClient: VPNTransport {
         p.addInt("max_connection", UInt32(maxConnectionsConfig))
         p.addBool("use_encrypt", true)
         p.addBool("use_compress", useCompressConfig)
-        p.addBool("half_connection", false)
+        p.addBool("half_connection", halfConnectionConfig)
         p.addBool("require_bridge_routing_mode", false)
         p.addBool("require_monitor_mode", false)
         p.addBool("qos", !disableQoS)                // upstream: !DisableQoS
@@ -684,11 +694,12 @@ final class SoftEtherClient: VPNTransport {
             throw StreamError.protocolError("Additional connection refused: \(SoftEtherError.describe(Int(err)))")
         }
 
-        // The reply's `direction` (0 both, 1 server->client, 2 client->server) is chosen by the server and is 0 unless
-        // half_connection was requested, which this client never does; the field is therefore not acted on.
+        // The reply's `direction` (0 both, 1 server->client, 2 client->server) is chosen by the server, only when
+        // half connection was requested; absent/0 means both ways, same as a normal connection (Protocol.c:5257).
+        let direction = ConnectionPool.SocketDirection(wireValue: resp.int("direction"))
         guard !isClosed else { return }
         added = true
-        pool.add(stream: s, useCompress: useCompress, timeoutMs: timeoutMs)
+        pool.add(stream: s, useCompress: useCompress, timeoutMs: timeoutMs, direction: direction)
     }
 
     // MARK: - Send Frame

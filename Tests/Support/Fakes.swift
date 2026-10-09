@@ -134,11 +134,14 @@ final class SessionHarness {
 }
 
 final class FakeNet: NetConfiguring {
-    private let state = Locked((applied: [(iface: String, host: String)](), torn: 0, ipv6: [Bool]()))
+    private let state = Locked((applied: [(iface: String, host: String)](), torn: 0, ipv6: [Bool](), mtuOverrides: [Int?]()))
     var applied: [(iface: String, host: String)] { state.value.applied }
     var ipv6Flags: [Bool] { state.value.ipv6 }
+    var mtuOverrides: [Int?] { state.value.mtuOverrides }
     var tornDown: Int { state.value.torn }
-    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool) throws { state.update { $0.applied.append((iface, bypassHost)); $0.ipv6.append(blockIPv6) } }
+    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool, mtuOverride: Int?) throws {
+        state.update { $0.applied.append((iface, bypassHost)); $0.ipv6.append(blockIPv6); $0.mtuOverrides.append(mtuOverride) }
+    }
     func teardown() { state.update { $0.torn += 1 } }
     private let extra = Locked([String]())
     var bypassed: [String] { extra.value }

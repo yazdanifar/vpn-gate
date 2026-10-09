@@ -50,6 +50,7 @@ struct SessionDependencies {
             useCompress: config.useCompress,
             useUdpAccel: config.useUdpAccel,
             disableQoS: config.disableQoS,
+            halfConnection: config.halfConnection,
             uniqueId: HostUniqueId.shared,
             serverCertPolicy: ServerCertPolicy(checkServerCert: config.checkServerCert, fingerprint: config.serverCertFingerprint)
         )
@@ -293,7 +294,7 @@ final class VPNSession: SessionControlling {
 
         let tun = try deps.makeTun()
         guard withResources(r, { $0.tun = tun }) else { tun.close(); throw CancellationError() }
-        let bridge = EthernetBridge(timing: timing.bridge)
+        let bridge = EthernetBridge(timing: timing.bridge, mac: config.virtualMacAddress.flatMap(InputValidation.parseMacAddress))
         bridge.handleIPv6 = !config.blockIPv6
         tun.forwardIPv6 = !config.blockIPv6
         guard withResources(r, { $0.bridge = bridge }) else { throw CancellationError() }
@@ -320,7 +321,7 @@ final class VPNSession: SessionControlling {
         // The address the TLS connection really went to, not a second lookup of the name (which could differ, or fail).
         let primaryBypass = config.proxy.kind != .none ? config.proxy.host
             : InputValidation.isIPv4Literal(config.host) ? config.host : (client.remoteIPv4 ?? config.host)
-        try net.apply(iface: tun.name, lease: lease, bypassHost: primaryBypass, blockIPv6: config.blockIPv6)
+        try net.apply(iface: tun.name, lease: lease, bypassHost: primaryBypass, blockIPv6: config.blockIPv6, mtuOverride: config.mtu)
         // After a cluster redirect the data flows to another host, and UDP acceleration to its own endpoint:
         // both need their own route around the tunnel.
         for h in client.bypassHosts where h != primaryBypass { net.addBypass(host: h) }

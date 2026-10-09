@@ -38,6 +38,9 @@ public struct ConnectConfig: Codable, Equatable {
     /// SoftEther "Disable QoS" (login `qos` = !disableQoS). False = QoS on, like the stock Client Manager;
     /// the VPN Gate server-connect path sets it (the real VPN Gate client does).
     public var disableQoS: Bool
+    /// SoftEther half connection: client-to-server and server-to-client traffic go over separate TCP sockets.
+    /// Requires at least 4 connections; the helper enforces that minimum itself when this is set.
+    public var halfConnection: Bool
     public var autoReconnect: Bool
     /// Seconds between reconnect attempts; nil keeps the helper's own default (3 s, the stock Client Manager's
     /// setting). VPN Gate connections never set this: the app does their retrying itself (see AppModel).
@@ -47,7 +50,10 @@ public struct ConnectConfig: Codable, Equatable {
     public var blockIPv6: Bool
     public var checkServerCert: Bool
     public var serverCertFingerprint: String?
+    /// Overrides the tunnel MTU; nil (the default) leaves it to the DHCP lease.
     public var mtu: Int?
+    /// "Virtual Network Adapter" MAC override ("aa:bb:cc:dd:ee:ff"); nil (the default) uses a random one.
+    public var virtualMacAddress: String?
 
     public init(
         host: String,
@@ -64,13 +70,15 @@ public struct ConnectConfig: Codable, Equatable {
         useCompress: Bool = false,
         useUdpAccel: Bool = true,
         disableQoS: Bool = false,
+        halfConnection: Bool = false,
         autoReconnect: Bool = true,
         reconnectInterval: TimeInterval? = nil,
         reconnectCount: Int? = nil,
         blockIPv6: Bool = true,
         checkServerCert: Bool = false,
         serverCertFingerprint: String? = nil,
-        mtu: Int? = 1500
+        mtu: Int? = nil,
+        virtualMacAddress: String? = nil
     ) {
         self.host = host
         self.ports = ports
@@ -86,6 +94,7 @@ public struct ConnectConfig: Codable, Equatable {
         self.useCompress = useCompress
         self.useUdpAccel = useUdpAccel
         self.disableQoS = disableQoS
+        self.halfConnection = halfConnection
         self.autoReconnect = autoReconnect
         self.reconnectInterval = reconnectInterval
         self.reconnectCount = reconnectCount
@@ -93,6 +102,7 @@ public struct ConnectConfig: Codable, Equatable {
         self.checkServerCert = checkServerCert
         self.serverCertFingerprint = serverCertFingerprint
         self.mtu = mtu
+        self.virtualMacAddress = virtualMacAddress
     }
 
     /// Tolerant like the account file: a request from an older app (without `disableQoS`) still decodes.
@@ -113,13 +123,15 @@ public struct ConnectConfig: Codable, Equatable {
             useCompress: try c.decodeIfPresent(Bool.self, forKey: .useCompress) ?? false,
             useUdpAccel: try c.decodeIfPresent(Bool.self, forKey: .useUdpAccel) ?? true,
             disableQoS: try c.decodeIfPresent(Bool.self, forKey: .disableQoS) ?? false,
+            halfConnection: try c.decodeIfPresent(Bool.self, forKey: .halfConnection) ?? false,
             autoReconnect: try c.decodeIfPresent(Bool.self, forKey: .autoReconnect) ?? true,
             reconnectInterval: try c.decodeIfPresent(TimeInterval.self, forKey: .reconnectInterval),
             reconnectCount: try c.decodeIfPresent(Int.self, forKey: .reconnectCount),
             blockIPv6: try c.decodeIfPresent(Bool.self, forKey: .blockIPv6) ?? true,
             checkServerCert: try c.decodeIfPresent(Bool.self, forKey: .checkServerCert) ?? false,
             serverCertFingerprint: try c.decodeIfPresent(String.self, forKey: .serverCertFingerprint),
-            mtu: try c.decodeIfPresent(Int.self, forKey: .mtu)
+            mtu: try c.decodeIfPresent(Int.self, forKey: .mtu),
+            virtualMacAddress: try c.decodeIfPresent(String.self, forKey: .virtualMacAddress)
         )
     }
 }

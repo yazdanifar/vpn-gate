@@ -49,7 +49,7 @@ protocol DNSConfigurator {
 }
 
 protocol NetConfiguring: AnyObject {
-    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool) throws
+    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool, mtuOverride: Int?) throws
     /// Adds a host route around the tunnel for a further peer (redirect target, UDP acceleration endpoint); removed by `teardown()`.
     func addBypass(host: String)
     /// Puts the SLAAC address learned from a Router Advertisement on the tunnel interface (only used when IPv6 is not blocked).
