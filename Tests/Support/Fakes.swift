@@ -151,7 +151,7 @@ final class FakeNet: NetConfiguring {
     func configureIPv6(address: [UInt8], prefixLength: Int) { v6.update { $0.append(address) } }
 }
 
-final class FakeSession: SessionControlling {
+final class FakeSession: SessionControlling, @unchecked Sendable {
     var emit: ((HelperEvent) -> Void)?
     var snapshot = HelperEvent(state: .disconnected)
     private let state = Locked((connects: [(host: String, port: Int?)](), disconnects: 0, blockIPv6: [Bool](), configs: [ConnectConfig](), autoReconnects: [Bool](), portLists: [[Int]?]()))
@@ -210,3 +210,8 @@ func wire(_ bridge: EthernetBridge, to net: FakeNetworkServer) {
         for r in net.handle(f) { bridge?.fromHub(r) }
     }
 }
+
+// UserDefaults is documented thread-safe but older SDKs do not say so; the tests hand throwaway suites to @Sendable closures.
+extension UserDefaults: @unchecked @retroactive Sendable {}
+// UdpAccel guards all of its state with its own lock; the concurrency tests call it from several threads on purpose.
+extension UdpAccel: @unchecked Sendable {}

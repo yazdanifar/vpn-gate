@@ -126,10 +126,11 @@ enum CertImport {
         let path = (directory as NSString).appendingPathComponent("vpngate-p12-\(UUID().uuidString).keychain")
         var kc: SecKeychain?
         let pw = UUID().uuidString
-        guard SecKeychainCreate(path, UInt32(pw.utf8.count), pw, false, nil, &kc) == errSecSuccess, let keychain = kc else {
+        guard let api = LegacyKeychainAPI.shared,
+              api.create(path, UInt32(pw.utf8.count), pw, 0, nil, &kc) == errSecSuccess, let keychain = kc else {
             throw Failure.pkcs12("cannot create a temporary keychain")
         }
-        defer { SecKeychainDelete(keychain); try? FileManager.default.removeItem(atPath: path) }
+        defer { _ = LegacyKeychainAPI.shared?.delete(keychain); try? FileManager.default.removeItem(atPath: path) }
         return try body(keychain)
     }
 
@@ -238,4 +239,22 @@ enum CertImport {
         guard let key = header(0x04) else { return .other }
         return isRSA ? .rsa(Data(b[key.start..<key.start + key.len])) : .other
     }
+}
+
+/// `SecKeychainCreate` / `SecKeychainDelete` are deprecated, but a throwaway *file* keychain is the only way to import
+/// an extractable key from an older-encoding .p12 on macOS 14 (`SecPKCS12Import` makes non-extractable keys there).
+/// They are looked up at run time so the build stays free of deprecation warnings; if a future macOS drops them the
+/// lookup returns nil and the import fails with a clear message instead of crashing.
+private struct LegacyKeychainAPI {
+    typealias Create = @convention(c) (UnsafePointer<CChar>, UInt32, UnsafeRawPointer?, UInt8, SecAccess?,
+                                       UnsafeMutablePointer<SecKeychain?>) -> OSStatus
+    typealias Delete = @convention(c) (SecKeychain?) -> OSStatus
+    let create: Create
+    let delete: Delete
+
+    static let shared: LegacyKeychainAPI? = {
+        guard let handle = dlopen(nil, RTLD_NOW),
+              let c = dlsym(handle, "SecKeychainCreate"), let d = dlsym(handle, "SecKeychainDelete") else { return nil }
+        return LegacyKeychainAPI(create: unsafeBitCast(c, to: Create.self), delete: unsafeBitCast(d, to: Delete.self))
+    }()
 }

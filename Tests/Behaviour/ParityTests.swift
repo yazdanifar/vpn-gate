@@ -336,7 +336,7 @@ func registerParityTests() {
         try! srv.start()
         return (srv, fake)
     }
-    func vpnServer(_ ip: String = "5.6.7.8") -> VPNServer {
+    @Sendable func vpnServer(_ ip: String = "5.6.7.8") -> VPNServer {
         ServerList.parse("#h\nvpn1,\(ip),1,1,1,Japan,JP,1,1,1,1,2weeks,Op,msg,\(Data("proto tcp\nremote \(ip) 443\n".utf8).base64EncodedString())\n")[0]
     }
     func drop(_ fake: FakeSession, _ why: String = "Link closed") {

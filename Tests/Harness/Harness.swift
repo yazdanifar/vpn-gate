@@ -89,7 +89,7 @@ func runAllTests(args: [String]) async -> Int32 {
     var passed = 0, failed = 0
     var failedNames: [String] = []
     for t in selected {
-        failLock.lock(); failures = []; failLock.unlock()
+        failLock.withLock { failures = [] }
         let start = Date()
         let finished = await withTaskGroup(of: Bool.self) { g -> Bool in
             g.addTask { do { try await t.body(); return true } catch { fail("threw \(error)"); return true } }
@@ -99,7 +99,7 @@ func runAllTests(args: [String]) async -> Int32 {
             return r
         }
         if !finished { fail("timed out after \(t.timeout)s") }
-        failLock.lock(); let f = failures; failLock.unlock()
+        let f = failLock.withLock { failures }
         let ms = Int(Date().timeIntervalSince(start) * 1000)
         if f.isEmpty { passed += 1; print("PASS \(t.name) (\(ms)ms)") }
         else { failed += 1; failedNames.append(t.name); print("FAIL \(t.name) (\(ms)ms)"); f.forEach { print($0) } }

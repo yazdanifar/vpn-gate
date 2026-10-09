@@ -124,8 +124,7 @@ final class VPNSession: SessionControlling {
     func waitUntilIdle(timeout: Double) async -> Bool {
         let end = Date().addingTimeInterval(timeout)
         while Date() < end {
-            lock.lock(); let n = activeRuns; lock.unlock()
-            if n == 0 { return true }
+            if lock.withLock({ activeRuns }) == 0 { return true }
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
         return false
@@ -169,7 +168,7 @@ final class VPNSession: SessionControlling {
         if let old = old { release(old) }
         runTask = Task.detached { [weak self] in
             await self?.run(gen, config: config)
-            if let self = self { self.lock.lock(); self.activeRuns -= 1; self.lock.unlock() }
+            if let self { self.lock.withLock { self.activeRuns -= 1 } }
         }
     }
 
@@ -214,10 +213,12 @@ final class VPNSession: SessionControlling {
         while isCurrent(gen) && !Task.isCancelled {
             set(gen, attempt == 0 ? .connecting : .reconnecting, server: config.host)
             let r = Resources(gen: gen)
-            lock.lock()
-            guard generation == gen else { lock.unlock(); return }
-            res = r
-            lock.unlock()
+            let stillCurrent: Bool = lock.withLock {
+                guard generation == gen else { return false }
+                res = r
+                return true
+            }
+            guard stillCurrent else { return }
 
             var failure: Error?
             do {
@@ -227,9 +228,7 @@ final class VPNSession: SessionControlling {
             } catch { failure = error }
 
             // Release only if nobody else already did (disconnect/connect hand resources over themselves).
-            lock.lock()
-            if res === r { res = nil }
-            lock.unlock()
+            lock.withLock { if res === r { res = nil } }
             release(r)
             if !isCurrent(gen) || Task.isCancelled { return }
 

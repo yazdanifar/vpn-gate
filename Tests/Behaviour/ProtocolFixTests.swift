@@ -415,7 +415,7 @@ func registerProtocolFixTests() {
         let threads = 4, each = 40
         let done = DispatchGroup()
         for _ in 0..<threads { done.enter(); Thread.detachNewThread { for i in 0..<each { _ = u.sendFrame([UInt8(i)]) }; done.leave() } }
-        done.wait()
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in done.notify(queue: .global()) { c.resume() } }
         var ivs = Set<[UInt8]>(); var n = 0
         while let p = lb.recv(timeout: 0.3) { ivs.insert(Array(p.prefix(12))); n += 1 }
         expect(n >= threads * each / 2, "received \(n)")

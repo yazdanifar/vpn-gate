@@ -179,10 +179,10 @@ final class FakeStream: ByteStream {
     // client → server
     func send(_ data: Data) async throws {
         if isCancelled { throw StreamError.closed }
-        lock.lock()
-        rx.append(contentsOf: data)
-        _bytesReceivedFromClient += data.count
-        lock.unlock()
+        lock.withLock {
+            rx.append(contentsOf: data)
+            _bytesReceivedFromClient += data.count
+        }
         process()
     }
 

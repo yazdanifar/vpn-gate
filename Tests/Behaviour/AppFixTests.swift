@@ -396,8 +396,11 @@ func registerAppFixTests() {
         let (srv, fake) = startHelper(path); defer { srv.stop() }
         let m = await MainActor.run { makeModel(path) }
         await waitReady(m)
-        var acc = ClientAccount(name: "P", host: "8.8.8.8")
-        acc.proxy.kind = .http; acc.proxy.host = "10.0.0.2"; acc.proxy.port = 3128; acc.proxy.username = "u"; acc.proxy.password = "px-secret"
+        let acc: ClientAccount = {
+            var a = ClientAccount(name: "P", host: "8.8.8.8")
+            a.proxy.kind = .http; a.proxy.host = "10.0.0.2"; a.proxy.port = 3128; a.proxy.username = "u"; a.proxy.password = "px-secret"
+            return a
+        }()
         let stored = await MainActor.run { () -> ClientAccount in m.accountManager.add(acc, password: "pw"); return m.accountManager.accounts[0] }
         expect(stored.proxy.password == nil)
         await MainActor.run { m.connect(account: stored) }

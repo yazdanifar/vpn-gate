@@ -111,12 +111,9 @@ public final class TLSStream: ByteStream {
 
     public func start(timeout: TimeInterval) async throws {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
-            let lock = NSLock()
-            var done = false
+            let once = OnceFlag()
             @Sendable func finish(_ r: Result<Void, Error>) {
-                lock.lock(); defer { lock.unlock() }
-                if done { return }
-                done = true
+                guard once.claim() else { return }
                 // A failed or timed-out attempt must not keep retrying in the background.
                 if case .failure = r { self.conn.cancel() }
                 if case .failure = r, let why = self.verifyFailure.reason { c.resume(throwing: StreamError.protocolError(why)); return }
@@ -164,4 +161,12 @@ public final class TLSStream: ByteStream {
     }
 
     public func cancel() { conn.cancel() }
+}
+
+/// Thread-safe "first caller wins" flag, shared by the state handler and the timeout of a connection attempt.
+private final class OnceFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var claimed = false
+    /// True exactly once, for the first caller.
+    func claim() -> Bool { lock.withLock { if claimed { return false }; claimed = true; return true } }
 }
