@@ -132,6 +132,11 @@ final class Utun: TunDevice {
         reader = FDPacketReader(fd: s)
     }
 
+    var forwardIPv6: Bool {
+        get { reader.forwardIPv6 }
+        set { reader.forwardIPv6 = newValue }
+    }
+
     func startReading() { reader.startReading() }
     func write(ipv4 packet: [UInt8]) { reader.write(ipv4: packet) }
     func write(ipv6 packet: [UInt8]) { reader.write(ipv6: packet) }

@@ -11,6 +11,7 @@ public enum DataPhaseError: Error, Equatable, LocalizedError {
     case badBlockCount(Int)
     case badKeepAlive(Int)
     case decompressionFailed
+    case compressionFailed
 
     public var errorDescription: String? {
         switch self {
@@ -18,6 +19,7 @@ public enum DataPhaseError: Error, Equatable, LocalizedError {
         case .badBlockCount(let n): return "Bad block count (\(n))"
         case .badKeepAlive(let n): return "Bad keep-alive length (\(n))"
         case .decompressionFailed: return "Zlib block decompression failed"
+        case .compressionFailed: return "Zlib block compression failed"
         }
     }
 }
@@ -31,11 +33,12 @@ public enum DataPhase {
     public static let maxKeepAlive = 4095
 
     /// Compress an individual Ethernet frame with zlib (deflate).
-    public static func compressFrame(_ frame: [UInt8]) -> [UInt8] {
-        var destLen = uLongf(compressBound(uLong(frame.count)))
+    /// `capacity` overrides the output buffer size (default `compressBound`); only tests shrink it to force a zlib error.
+    public static func compressFrame(_ frame: [UInt8], capacity: Int? = nil) throws -> [UInt8] {
+        var destLen = uLongf(capacity ?? Int(compressBound(uLong(frame.count))))
         var dest = [UInt8](repeating: 0, count: Int(destLen))
         let rc = compress(&dest, &destLen, frame, uLong(frame.count))
-        guard rc == Z_OK else { return frame }
+        guard rc == Z_OK else { throw DataPhaseError.compressionFailed }     // never send the raw frame as if it were a zlib block
         return Array(dest.prefix(Int(destLen)))
     }
 
@@ -48,14 +51,18 @@ public enum DataPhase {
         return Array(dest.prefix(Int(destLen)))
     }
 
-    public static func encode(frames: [[UInt8]], useCompress: Bool = false) -> [UInt8] {
+    public static func encode(frames: [[UInt8]]) -> [UInt8] {
         var out = be32(UInt32(frames.count))
         for f in frames {
-            let block = useCompress ? compressFrame(f) : f
-            out += be32(UInt32(block.count))
-            out += block
+            out += be32(UInt32(f.count))
+            out += f
         }
         return out
+    }
+
+    public static func encode(frames: [[UInt8]], useCompress: Bool) throws -> [UInt8] {
+        guard useCompress else { return encode(frames: frames) }
+        return encode(frames: try frames.map { try compressFrame($0) })
     }
 
     public static func encodeKeepAlive(junk: [UInt8]) -> [UInt8] {

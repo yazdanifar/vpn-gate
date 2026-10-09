@@ -5,15 +5,18 @@ import VPNGateCore
 private let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
 /// Runs a package script with stub launchctl/chown/chmod/sleep on PATH; returns the exit status and the calls made.
-private func runPackageScript(_ name: String, failBootstrapTimes: Int = 0, alwaysFailBootstrap: Bool = false) throws -> (status: Int32, log: [String]) {
+private func runPackageScript(_ name: String, failBootstrapTimes: Int = 0, alwaysFailBootstrap: Bool = false,
+                              jobAlreadyLoaded: Bool = false) throws -> (status: Int32, log: [String]) {
     let dir = tempPath("pkgstubs-\(UUID().uuidString.prefix(6))")
     try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    let log = dir + "/log", counter = dir + "/count"
+    let log = dir + "/log", counter = dir + "/count", loaded = dir + "/loaded"
+    if jobAlreadyLoaded { FileManager.default.createFile(atPath: loaded, contents: Data()) }
     for tool in ["launchctl", "chown", "chmod", "sleep"] {
         var body = "#!/bin/sh\necho \"\(tool) $*\" >> '\(log)'\n"
         if tool == "launchctl" {
-            body += "if [ \"$1\" = bootout ]; then exit 3; fi\n"
+            body += "if [ \"$1\" = bootout ]; then [ -e '\(loaded)' ] && { rm '\(loaded)'; exit 0; }; exit 3; fi\n"
             body += "if [ \"$1\" = bootstrap ]; then\n"
+            body += "  [ -e '\(loaded)' ] && exit 5\n"       // a job that is still loaded cannot be bootstrapped again
             body += "  n=$(cat '\(counter)' 2>/dev/null || echo 0); n=$((n+1)); echo $n > '\(counter)'\n"
             if alwaysFailBootstrap { body += "  exit 5\n" }
             else { body += "  [ $n -le \(failBootstrapTimes) ] && exit 5\n" }
@@ -53,6 +56,23 @@ func registerPackagingTests() {
         let r = try runPackageScript("postinstall", alwaysFailBootstrap: true)
         expect(r.status != 0, "the installer must report failure instead of leaving a dead helper")
         expectEqual(r.log.filter { $0.hasPrefix("launchctl bootstrap") }.count, 5)
+    }
+    test("pkg/postinstall-replaces-a-job-that-is-already-loaded") {
+        let r = try runPackageScript("postinstall", jobAlreadyLoaded: true)
+        expectEqual(r.status, 0, "reinstalling over a running helper must not fail the whole install: \(r.log)")
+        expect(r.log.contains("launchctl bootout system/com.yazdanifar.vpngate.helper"), "\(r.log)")
+    }
+    test("pkg/version-comes-from-the-VERSION-file-not-the-ipc-version") {
+        let script = try String(contentsOf: repoRoot.appendingPathComponent("scripts/build-pkg.sh"), encoding: .utf8)
+        let line = script.split(separator: "\n").first { $0.hasPrefix("VERSION=") }.map(String.init) ?? ""
+        let p = Process(); p.executableURL = URL(fileURLWithPath: "/bin/sh")
+        p.arguments = ["-c", line + "; printf %s \"$VERSION\""]
+        p.currentDirectoryURL = repoRoot
+        let out = Pipe(); p.standardOutput = out
+        try p.run(); p.waitUntilExit()
+        let version = try String(contentsOf: repoRoot.appendingPathComponent("VERSION"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        expectEqual(String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self), version)
+        expect(!script.contains("--version \"$HELPER"), "package versions must not be the helper IPC version")
     }
     test("pkg/daemon-plist-matches-what-the-app-expects") {
         let d = try Data(contentsOf: repoRoot.appendingPathComponent("packaging/com.yazdanifar.vpngate.helper.plist"))

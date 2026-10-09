@@ -153,7 +153,7 @@ func registerHandshakeTests() {
         let payload = Array("UDP acceleration v2 payload test".utf8)
         let (packet, nextIV) = try UdpAccelPacket.encode(
             key32: key, iv: iv, cookie: 0x11223344, myTick: 1000, yourTick: 2000,
-            flag: .data, payload: payload, paddingSize: 10
+            compressed: false, payload: payload, paddingSize: 10
         )
         expect(packet.count >= UdpAccelPacket.minPacketSize)
         expectEqual(nextIV.count, 12)
@@ -162,7 +162,7 @@ func registerHandshakeTests() {
         expectEqual(decoded.header.cookie, 0x11223344)
         expectEqual(decoded.header.myTick, 1000)
         expectEqual(decoded.header.yourTick, 2000)
-        expectEqual(decoded.header.flag, .data)
+        expectEqual(decoded.header.compressed, false)
         expectEqual(decoded.payload, payload)
     }
     test("handshake/http-error-fails") {

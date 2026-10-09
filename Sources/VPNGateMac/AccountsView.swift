@@ -79,6 +79,9 @@ struct AccountsView: View {
 
             Divider()
 
+            if let notice = accountManager.loadNotice {
+                Text(notice).font(.caption).foregroundStyle(.orange).padding(.horizontal, 12).padding(.vertical, 4)
+            }
             // Accounts Table
             if accountManager.accounts.isEmpty {
                 VStack(spacing: 12) {
@@ -123,11 +126,12 @@ struct AccountsView: View {
             AccountEditor(
                 account: ui.editingAccount,
                 initialPassword: ui.editingAccount.flatMap { accountManager.password(for: $0) },
-                onSave: { updated, pw, cert in
+                hasStoredIdentity: ui.editingAccount.map { accountManager.hasCertificateIdentity($0) } ?? false,
+                onSave: { updated, pw, cert, key in
                     if ui.editingAccount != nil {
-                        accountManager.update(updated, password: pw, certDer: cert)
+                        accountManager.update(updated, password: pw, certDer: cert, privateKeyDer: key)
                     } else {
-                        accountManager.add(updated, password: pw, certDer: cert)
+                        accountManager.add(updated, password: pw, certDer: cert, privateKeyDer: key)
                     }
                 }
             )

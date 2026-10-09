@@ -176,6 +176,33 @@ func registerSessionTests() {
             s.disconnect()
         }
     }
+    test("session/ipv6-is-forwarded-and-addressed-only-when-not-blocked") {              // review 7
+        for block in [true, false] {
+            let h = SessionHarness(); let s = VPNSession(deps: h.deps(), timing: h.fastTiming); let r = Recorder(); r.attach(s)
+            s.connect(host: "1.2.3.4", port: nil, proxy: ProxySettings(), autoReconnect: false, blockIPv6: block)
+            await expectA(await r.waitFor(.connected))
+            let tun = h.tuns.value[0], t = h.transports.value[0]
+            expectEqual(tun.forwardIPv6, !block, "utun must hand IPv6 to the bridge only when allowed")
+            // A Router Advertisement from the hub
+            let ours = Array(t.sent[0][6..<12])
+            let src = hex6("fe80::1"), dst = hex6("ff02::1")
+            var icmp: [UInt8] = [134, 0, 0, 0, 64, 0, 0x07, 0x08, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 0, 0, 0, 0, 1]
+            icmp += [3, 4, 64, 0xC0] + be32(86400) + be32(14400) + [0, 0, 0, 0] + hex6("2001:db8:1:2::")
+            let c = ICMPv6.checksum(src: src, dst: dst, icmpPayload: icmp)
+            icmp[2] = UInt8(c >> 8); icmp[3] = UInt8(c & 0xff)
+            let pkt = IPv6.header(src: src, dst: dst, nextHeader: 58, payloadLen: icmp.count, hopLimit: 255) + icmp
+            t.onFrame?(Ethernet.frame(dst: [0x33, 0x33, 0, 0, 0, 1], src: [2, 0, 0, 0, 0, 1], type: 0x86DD, payload: pkt))
+            if block {
+                try await Task.sleep(nanoseconds: 200_000_000)
+                expectEqual(h.nets.value[0].ipv6Addresses, [], "blocked: no IPv6 address")
+            } else {
+                await expectA(await eventually { h.nets.value[0].ipv6Addresses.count == 1 }, "SLAAC address never reached the network config")
+                expectEqual(h.nets.value[0].ipv6Addresses.first, IPv6.slaac(prefix: hex6("2001:db8:1:2::"), mac: ours))
+            }
+            s.disconnect()
+            await expectA(await s.waitUntilIdle(timeout: 3))
+        }
+    }
     test("session/idle-snapshot-already-carries-the-helper-version") {
         let h = SessionHarness(); let s = VPNSession(deps: h.deps(), timing: h.fastTiming)
         expectEqual(s.snapshot.helperVersion, helperVersion)

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import Network
 import ServiceManagement
@@ -38,16 +39,28 @@ final class AppModel: ObservableObject {
     @Published var mirrorURL: String { didSet { defaults.set(mirrorURL, forKey: "mirrorURL") } }
     @Published var launchAtLogin: Bool {
         didSet {
+            guard !revertingLaunchAtLogin else { return }
             defaults.set(launchAtLogin, forKey: "launchAtLogin")
             updateLaunchAtLogin(launchAtLogin)
         }
     }
+    /// The first-run disclaimer must be accepted before any connection starts (see `requireAgreement`).
+    @Published var hasAgreedToDisclaimer: Bool
+    @Published var showingDisclaimer = false
+    private var pendingAfterAgreement: (() -> Void)?
     @Published var listSource: ListSource = .bundle
     @Published var listTimestamp: Date? = nil
     @Published var listIsFresh: Bool = true
     @Published var activeAccount: ClientAccount? = nil
-    @ObservedObject public var statistics = VGStatistics()
-    public let accountManager = AccountManager()
+    /// Opt-in, Mac-only diagnostics (off until the user turns it on).
+    var statistics: VGStatistics
+    let accountManager: AccountManager
+    let connectionLog: ConnectionLogStore
+    private var historyEntry: UUID?
+    private var historyBytes: (in: UInt64, out: UInt64) = (0, 0)
+    private let loginItem: LoginItemControlling
+    private var revertingLaunchAtLogin = false
+    private var forwarded: [AnyCancellable] = []
 
     private let helper: HelperClient
     private let defaults: UserDefaults
@@ -55,14 +68,39 @@ final class AppModel: ObservableObject {
     private var lastEventAt = Date.distantPast
     private var retry: Timer?
     private var pollTimer: Timer?
-    private let datFetcher = VGDatFetcher()
+    private let datFetcher: VGDatFetcher
+    /// Wait between reconnect attempts of a VPN Gate connection: the stock account's RetryInterval 0xF
+    /// (client_exe.c:27590s). Tests shorten it.
+    nonisolated static let reconnectInterval: TimeInterval = 15
+    private let reconnectDelay: TimeInterval
+    /// The old servers.json cache lives in ~/Library/Caches; tests (autoStart false) never write it.
+    private let persistsServerCache: Bool
+    /// Delay chosen for the pending list poll (seconds), for tests and the log.
+    private(set) var scheduledPollDelay: TimeInterval?
+    /// The VPN Gate server the user asked for and has not disconnected from (nil = nothing to keep alive).
+    private var wantedServer: VPNServer?
+    private var reconnectTask: Task<Void, Never>?
+    /// Failed attempts since the last good connection (shown in the log only; there is no limit).
+    private(set) var reconnectAttempts = 0
 
     /// `autoStart: false` (tests) skips the background timer, the cache and the server-list download.
     init(socketPath: String = helperSocketPath, defaults: UserDefaults = .standard, autoStart: Bool = true,
-         openInstaller: @escaping () -> Bool = { HelperInstaller.openInstaller() }) {
+         openInstaller: @escaping () -> Bool = { HelperInstaller.openInstaller() },
+         loginItem: LoginItemControlling = SMAppLoginItem(),
+         accountManager: AccountManager? = nil, connectionLog: ConnectionLogStore? = nil,
+         datFetcher: VGDatFetcher? = nil, reconnectDelay: TimeInterval = 15) {
         self.helper = HelperClient(path: socketPath)
+        // `alternativeMode` (hidden: defaults write ... alternativeMode -bool YES) is the original's "alt mode".
+        self.datFetcher = datFetcher ?? VGDatFetcher(defaults: defaults, alternativeMode: defaults.bool(forKey: "alternativeMode"))
+        self.reconnectDelay = reconnectDelay
+        self.persistsServerCache = autoStart
         self.defaults = defaults
         self.openInstaller = openInstaller
+        self.loginItem = loginItem
+        self.accountManager = accountManager ?? AccountManager()
+        self.connectionLog = connectionLog ?? ConnectionLogStore()
+        self.statistics = VGStatistics(defaults: defaults, startIfEnabled: autoStart)
+        hasAgreedToDisclaimer = defaults.bool(forKey: "hasAgreedToDisclaimer")
         let d = defaults
         favorites = Set(d.stringArray(forKey: "favorites") ?? [])
         autoReconnect = d.object(forKey: "autoReconnect") as? Bool ?? true
@@ -75,14 +113,19 @@ final class AppModel: ObservableObject {
         lastServerID = d.string(forKey: "lastServerID")
         maxLogWeeks = d.object(forKey: "maxLogWeeks") as? Int ?? -1
         mirrorURL = d.string(forKey: "mirrorURL") ?? ""
-        launchAtLogin = d.bool(forKey: "launchAtLogin")
+        launchAtLogin = autoStart ? loginItem.status == .enabled : d.bool(forKey: "launchAtLogin")
+        // Views observe the model only; relay changes of the nested stores so their screens refresh.
+        forwarded = [statistics.objectWillChange, self.accountManager.objectWillChange, self.connectionLog.objectWillChange]
+            .map { $0.sink { [weak self] _ in self?.objectWillChange.send() } }
         if autoStart {
-            if let cached = VGDatFetcher.loadCachedDat() {
+            if let cached = self.datFetcher.loadCached() {
+                self.datFetcher.adopt(cached)
                 servers = cached.servers
                 listSource = .cache
                 listTimestamp = cached.timestamp
                 listIsFresh = cached.isFresh
-            } else if let bundled = VGDatFetcher.loadBundleDat() {
+            } else if let bundled = self.datFetcher.loadBundleDat() {
+                self.datFetcher.adopt(bundled)
                 servers = bundled.servers
                 listSource = .bundle
                 listTimestamp = bundled.timestamp
@@ -95,7 +138,12 @@ final class AppModel: ObservableObject {
 
         helper.onEvent = { [weak self] e in Task { @MainActor in self?.handle(e) } }
         helper.onDisconnect = { [weak self] in
-            Task { @MainActor in self?.helperRunning = false; self?.event = HelperEvent(state: .disconnected) }
+            Task { @MainActor in
+                self?.helperRunning = false
+                self?.cancelReconnect()
+                self?.endHistory(error: nil)
+                self?.event = HelperEvent(state: .disconnected)
+            }
         }
         guard autoStart else { return }
         retry = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
@@ -152,8 +200,89 @@ final class AppModel: ObservableObject {
         if let err = e.error { appendLog("Error: \(err)"); notice = err }
         if e.state == .connected && connectedAt == nil { connectedAt = Date(); notice = nil }
         if e.state != .connected { connectedAt = nil }
+        trackHistory(e)
         event = e
+        considerReconnect(after: e)
     }
+
+    // MARK: reconnect (VPN Gate connections)
+
+    /// The Windows client's own account retries forever, every 15 s (NumRetry 0xFFFFFFFF, RetryInterval 0xF,
+    /// client_exe.c:27590s): no attempt limit and no backoff. The helper is asked not to retry by itself for these
+    /// connections; when it reports a dropped or failed connection and "Reconnect automatically" is on, this waits
+    /// `reconnectDelay` and connects to the same server again, until the user disconnects or connects elsewhere.
+    private func considerReconnect(after e: HelperEvent) {
+        if e.state == .connected { reconnectAttempts = 0; return }
+        guard e.state == .disconnected, e.error != nil, autoReconnect, let server = wantedServer, activeAccount == nil,
+              reconnectTask == nil else { return }
+        reconnectAttempts += 1
+        appendLog("Reconnecting to \(server.hostName) in \(Int(reconnectDelay.rounded(.up))) s (attempt \(reconnectAttempts))")
+        var waiting = HelperEvent(state: .reconnecting); waiting.server = server.ip; waiting.error = e.error
+        event = waiting
+        let delay = reconnectDelay
+        reconnectTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            self.reconnectTask = nil
+            guard self.wantedServer?.id == server.id, self.autoReconnect, self.event.state == .reconnecting, self.helperRunning else {
+                if self.event.state == .reconnecting { self.event = HelperEvent(state: .disconnected) }
+                return
+            }
+            self.sendConnect(server)
+        }
+    }
+
+    private func cancelReconnect() { reconnectTask?.cancel(); reconnectTask = nil }
+
+    // MARK: connection history
+
+    /// One history entry per connected period: started when the helper reports `connected`, finished by the next
+    /// event in any other state (or the helper going away) with the last byte counters seen while connected.
+    private func trackHistory(_ e: HelperEvent) {
+        if e.state == .connected {
+            historyBytes = (e.bytesIn, e.bytesOut)
+            if historyEntry == nil {
+                let name = connectedServerName(for: e)
+                historyEntry = connectionLog.recordStart(serverName: name, serverIP: e.server ?? "")
+            }
+        } else {
+            endHistory(error: e.error)
+        }
+    }
+
+    private func endHistory(error: String?) {
+        guard let id = historyEntry else { return }
+        historyEntry = nil
+        connectionLog.recordEnd(id: id, bytesIn: historyBytes.in, bytesOut: historyBytes.out, error: error)
+        historyBytes = (0, 0)
+    }
+
+    private func connectedServerName(for e: HelperEvent) -> String {
+        if let a = activeAccount, a.host == e.server { return a.name }
+        return servers.first { $0.ip == e.server }?.hostName ?? e.server ?? "unknown"
+    }
+
+    // MARK: disclaimer
+
+    /// Every connection path goes through here: without the user's agreement the sheet is requested instead and the
+    /// request is parked until they accept (or dropped if they decline).
+    private func requireAgreement(_ action: @escaping () -> Void) -> Bool {
+        if hasAgreedToDisclaimer { return true }
+        pendingAfterAgreement = action
+        showingDisclaimer = true
+        return false
+    }
+
+    func agreeToDisclaimer() {
+        hasAgreedToDisclaimer = true
+        defaults.set(true, forKey: "hasAgreedToDisclaimer")
+        showingDisclaimer = false
+        let resume = pendingAfterAgreement
+        pendingAfterAgreement = nil
+        resume?()
+    }
+
+    func declineDisclaimer() { pendingAfterAgreement = nil }
 
     private func appendLog(_ l: String) {
         logLines.append(l)
@@ -176,15 +305,23 @@ final class AppModel: ObservableObject {
     var helperOutdated: Bool { helperRunning && lastEventAt > .distantPast && (event.helperVersion ?? 0) < helperVersion }
 
     func connect(_ s: VPNServer) {
+        guard requireAgreement({ [weak self] in self?.connect(s) }) else { return }
         pollHelper()
         // No helper (first run) or an older one: ask once, then continue automatically when the installer is done.
         if !helperRunning { pendingServer = s; setupPrompt = .install; return }
         if helperOutdated { pendingServer = s; setupPrompt = .update; return }
         notice = nil
+        cancelReconnect()
+        wantedServer = s; reconnectAttempts = 0
+        sendConnect(s)
+    }
+
+    private func sendConnect(_ s: VPNServer) {
         var r = HelperRequest(cmd: "connect")
         r.host = s.ip; r.port = s.connectPort
-        if !s.sslPorts.isEmpty { r.ports = s.sslPorts.map(Int.init) }
-        r.proxy = currentProxy; r.autoReconnect = autoReconnect; r.blockIPv6 = blockIPv6
+        if !s.sslPorts.isEmpty { r.ports = s.prioritizedSslPorts.map(Int.init) }
+        // Retrying is done here (see considerReconnect), so the helper makes a single attempt.
+        r.proxy = currentProxy; r.autoReconnect = false; r.blockIPv6 = blockIPv6
         lastServerID = s.id
         let sentAt = Date()
         helper.send(r)
@@ -202,13 +339,22 @@ final class AppModel: ObservableObject {
     }
 
     func connect(account: ClientAccount) {
+        guard requireAgreement({ [weak self] in self?.connect(account: account) }) else { return }
         pollHelper()
         if !helperRunning { setupPrompt = .install; return }
         if helperOutdated { setupPrompt = .update; return }
         notice = nil
+        cancelReconnect(); wantedServer = nil
         let pw = accountManager.password(for: account)
         let cert = accountManager.certificate(for: account)
-        let cfg = account.toConnectConfig(password: pw, certDer: cert, blockIPv6: blockIPv6)
+        let key = accountManager.privateKey(for: account)
+        if account.authType == .certificate && (cert == nil || key == nil) {
+            notice = "“\(account.name)” needs a certificate and RSA private key. Open its properties and import them."
+            return
+        }
+        var acc = account
+        if acc.proxy.kind != .none, acc.proxy.password == nil { acc.proxy.password = accountManager.proxyPassword(for: account) }
+        let cfg = acc.toConnectConfig(password: pw, certDer: cert, privateKeyDer: key, blockIPv6: blockIPv6)
         var r = HelperRequest(cmd: "connect")
         r.config = cfg
         activeAccount = account
@@ -228,7 +374,12 @@ final class AppModel: ObservableObject {
 
     static let helperAnswerTimeoutNs: UInt64 = 8_000_000_000
 
-    func disconnect() { helper.send(HelperRequest(cmd: "disconnect")) }
+    func disconnect() {
+        let waiting = reconnectTask != nil
+        cancelReconnect(); wantedServer = nil
+        helper.send(HelperRequest(cmd: "disconnect"))
+        if waiting { event = HelperEvent(state: .disconnected) }       // between attempts the helper is idle already
+    }
 
     /// Drops the current tunnel and connects again to the last server (new session, new address).
     func reconnect() {
@@ -254,35 +405,48 @@ final class AppModel: ObservableObject {
                 listTimestamp = res.timestamp
                 listIsFresh = res.isFresh
                 migrateFavorites()
-                Self.saveCache(res.servers)
+                if persistsServerCache { Self.saveCache(res.servers) }
             } else if servers.isEmpty {
                 loadError = "Failed to load servers"
             }
             loading = false
-            scheduleNextPoll(success: !res.servers.isEmpty)
+            scheduleNextPoll(res.servers.isEmpty ? .noRelays : res.outcome)
         }
     }
 
-    private func scheduleNextPoll(success: Bool) {
+    /// Uniformly random in [0, interval) like the original, so clients do not poll in lockstep.
+    private func scheduleNextPoll(_ outcome: SyncOutcome) {
         pollTimer?.invalidate()
-        let interval = success ? VGDatFetcher.pollIntervalOk : VGDatFetcher.pollIntervalError
+        let interval = datFetcher.nextPollDelay(after: outcome)
+        scheduledPollDelay = interval
         pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
     }
 
+    /// Registers or unregisters the login item, then trusts what macOS reports: on an error, or when macOS still
+    /// needs the user's approval, the toggle goes back and the reason is shown.
     private func updateLaunchAtLogin(_ enabled: Bool) {
-        if #available(macOS 13.0, *) {
-            do {
-                if enabled {
-                    try SMAppService.mainApp.register()
-                } else {
-                    try SMAppService.mainApp.unregister()
-                }
-            } catch {
-                print("SMAppService registration error: \(error)")
-            }
+        do {
+            if enabled { try loginItem.register() } else { try loginItem.unregister() }
+        } catch {
+            revertLaunchAtLogin(to: !enabled, "Launch at login could not be \(enabled ? "enabled" : "disabled"): \(error.localizedDescription)")
+            return
         }
+        let status = loginItem.status
+        if enabled && status != .enabled {
+            try? loginItem.unregister()
+            revertLaunchAtLogin(to: false, status == .requiresApproval
+                ? "Launch at login needs approval in System Settings → General → Login Items."
+                : "Launch at login is not available for this copy of the app (install it in /Applications).")
+        }
+    }
+
+    private func revertLaunchAtLogin(to value: Bool, _ message: String) {
+        revertingLaunchAtLogin = true; launchAtLogin = value; revertingLaunchAtLogin = false
+        defaults.set(value, forKey: "launchAtLogin")
+        notice = message
+        appendLog(message)
     }
 
     func toggleFavorite(_ s: VPNServer) {

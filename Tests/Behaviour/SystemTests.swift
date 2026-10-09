@@ -37,6 +37,20 @@ func registerSystemTests() {
         expectEqual(Array(buf[0..<n]), [0, 0, 0, 2, 5, 5, 5, 5])
         r.close(); Darwin.close(fds[1])
     }
+    test("fdreader/ipv6-is-forwarded-only-when-enabled-and-written-as-af-inet6") {        // review 15
+        var fds: [Int32] = [0, 0]; socketpair(AF_UNIX, SOCK_DGRAM, 0, &fds)
+        let r = FDPacketReader(fd: fds[0], forwardIPv6: true); let got = Locked([[UInt8]]())
+        r.onPacket = { p in got.update { $0.append(p) } }; r.startReading()
+        func put(_ af: UInt8, _ body: [UInt8]) { let d = [0, 0, 0, af] + body; _ = d.withUnsafeBytes { write(fds[1], $0.baseAddress, d.count) } }
+        put(30, [0x60, 1, 2, 3]); put(18, [7, 7, 7, 7])
+        await expectA(await eventually { got.value.count == 1 })
+        try await Task.sleep(nanoseconds: 100_000_000)
+        expectEqual(got.value, [[0x60, 1, 2, 3]], "AF_INET6 forwarded, other families still skipped")
+        r.write(ipv6: [0x60, 9, 9, 9])
+        var buf = [UInt8](repeating: 0, count: 64); let n = read(fds[1], &buf, 64)
+        expectEqual(Array(buf[0..<n]), [0, 0, 0, 30, 0x60, 9, 9, 9], "utun header for IPv6 is AF_INET6 = 30 on macOS")
+        r.close(); Darwin.close(fds[1])
+    }
     test("fdreader/closed-reader-never-reads-from-a-recycled-descriptor") {          // B8
         var fds: [Int32] = [0, 0]; socketpair(AF_UNIX, SOCK_DGRAM, 0, &fds)
         let old = fds[0]

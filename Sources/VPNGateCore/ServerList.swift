@@ -36,6 +36,12 @@ public struct VPNServer: Identifiable, Codable, Hashable {
     public var numLogin: Int64?
     public var noLog: Bool
     public var logPermanent: Bool
+    /// More VPNGate.dat host fields (client_exe.c host record, 9122-9230); 0 / nil for CSV-sourced servers.
+    public var name: String?
+    public var pingToGoogle: Int
+    public var sendSize: UInt64
+    public var recvSize: UInt64
+    public var isKernelModeNAT: Bool
 
     public init(hostName: String, ip: String, score: Int = 0, ping: Int = 0, speed: Int = 0,
                 countryLong: String = "", countryShort: String = "", sessions: Int = 0,
@@ -45,7 +51,9 @@ public struct VPNServer: Identifiable, Codable, Hashable {
                 fqdn: String = "", sslPorts: [UInt16] = [], udpPort: UInt16? = nil,
                 openVpnUdpPorts: [UInt16] = [], l2tp: Bool = false, os: String? = nil,
                 soft: String? = nil, build: Int? = nil, owner: String? = nil, abuse: String? = nil,
-                numLogin: Int64? = nil, noLog: Bool = false, logPermanent: Bool = false) {
+                numLogin: Int64? = nil, noLog: Bool = false, logPermanent: Bool = false,
+                name: String? = nil, pingToGoogle: Int = 0, sendSize: UInt64 = 0, recvSize: UInt64 = 0,
+                isKernelModeNAT: Bool = false) {
         self.hostName = hostName.isEmpty ? fqdn : hostName
         self.ip = ip; self.score = score; self.ping = ping; self.speed = speed
         self.countryLong = countryLong; self.countryShort = countryShort; self.sessions = sessions
@@ -57,6 +65,8 @@ public struct VPNServer: Identifiable, Codable, Hashable {
         self.l2tp = l2tp; self.os = os; self.soft = soft; self.build = build
         self.owner = owner; self.abuse = abuse; self.numLogin = numLogin
         self.noLog = noLog; self.logPermanent = logPermanent
+        self.name = name; self.pingToGoogle = pingToGoogle; self.sendSize = sendSize; self.recvSize = recvSize
+        self.isKernelModeNAT = isKernelModeNAT
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -64,7 +74,7 @@ public struct VPNServer: Identifiable, Codable, Hashable {
              totalTraffic, logType, operatorName, message, listedPort, listedProto
         case tcpPort            // written by the first app version, before ports/protocols were recorded
         case fqdn, sslPorts, udpPort, openVpnUdpPorts, l2tp, os, soft, build, owner, abuse, numLogin,
-             noLog, logPermanent
+             noLog, logPermanent, name, pingToGoogle, sendSize, recvSize, isKernelModeNAT
     }
 
     /// Caches written by older versions must still load (otherwise the table is empty until the download ends).
@@ -103,6 +113,11 @@ public struct VPNServer: Identifiable, Codable, Hashable {
         numLogin = try c.decodeIfPresent(Int64.self, forKey: .numLogin)
         noLog = try c.decodeIfPresent(Bool.self, forKey: .noLog) ?? false
         logPermanent = try c.decodeIfPresent(Bool.self, forKey: .logPermanent) ?? false
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        pingToGoogle = try c.decodeIfPresent(Int.self, forKey: .pingToGoogle) ?? 0
+        sendSize = try c.decodeIfPresent(UInt64.self, forKey: .sendSize) ?? 0
+        recvSize = try c.decodeIfPresent(UInt64.self, forKey: .recvSize) ?? 0
+        isKernelModeNAT = try c.decodeIfPresent(Bool.self, forKey: .isKernelModeNAT) ?? false
     }
 
     public func encode(to e: Encoder) throws {
@@ -122,12 +137,28 @@ public struct VPNServer: Identifiable, Codable, Hashable {
         try c.encode(owner, forKey: .owner); try c.encode(abuse, forKey: .abuse)
         try c.encode(numLogin, forKey: .numLogin); try c.encode(noLog, forKey: .noLog)
         try c.encode(logPermanent, forKey: .logPermanent)
+        try c.encodeIfPresent(name, forKey: .name); try c.encode(pingToGoogle, forKey: .pingToGoogle)
+        try c.encode(sendSize, forKey: .sendSize); try c.encode(recvSize, forKey: .recvSize)
+        try c.encode(isKernelModeNAT, forKey: .isKernelModeNAT)
     }
 
-    /// Port to try first when connecting: uses real SSL ports from VPNGate.dat first, then listedPort.
+    /// The Windows client's port order (client_exe.c FUN_004117c0, 7569-7640): 443, 992, 995, 465, 585, 993, 22
+    /// (only those the host offers), then the host's other ports in their original order.
+    public static let preferredPorts: [UInt16] = [443, 992, 995, 465, 585, 993, 22]
+
+    public static func portPriority(_ ports: [UInt16]) -> [UInt16] {
+        var out = preferredPorts.filter { ports.contains($0) }
+        for p in ports where !out.contains(p) { out.append(p) }
+        return out
+    }
+
+    /// SSL ports in the Windows priority order.
+    public var prioritizedSslPorts: [UInt16] { Self.portPriority(sslPorts) }
+
+    /// Port to try first when connecting: the first SSL port in priority order, then listedPort.
     public var connectPort: Int? {
-        if let firstSsl = sslPorts.first, InputValidation.isValidPort(Int(firstSsl)) {
-            return Int(firstSsl)
+        if let first = prioritizedSslPorts.first, InputValidation.isValidPort(Int(first)) {
+            return Int(first)
         }
         return InputValidation.isValidPort(listedPort) ? listedPort : nil
     }
@@ -196,5 +227,34 @@ public enum ServerList {
             if w.first == "remote", w.count > 2, let p = Int(w[2]), InputValidation.isValidPort(p) { port = p }
         }
         return (port, proto)
+    }
+}
+
+/// Text of the list table, following the Windows client (client_exe.c FUN_00525490 / FUN_00525da0 / FUN_00525490's
+/// status line, 149575-149860).
+public enum ListFormat {
+    /// Uptime: up to 1 h in minutes, up to 24 h in hours, beyond that in days. The cut-offs are the original's
+    /// `< 3,600,001 ms` and `< 86,400,001 ms`. The English words are not in the decompile (they come from the
+    /// client's external string table: VGC_UPTIME_MIN / _HOUR / _DAY), so these are this app's own.
+    public static func uptime(ms: Int) -> String {
+        let ms = max(0, ms)
+        if ms < 3_600_001 { return "\(ms / 60_000) min" }
+        if ms < 86_400_001 { return "\(ms / 3_600_000) h" }
+        return "\(ms / 86_400_000) d"
+    }
+
+    /// "<PingToGoogle>, <PingToJapan>", each as "<n> ms" or "-" when 0 (the original prints "-" for 0).
+    public static func pings(google: Int, japan: Int) -> String {
+        func one(_ v: Int) -> String { v == 0 ? "-" : "\(v) ms" }
+        return "\(one(google)), \(one(japan))"
+    }
+
+    /// UDP column: the original shows a localized "yes" when UdpPort != 0, else "-".
+    public static func udp(_ port: UInt16?) -> String { port == nil ? "-" : "Yes" }
+
+    /// List age as the original's status line classifies it: within 24 h (inclusive of the original's
+    /// `< 86,400,001 ms`) the list is OK, older it is "stale". (Accepting a download uses 36 h; the UI uses 24 h.)
+    public static func isListOK(timestamp: Date, now: Date) -> Bool {
+        abs(now.timeIntervalSince(timestamp)) * 1000 < 86_400_001
     }
 }

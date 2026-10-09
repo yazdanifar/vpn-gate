@@ -39,18 +39,18 @@ public final class ConnectionLogStore: ObservableObject {
     @Published public var entries: [ConnectionLogEntry] = []
 
     public static var logFileURL: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let dir = appSupport.appendingPathComponent("VPNGateMac", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("connection_history.json")
+        AppPaths.supportFile("connection_history.json")
     }
 
-    public init() {
+    private let fileURL: URL
+
+    public init(fileURL: URL? = nil) {
+        self.fileURL = fileURL ?? Self.logFileURL
         load()
     }
 
     public func load() {
-        guard let data = try? Data(contentsOf: Self.logFileURL),
+        guard let data = try? Data(contentsOf: fileURL),
               let list = try? JSONDecoder().decode([ConnectionLogEntry].self, from: data) else {
             entries = []
             return
@@ -60,7 +60,7 @@ public final class ConnectionLogStore: ObservableObject {
 
     public func save() {
         guard let data = try? JSONEncoder().encode(entries) else { return }
-        try? data.write(to: Self.logFileURL, options: .atomic)
+        try? data.write(to: fileURL, options: .atomic)
     }
 
     public func recordStart(serverName: String, serverIP: String) -> UUID {

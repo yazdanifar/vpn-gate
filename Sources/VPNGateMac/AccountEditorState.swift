@@ -1,0 +1,90 @@
+import Foundation
+import Combine
+import VPNGateCore
+
+/// Form state of the connection-setting editor. Kept free of SwiftUI so the save logic can be tested.
+final class AccountEditorState: ObservableObject {
+    @Published var name: String
+    @Published var host: String
+    @Published var portString: String
+    @Published var hub: String
+    @Published var username: String
+    @Published var authType: AccountAuthType
+    @Published var password: String
+
+    @Published var maxConnection: Int
+    @Published var compression: Bool
+    @Published var udpAcceleration: Bool
+    @Published var useQoS: Bool
+    @Published var autoReconnect: Bool
+    @Published var checkServerCert: Bool
+    @Published var fingerprint: String
+
+    /// Certificate login: freshly imported material (nil = keep what is stored) and whether something is stored already.
+    @Published var certDer: Data?
+    @Published var privateKeyDer: Data?
+    @Published var hasStoredIdentity: Bool
+    @Published var importError: String?
+    @Published var p12Passphrase = ""
+
+    init(account: ClientAccount? = nil, initialPassword: String? = nil, hasStoredIdentity: Bool = false) {
+        self.name = account?.name ?? "New Connection"
+        self.host = account?.host ?? ""
+        self.portString = account?.portList.map(String.init).joined(separator: ", ") ?? "443, 992, 5555, 1194"
+        self.hub = account?.hub ?? "DEFAULT"
+        self.username = account?.username ?? ""
+        self.authType = account?.authType ?? .password
+        self.password = initialPassword ?? ""
+        self.maxConnection = account?.maxConnection ?? 1
+        self.compression = account?.compression ?? false
+        self.udpAcceleration = account?.udpAcceleration ?? true
+        self.useQoS = !(account?.disableQoS ?? false)
+        self.autoReconnect = account?.autoReconnect ?? true
+        self.checkServerCert = account?.checkServerCert ?? false
+        self.fingerprint = account?.serverCertFingerprint ?? ""
+        self.hasStoredIdentity = hasStoredIdentity
+    }
+
+    var parsedPorts: [UInt16] {
+        portString.split(separator: ",").compactMap { UInt16($0.trimmingCharacters(in: .whitespaces)) }.filter { $0 > 0 }
+    }
+
+    var trimmedFingerprint: String { fingerprint.trimmingCharacters(in: .whitespaces) }
+
+    /// Empty is fine (no pin); otherwise it must be a SHA-1 or SHA-256 hex fingerprint.
+    var fingerprintError: String? {
+        trimmedFingerprint.isEmpty || InputValidation.normalizedFingerprint(trimmedFingerprint) != nil
+            ? nil : "Fingerprint must be 40 (SHA-1) or 64 (SHA-256) hex digits."
+    }
+
+    var certificateReady: Bool { authType != .certificate || certDer != nil && privateKeyDer != nil || hasStoredIdentity }
+
+    var canSave: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && !host.trimmingCharacters(in: .whitespaces).isEmpty
+            && InputValidation.isValidHost(host.trimmingCharacters(in: .whitespaces))
+            && fingerprintError == nil && certificateReady
+            && InputValidation.isValidIdentityField(hub) && InputValidation.isValidIdentityField(username)
+    }
+
+    /// The saved account: starts from `base` (when editing) so every field the form does not show (proxy, reserved
+    /// settings, creation date, ...) survives, and only the fields the form shows are replaced.
+    func makeAccount(base: ClientAccount?) -> ClientAccount {
+        var acc = base ?? ClientAccount(name: "", host: "")
+        let ports = parsedPorts
+        acc.name = name.trimmingCharacters(in: .whitespaces)
+        acc.host = host.trimmingCharacters(in: .whitespaces)
+        acc.portList = ports.isEmpty ? [443] : ports
+        let h = hub.trimmingCharacters(in: .whitespaces)
+        acc.hub = h.isEmpty ? "DEFAULT" : h
+        acc.username = username.trimmingCharacters(in: .whitespaces)
+        acc.authType = authType
+        acc.checkServerCert = checkServerCert
+        acc.serverCertFingerprint = InputValidation.normalizedFingerprint(trimmedFingerprint)
+        acc.maxConnection = max(1, min(maxConnection, 32))
+        acc.compression = compression
+        acc.udpAcceleration = udpAcceleration
+        acc.disableQoS = !useQoS
+        acc.autoReconnect = autoReconnect
+        return acc
+    }
+}

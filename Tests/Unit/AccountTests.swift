@@ -20,7 +20,6 @@ func registerAccountTests() {
             autoReconnect: true,
             reconnectInterval: 5.0,
             reconnectCount: 10,
-            hideFromVpnGateList: true,
             virtualMacAddress: "00:AC:22:33:44:55",
             mtu: 1400
         )
@@ -68,7 +67,7 @@ func registerAccountTests() {
     }
 
     test("account/manager-crud-operations") {
-        Task { @MainActor in
+        await MainActor.run {
             let mgr = AccountManager()
             let initialCount = mgr.accounts.count
 

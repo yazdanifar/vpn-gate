@@ -33,6 +33,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
         <key>NSIncludesSubdomains</key><true/>
         <key>NSExceptionAllowsInsecureHTTPLoads</key><true/>
       </dict>
+      <key>vpngate2.jp</key><dict>
+        <key>NSIncludesSubdomains</key><true/>
+        <key>NSExceptionAllowsInsecureHTTPLoads</key><true/>
+      </dict>
     </dict>
   </dict>
 </dict></plist>

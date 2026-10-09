@@ -3,7 +3,8 @@ import Security
 
 /// Minimal generic-password wrapper for the proxy password.
 enum Keychain {
-    private static let service = "com.yazdanifar.VPNGateMac"
+    /// Only the test harness changes this (to keep tests out of the user's real Keychain items).
+    static var service = "com.yazdanifar.VPNGateMac"
 
     private static func query(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]

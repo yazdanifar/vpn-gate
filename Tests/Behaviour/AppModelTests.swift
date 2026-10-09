@@ -7,6 +7,7 @@ private func makeDefaults() -> UserDefaults {
     let name = "vpngate-tests-\(UUID().uuidString)"
     let d = UserDefaults(suiteName: name)!
     d.removePersistentDomain(forName: name)
+    d.set(true, forKey: "hasAgreedToDisclaimer")                 // these tests are about the helper flow, not the gate
     return d
 }
 

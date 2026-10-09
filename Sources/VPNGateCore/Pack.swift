@@ -42,6 +42,11 @@ public struct Pack: Equatable {
     public mutating func addUni(_ n: String, _ v: String) { add(n, .unistr(v)) }
     public mutating func addData(_ n: String, _ v: Data) { add(n, .data(v)) }
     public mutating func addInt64(_ n: String, _ v: UInt64) { add(n, .int64(v)) }
+    /// A multi-valued integer element (SoftEther PackAddIntEx array), e.g. the redirect "Port" list.
+    public mutating func addInts(_ n: String, _ v: [UInt32]) {
+        elements.removeAll { $0.name.caseInsensitiveCompare(n) == .orderedSame }
+        elements.append(Element(name: n, values: v.map { .int($0) }))
+    }
 
     /// IPv4 address stored the way SoftEther's PackAddIp does it.
     public mutating func addIPv4(_ name: String, _ ip: UInt32) {

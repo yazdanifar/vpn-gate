@@ -8,7 +8,6 @@ final class ListState: ObservableObject {
     @Published var selection: VPNServer.ID?
     @Published var sortOrder = [KeyPathComparator(\VPNServer.score, order: .reverse)]
     @Published var showingDetails = false
-    @Published var showingDisclaimer = false
     @Published var selectedServerForDetails: VPNServer? = nil
 }
 
@@ -38,7 +37,8 @@ struct ServerListView: View {
         if let e = model.loadError { return "Could not load the server list: \(e). Press Refresh to retry." }
         if model.loading { return model.servers.isEmpty ? "Loading server list… (about 1 MB, can take 10–20 s)" : "Updating server list…" }
         if model.servers.isEmpty { return "No servers yet. Press Refresh." }
-        return "\(rows.count) servers — double-click a server to connect"
+        let age = model.listTimestamp.map { " — list \(ListFormat.isListOK(timestamp: $0, now: Date()) ? "OK" : "stale")" } ?? ""
+        return "\(rows.count) servers\(age) — double-click a server to connect"
     }
 
     private var setupTitle: String { model.setupPrompt == .update ? "Update the VPN component?" : "One-time setup" }
@@ -92,6 +92,34 @@ struct ServerListView: View {
         }
     }
 
+    // The table's columns are split in two builders: one big Table expression is too slow to type-check.
+    @TableColumnBuilder<VPNServer, KeyPathComparator<VPNServer>>
+    private var identityColumns: some TableColumnContent<VPNServer, KeyPathComparator<VPNServer>> {
+                TableColumn("★") { (s: VPNServer) in
+                    Button { model.toggleFavorite(s) } label: {
+                        Image(systemName: model.favorites.contains(s.id) ? "star.fill" : "star")
+                    }.buttonStyle(.plain)
+                }.width(24)
+                TableColumn("Country", value: \.countryLong) { (s: VPNServer) in CountryCell(server: s) }.width(min: 110, ideal: 130)
+                TableColumn("Host / IP", value: \.hostName) { (s: VPNServer) in HostCell(server: s) }.width(min: 120, ideal: 140)
+                TableColumn("DDNS name", value: \.fqdn) { (s: VPNServer) in FqdnCell(server: s) }.width(min: 120, ideal: 170)
+                TableColumn("Score", value: \.score) { (s: VPNServer) in NumberCell(text: "\(s.score)") }.width(60)
+                TableColumn("Speed", value: \.speed) { (s: VPNServer) in NumberCell(text: Fmt.speed(s.speed)) }.width(90)
+                TableColumn("Ping Google, Japan", value: \.ping) { (s: VPNServer) in
+                    PingCell(server: s, measured: model.pings[s.id])
+                }.width(min: 100, ideal: 120)
+                TableColumn("Sessions", value: \.sessions) { (s: VPNServer) in NumberCell(text: "\(s.sessions)") }.width(65)
+    }
+
+    @TableColumnBuilder<VPNServer, KeyPathComparator<VPNServer>>
+    private var statColumns: some TableColumnContent<VPNServer, KeyPathComparator<VPNServer>> {
+                TableColumn("Uptime", value: \.uptimeMs) { (s: VPNServer) in Text(ListFormat.uptime(ms: s.uptimeMs)) }.width(70)
+                TableColumn("SSL ports") { (s: VPNServer) in PortsCell(server: s) }.width(min: 90, ideal: 130)
+                TableColumn("UDP") { (s: VPNServer) in Text(ListFormat.udp(s.udpPort)) }.width(40)
+                TableColumn("Users / Traffic", value: \.totalTraffic) { (s: VPNServer) in TrafficCell(server: s) }.width(100)
+                TableColumn("Operator / Logs", value: \.operatorName) { (s: VPNServer) in OperatorCell(server: s) }.width(min: 140)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             StatusBar()
@@ -111,43 +139,11 @@ struct ServerListView: View {
                     .disabled(model.loading)
             }.padding(8)
 
+            // Column titles are this app's own English wording: the Windows client's VGC_COLUMN_0..14 texts live in an
+            // external string table that is not part of the decompile. The cells follow client_exe.c FUN_00525490.
             Table(rows, selection: $ui.selection, sortOrder: $ui.sortOrder) {
-                TableColumn("★") { s in
-                    Button { model.toggleFavorite(s) } label: {
-                        Image(systemName: model.favorites.contains(s.id) ? "star.fill" : "star")
-                    }.buttonStyle(.plain)
-                }.width(24)
-                TableColumn("Country", value: \.countryLong) { Text("\($0.flag) \($0.countryLong)") }.width(min: 110, ideal: 130)
-                TableColumn("Host / IP", value: \.hostName) { s in
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(s.hostName)
-                        Text(s.ip).font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                    }
-                }.width(min: 120, ideal: 140)
-                TableColumn("Score", value: \.score) { Text("\($0.score)").monospacedDigit() }.width(60)
-                TableColumn("Speed", value: \.speed) { Text(Fmt.speed($0.speed)).monospacedDigit() }.width(90)
-                TableColumn("Ping", value: \.ping) { s in
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("\(s.ping) ms").monospacedDigit()
-                        if let ms = model.pings[s.id] {
-                            Text(ms < 0 ? "unreachable" : "\(ms) ms here").font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                }.width(80)
-                TableColumn("Sessions", value: \.sessions) { Text("\($0.sessions)").monospacedDigit() }.width(65)
-                TableColumn("Uptime", value: \.uptimeMs) { Text(Fmt.uptime($0.uptimeMs)) }.width(70)
-                TableColumn("Users / Traffic", value: \.totalTraffic) { s in
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("\(s.totalUsers) users").monospacedDigit()
-                        Text(Fmt.traffic(s.totalTraffic)).font(.caption).foregroundStyle(.secondary)
-                    }
-                }.width(100)
-                TableColumn("Operator / Logs", value: \.operatorName) { s in
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(s.operatorName.isEmpty ? "Anonymous" : s.operatorName).lineLimit(1)
-                        Text("logs: \(s.logType)").font(.caption).foregroundStyle(.secondary)
-                    }
-                }.width(min: 140)
+                identityColumns
+                statColumns
             }
             .contextMenu(forSelectionType: VPNServer.ID.self) { ids in
                 if let s = model.servers.first(where: { ids.contains($0.id) }) {
@@ -176,9 +172,6 @@ struct ServerListView: View {
                 ServerDetailsSheet(server: s)
             }
         }
-        .sheet(isPresented: $ui.showingDisclaimer) {
-            AcademicDisclaimerSheet(isPresented: $ui.showingDisclaimer)
-        }
         .alert(setupTitle, isPresented: Binding(get: { model.setupPrompt != nil }, set: { if !$0 { model.cancelSetup() } })) {
             Button("Continue") { model.beginSetup() }
             Button("Not Now", role: .cancel) { model.cancelSetup() }
@@ -186,10 +179,55 @@ struct ServerListView: View {
             Text("VPN Gate needs a small background component to create the VPN connection. macOS will open its standard installer and ask for your password once. After that, VPN Gate connects by itself.")
         }
         .onAppear {
-            if !UserDefaults.standard.bool(forKey: "hasAgreedToDisclaimer") {
-                ui.showingDisclaimer = true
-            }
             if model.servers.isEmpty { model.refresh() }
+        }
+    }
+}
+
+// Table cells, kept as small views so the Table expression stays cheap to type-check.
+private struct CountryCell: View { let server: VPNServer; var body: some View { Text("\(server.flag) \(server.countryLong)") } }
+private struct NumberCell: View { let text: String; var body: some View { Text(text).monospacedDigit() } }
+private struct FqdnCell: View { let server: VPNServer; var body: some View { Text(server.fqdn).lineLimit(1).textSelection(.enabled) } }
+private struct HostCell: View {
+    let server: VPNServer
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(server.hostName)
+            Text(server.ip).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+        }
+    }
+}
+private struct PingCell: View {
+    let server: VPNServer
+    let measured: Int?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(ListFormat.pings(google: server.pingToGoogle, japan: server.ping)).monospacedDigit()
+            if let ms = measured {
+                Text(ms < 0 ? "unreachable" : "\(ms) ms here").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+private struct PortsCell: View {
+    let server: VPNServer
+    var body: some View { Text(server.prioritizedSslPorts.map(String.init).joined(separator: ", ")).monospacedDigit().lineLimit(1) }
+}
+private struct TrafficCell: View {
+    let server: VPNServer
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("\(server.totalUsers) users").monospacedDigit()
+            Text(Fmt.traffic(server.totalTraffic)).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+private struct OperatorCell: View {
+    let server: VPNServer
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(server.operatorName.isEmpty ? "Anonymous" : server.operatorName).lineLimit(1)
+            Text("logs: \(server.logType)").font(.caption).foregroundStyle(.secondary)
         }
     }
 }
@@ -228,7 +266,9 @@ struct ServerDetailsSheet: View {
                     DetailRow(title: "Line Speed:", value: Fmt.speed(server.speed))
                     DetailRow(title: "Score:", value: "\(server.score)")
                     DetailRow(title: "Ping to Japan:", value: "\(server.ping) ms")
-                    DetailRow(title: "SSL-VPN Ports:", value: server.sslPorts.isEmpty ? "Default (443)" : server.sslPorts.map(String.init).joined(separator: ", "))
+                    DetailRow(title: "Ping to Google:", value: server.pingToGoogle == 0 ? "-" : "\(server.pingToGoogle) ms")
+                    DetailRow(title: "UDP port:", value: server.udpPort.map(String.init) ?? "-")
+                    DetailRow(title: "SSL-VPN Ports:", value: server.sslPorts.isEmpty ? "Default (443)" : server.prioritizedSslPorts.map(String.init).joined(separator: ", "))
                     DetailRow(title: "OpenVPN UDP Ports:", value: server.openVpnUdpPorts.isEmpty ? "None" : server.openVpnUdpPorts.map(String.init).joined(separator: ", "))
                     DetailRow(title: "L2TP / IPsec:", value: server.l2tp ? "Supported" : "Not supported")
                     DetailRow(title: "Logging Policy:", value: server.logType)
@@ -263,8 +303,9 @@ struct ServerDetailsSheet: View {
     }
 }
 
+/// Shown from the app root (any tab, menu-bar connects too) until accepted; connecting is blocked until then.
 struct AcademicDisclaimerSheet: View {
-    @Binding var isPresented: Bool
+    @EnvironmentObject var model: AppModel
 
     var body: some View {
         VStack(spacing: 16) {
@@ -279,20 +320,21 @@ struct AcademicDisclaimerSheet: View {
                 .foregroundColor(.secondary)
                 .padding(.horizontal)
             Divider()
+            Toggle("Send Mac-only diagnostics (off by default)", isOn: $model.statistics.isEnabled)
+            Text("This app’s own opt-in upload, not something the Windows client does for ordinary users. You can change it any time in Settings, where the exact contents are listed.")
+                .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
             HStack {
                 Button("Disagree & Quit") {
                     NSApplication.shared.terminate(nil)
                 }
                 Spacer()
-                Button("Agree and Continue") {
-                    UserDefaults.standard.set(true, forKey: "hasAgreedToDisclaimer")
-                    isPresented = false
-                }
-                .keyboardShortcut(.defaultAction)
+                Button("Agree and Continue") { model.agreeToDisclaimer() }
+                    .keyboardShortcut(.defaultAction)
             }
         }
         .padding(24)
-        .frame(width: 480, height: 320)
+        .frame(width: 480)
+        .interactiveDismissDisabled()
     }
 }
 
@@ -324,9 +366,12 @@ struct StatusBar: View {
                     .background(Color.secondary.opacity(0.15))
                     .cornerRadius(4)
                 if let ts = model.listTimestamp {
+                    // The original's status line: OK within 24 h of the list's timestamp, otherwise the "stale" wording.
+                    let ok = ListFormat.isListOK(timestamp: ts, now: Date())
                     Text(ts, style: .relative)
                         .font(.caption)
-                        .foregroundColor(model.listIsFresh ? .secondary : .orange)
+                        .foregroundColor(ok ? .secondary : .orange)
+                    if !ok { Text("stale").font(.caption).foregroundColor(.orange) }
                 }
             }
             if let n = model.notice { Text(n).font(.caption).foregroundStyle(.red).lineLimit(1) }

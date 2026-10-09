@@ -17,8 +17,16 @@ struct VPNGateApp: App {
                     .tabItem {
                         Label("Client Manager", systemImage: "network")
                     }
+                HistoryView()
+                    .tabItem {
+                        Label("History", systemImage: "clock")
+                    }
             }
             .environmentObject(model)
+            .sheet(isPresented: $model.showingDisclaimer) {
+                AcademicDisclaimerSheet().environmentObject(model)
+            }
+            .onAppear { if !model.hasAgreedToDisclaimer { model.showingDisclaimer = true } }
         }
         Settings { SettingsView().environmentObject(model) }
 
@@ -35,7 +43,10 @@ struct VPNGateApp: App {
             Divider()
             if s.state == .disconnected {
                 if let last = model.lastServer ?? model.servers.first(where: { model.favorites.contains($0.id) }) {
-                    Button("Connect to \(last.hostName)") { model.connect(last) }
+                    Button("Connect to \(last.hostName)") {
+                        model.connect(last)
+                        if model.showingDisclaimer { openWindow(id: "main"); NSApp.activate(ignoringOtherApps: true) }
+                    }
                 }
             } else {
                 Button("Disconnect") { model.disconnect() }

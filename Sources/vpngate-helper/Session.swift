@@ -33,7 +33,7 @@ struct SessionDependencies {
         case "plain password", "plain":
             auth = .plainPassword(config.password ?? "")
         case "user certificate", "cert":
-            auth = .certificate(certDer: config.certDer ?? Data(), sign: { _ in config.certSignData ?? Data() })
+            auth = .certificate(certDer: config.certDer ?? Data(), sign: CertAuth.signer(privateKeyDer: config.privateKeyDer))
         case "ticket":
             auth = .ticket(config.ticket ?? Data())
         default:
@@ -48,7 +48,10 @@ struct SessionDependencies {
             proxy: config.proxy,
             maxConnections: config.maxConnection,
             useCompress: config.useCompress,
-            useUdpAccel: config.useUdpAccel
+            useUdpAccel: config.useUdpAccel,
+            disableQoS: config.disableQoS,
+            uniqueId: HostUniqueId.shared,
+            serverCertPolicy: ServerCertPolicy(checkServerCert: config.checkServerCert, fingerprint: config.serverCertFingerprint)
         )
     }
 }
@@ -183,6 +186,8 @@ final class VPNSession: SessionControlling {
             userName: "vpn",
             authType: "anonymous",
             proxy: proxy,
+            maxConnection: 1,                       // the VPN Gate client's own account (client_exe.c:27590)
+            disableQoS: true,                       // ... and DisableQoS=1 (client_exe.c:27598)
             autoReconnect: autoReconnect,
             blockIPv6: blockIPv6
         )
@@ -286,6 +291,7 @@ final class VPNSession: SessionControlling {
         guard withResources(r, { $0.tun = tun }) else { tun.close(); throw CancellationError() }
         let bridge = EthernetBridge(timing: timing.bridge)
         bridge.handleIPv6 = !config.blockIPv6
+        tun.forwardIPv6 = !config.blockIPv6
         guard withResources(r, { $0.bridge = bridge }) else { throw CancellationError() }
         bridge.sendFrame = { [weak client] in client?.sendFrame($0) }
         bridge.deliverIPv4 = { [weak tun] in tun?.write(ipv4: $0) }
@@ -307,9 +313,15 @@ final class VPNSession: SessionControlling {
         bridge.gratuitousARP()
         let net = deps.makeNet()
         guard withResources(r, { $0.net = net }) else { throw CancellationError() }
-        try net.apply(iface: tun.name, lease: lease,
-                      bypassHost: config.proxy.kind == .none ? config.host : config.proxy.host,
-                      blockIPv6: config.blockIPv6)
+        // The address the TLS connection really went to, not a second lookup of the name (which could differ, or fail).
+        let primaryBypass = config.proxy.kind != .none ? config.proxy.host
+            : InputValidation.isIPv4Literal(config.host) ? config.host : (client.remoteIPv4 ?? config.host)
+        try net.apply(iface: tun.name, lease: lease, bypassHost: primaryBypass, blockIPv6: config.blockIPv6)
+        // After a cluster redirect the data flows to another host, and UDP acceleration to its own endpoint:
+        // both need their own route around the tunnel.
+        for h in client.bypassHosts where h != primaryBypass { net.addBypass(host: h) }
+        // IPv6 (only when not blocked): put the SLAAC address on the utun once a router advertises a prefix.
+        bridge.startIPv6 { [weak net] address, prefixLength in net?.configureIPv6(address: address, prefixLength: prefixLength) }
         tun.startReading()
 
         set(gen, .connected, ip: ipString(lease.ip), log: "Connected via \(tun.name), gateway \(ipString(lease.router))")

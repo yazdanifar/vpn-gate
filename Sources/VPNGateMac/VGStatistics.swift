@@ -1,17 +1,20 @@
 import Foundation
-import CryptoKit
 import VPNGateCore
 
-/// VPN Gate anonymous statistics / telemetry uploader.
-/// Reference: SoftEther Windows Client / VPN Gate Plugin client_exe.c:12600-12700.
+/// Mac-only, opt-in diagnostic upload (OFF by default, nothing is sent or scheduled until the user turns it on).
+/// The Windows client does NOT send this for an ordinary client: its upload (client_exe.c ~12600-12700) only happens
+/// when the machine hosts a VPN Gate relay and has per-session logs. The payload below is this app's own invention.
 @MainActor
 public final class VGStatistics: ObservableObject {
     public static let sendInterval: TimeInterval = 600.0   // 10 minutes
     public static let retryInterval: TimeInterval = 60.0   // 1 minute
+    /// Opt-in key. Deliberately not the old `telemetryEnabled` key, which earlier builds set to true for everyone.
+    static let optInKey = "telemetryOptIn"
+    static let hostKeyKey = "telemetryHostKey"
 
     @Published public var isEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(isEnabled, forKey: "telemetryEnabled")
+            defaults.set(isEnabled, forKey: Self.optInKey)
             if isEnabled { start() } else { stop() }
         }
     }
@@ -21,22 +24,44 @@ public final class VGStatistics: ObservableObject {
 
     private var timer: Timer?
     private let urlSession: URLSession
+    private let defaults: UserDefaults
+    /// Where uploads go; tests point this at a local server.
+    var endpointOverride: URL?
+    /// True while an upload is scheduled (nothing is scheduled while disabled).
+    public var isScheduled: Bool { timer != nil }
 
-    public init(session: URLSession = .shared) {
+    /// `startIfEnabled: false` (tests) never schedules anything even when the stored choice is on.
+    public init(defaults: UserDefaults = .standard, session: URLSession = .shared, startIfEnabled: Bool = true) {
         self.urlSession = session
-        // On by default matching Windows client
-        if UserDefaults.standard.object(forKey: "telemetryEnabled") == nil {
-            UserDefaults.standard.set(true, forKey: "telemetryEnabled")
-        }
-        self.isEnabled = UserDefaults.standard.bool(forKey: "telemetryEnabled")
-        if isEnabled {
-            start()
-        }
+        self.defaults = defaults
+        self.isEnabled = defaults.bool(forKey: Self.optInKey)          // absent = off
+        if isEnabled && startIfEnabled { start() }
+    }
+
+    /// Random per-install identifier (not derived from the machine); `resetHostKey()` replaces it.
+    public var hostKey: String {
+        if let k = defaults.string(forKey: Self.hostKeyKey), !k.isEmpty { return k }
+        return resetHostKey()
+    }
+
+    @discardableResult
+    public func resetHostKey() -> String {
+        let k = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        defaults.set(k, forKey: Self.hostKeyKey)
+        return k
+    }
+
+    /// Exactly what an upload contains, for the Settings screen.
+    nonisolated public static var payloadDescription: [String] {
+        let p = makeTelemetryPack(hostKey: "<random per-install ID>")
+        return ["HostKey: \(p.str("HostKey") ?? "")", "Build: \(p.int("Build") ?? 0)", "ClientVer: \(p.int("ClientVer") ?? 0)",
+                "ClientBuild: \(p.int("ClientBuild") ?? 0)", "ClientOsName: \(p.str("ClientOsName") ?? "")", "IsClient: \(p.int("IsClient") ?? 0)"]
     }
 
     public func start() {
         stop()
-        scheduleNext(interval: 5.0) // initial attempt shortly after launch
+        guard isEnabled else { return }
+        scheduleNext(interval: 5.0) // first upload shortly after the user turned it on
     }
 
     public func stop() {
@@ -46,26 +71,22 @@ public final class VGStatistics: ObservableObject {
 
     private func scheduleNext(interval: TimeInterval) {
         timer?.invalidate()
+        guard isEnabled else { timer = nil; return }
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor in
-                await self?.sendStatistics()
+                _ = await self?.sendStatistics()
             }
         }
-    }
-
-    nonisolated public static var hostKeyHex: String {
-        let uuid = ProcessInfo.processInfo.hostName
-        let hash = Insecure.SHA1.hash(data: Data(uuid.utf8))
-        return hash.map { String(format: "%02x", $0) }.joined()
     }
 
     nonisolated public static func telemetryURL(hostKey: String, baseURL: String? = nil) -> URL {
         if let base = baseURL, let url = URL(string: base) {
             return url
         }
+        // x%c.x%c are the hex digits at index 2 and 3 of the key (client_exe.c:12530-12535, 12623).
         let chars = Array(hostKey)
-        let c0 = chars.count > 0 ? chars[0] : "0"
-        let c1 = chars.count > 1 ? chars[1] : "0"
+        let c0 = chars.count > 2 ? chars[2] : "0"
+        let c1 = chars.count > 3 ? chars[3] : "0"
         let rand = UInt64.random(in: 1...UInt64.max)
         let urlStr = "https://x\(c0).x\(c1).statistics.api.vpngate2.jp/api/statistics/?rand=\(rand)"
         return URL(string: urlStr) ?? URL(string: "https://www.vpngate.net/api/statistics/")!
@@ -85,15 +106,15 @@ public final class VGStatistics: ObservableObject {
     public func sendStatistics(overrideURL: URL? = nil) async -> Bool {
         guard isEnabled else { return false }
 
-        let hostKey = Self.hostKeyHex
-        let targetURL = overrideURL ?? Self.telemetryURL(hostKey: hostKey)
+        let hostKey = self.hostKey
+        let targetURL = overrideURL ?? endpointOverride ?? Self.telemetryURL(hostKey: hostKey)
         let pack = Self.makeTelemetryPack(hostKey: hostKey)
         let body = pack.serialize()
 
         var req = URLRequest(url: targetURL, timeoutInterval: 120)
         req.httpMethod = "POST"
         req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        req.setValue("SoftEther VPN Client (macOS)", forHTTPHeaderField: "User-Agent")
+        req.setValue("VPNGateMac (opt-in diagnostics)", forHTTPHeaderField: "User-Agent")
         req.httpBody = body
 
         do {

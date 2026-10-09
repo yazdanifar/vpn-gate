@@ -6,7 +6,8 @@ cd "$(dirname "$0")/.."
 export COPYFILE_DISABLE=1          # no ._AppleDouble stubs for extended attributes in the payload
 # pkgbuild tries to chown payload files to root as a normal user; the recorded ownership is still root:wheel.
 quiet() { "$@" 2> >(grep -v "^write: Permission denied$" >&2); }
-VERSION=$(sed -n 's/^public let helperVersion = \([0-9]*\)$/\1/p' Sources/VPNGateCore/IPCMessages.swift)
+# The release version (VERSION file); the helper's IPC version (helperVersion) is a separate number.
+VERSION=$(tr -d '[:space:]' < VERSION)
 STAGE=build/pkg; rm -rf "$STAGE"; mkdir -p "$STAGE/helper-root/Library/PrivilegedHelperTools" \
   "$STAGE/helper-root/Library/LaunchDaemons" "$STAGE/app-root/Applications"
 
@@ -52,4 +53,4 @@ for f in ./Library/PrivilegedHelperTools/vpngate-helper ./Library/LaunchDaemons/
 done
 pkgutil --payload-files "$STAGE/app.pkg" | grep -q "VPN Gate Helper.pkg" || { echo "app lacks the helper installer"; exit 1; }
 SIG=$(pkgutil --check-signature "build/VPN Gate.pkg" 2>&1 || true); echo "$(head -1 <<< "$SIG")  (unsigned: macOS shows a one-time \"unidentified developer\" notice; right-click → Open)"
-echo "Built build/VPN Gate.pkg (helper version $VERSION)"
+echo "Built build/VPN Gate.pkg (version $VERSION)"

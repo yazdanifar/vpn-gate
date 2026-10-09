@@ -9,6 +9,9 @@ chown root:wheel "$HELPER" "$PLIST" 2>/dev/null
 chmod 755 "$HELPER"
 chmod 644 "$PLIST"
 
+# A job that is still loaded (reinstall, or preinstall's bootout lost the race) makes `bootstrap` fail: unload it first.
+launchctl bootout "system/$LABEL" >/dev/null 2>&1 || true
+
 i=0
 until launchctl bootstrap system "$PLIST"; do
   i=$((i + 1))

@@ -161,6 +161,11 @@ final class IPCServer {
         if let port = r.port, !InputValidation.isValidPort(port) { return "invalid port" }
         if let config = r.config {
             for p in config.ports where !InputValidation.isValidPort(p) { return "invalid port \(p)" }
+            if (config.certDer?.count ?? 0) > CertAuth.maxCertBytes { return "certificate too large" }
+            if (config.privateKeyDer?.count ?? 0) > CertAuth.maxKeyBytes { return "private key too large" }
+            if let t = config.ticket, t.count > 1024 { return "ticket too large" }
+            if !InputValidation.isValidIdentityField(config.hubName) { return "invalid hub name" }
+            if !InputValidation.isValidIdentityField(config.userName) { return "invalid user name" }
         }
         let p = r.config?.proxy ?? r.proxy
         if let p = p, p.kind != .none {

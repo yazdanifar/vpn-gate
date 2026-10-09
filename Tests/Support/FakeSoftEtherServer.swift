@@ -12,7 +12,15 @@ final class FakeSoftEtherServer {
     var redirect = false
     var redirectHost = "5.6.7.8"
     var redirectPort: UInt32 = 443
+    /// If set, the redirect offers this whole port list instead of `redirectPort`.
+    var redirectPorts: [UInt32]?
     var redirectTicket = Data(repeating: 0x42, count: 20)
+    /// If set, the redirect `Ip` is sent as SoftEther's pack integer instead of a string.
+    var redirectIpInt: UInt32?
+    /// If set, replaces the whole (non-error, non-redirect) welcome pack.
+    var welcomeOverride: Pack?
+    /// The next N additional_connect requests are answered with an error.
+    var failAdditionalConnects = 0
     var useCompress = false
     var maxConnections: UInt32 = 1
     var sessionKey = Data(repeating: 0x11, count: 20)
@@ -24,6 +32,8 @@ final class FakeSoftEtherServer {
     var helloStatus = 200
     var welcomeTimeoutMs: UInt32 = 20000
     var failStart: Error?
+    /// What every stream reports as the peer it really connected to.
+    var remoteIPv4: String?
     /// Bytes sent right after the welcome (same TCP segment).
     var trailingAfterWelcome: [UInt8] = []
     /// If set, server→client bytes are delivered in chunks of this size.
@@ -62,6 +72,11 @@ final class FakeSoftEtherServer {
     fileprivate func record(login: Pack) { lock.lock(); _logins.append(login); lock.unlock() }
     fileprivate func record(additionalConnect: Pack) { lock.lock(); _additionalConnects.append(additionalConnect); lock.unlock() }
     fileprivate func record(frame: [UInt8]) { lock.lock(); _frames.append(frame); lock.unlock() }
+    fileprivate func takeAdditionalFailure() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        if failAdditionalConnects > 0 { failAdditionalConnects -= 1; return true }
+        return false
+    }
     fileprivate func recordKeepAlive() { lock.lock(); _keepAlives += 1; lock.unlock() }
 
     static func http(_ status: Int, _ body: [UInt8]) -> [UInt8] {
@@ -81,11 +96,12 @@ final class FakeSoftEtherServer {
         if loginError != 0 { p.addInt("error", loginError); return p }
         if redirect {
             p.addInt("Redirect", 1)
-            p.addStr("Ip", redirectHost)
-            p.addInt("Port", redirectPort)
+            if let ip = redirectIpInt { p.addInt("Ip", ip) } else { p.addStr("Ip", redirectHost) }
+            if let ports = redirectPorts { p.addInts("Port", ports) } else { p.addInt("Port", redirectPort) }
             p.addData("Ticket", redirectTicket)
             return p
         }
+        if let o = welcomeOverride { return o }
         p.addStr("session_name", "SID-VPN-TEST-1")
         p.addStr("connection_name", "CID-1")
         p.addInt("timeout", welcomeTimeoutMs)
@@ -119,6 +135,8 @@ final class FakeStream: ByteStream {
     init(server: FakeSoftEtherServer) { self.server = server }
 
     func start() async throws { if let e = server.failStart { throw e } }
+
+    var remoteIPv4: String? { server.remoteIPv4 }
 
     func readChunk() async throws -> Data { try await incoming.next() }
 
@@ -200,6 +218,10 @@ final class FakeStream: ByteStream {
 
             if p.str("method") == "additional_connect" {
                 server.record(additionalConnect: p)
+                if server.takeAdditionalFailure() {
+                    var e = Pack(); e.addInt("error", 3)
+                    deliver(FakeSoftEtherServer.http(200, [UInt8](e.serialize()))); return
+                }
                 decoder.useCompress = server.useCompress
                 deliver(FakeSoftEtherServer.http(200, [UInt8](Pack().serialize())))
                 mode = .data

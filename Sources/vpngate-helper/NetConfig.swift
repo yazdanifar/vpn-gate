@@ -78,6 +78,7 @@ final class NetConfig: NetConfiguring {
     private let dns: DNSConfigurator
     private let stateFile: String
     private var state: State?
+    private var originalRoute: (gateway: String?, iface: String)?
 
     init(runner: CommandRunner = SystemRunner(), dns: DNSConfigurator = SystemDNS(),
          stateFile: String = NetConfig.defaultStateFile) {
@@ -97,30 +98,35 @@ final class NetConfig: NetConfiguring {
         }
     }
 
+    /// Host route that keeps traffic to `host` on the original default path instead of the tunnel.
+    private func addBypassRoute(_ host: String, via o: (gateway: String?, iface: String)) {
+        if let g = o.gateway { addRoute(["-host", host, g], undo: ["-host", host]) }
+        else { addRoute(["-host", host, "-interface", o.iface], undo: ["-host", host]) }
+    }
+
     func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool = true) throws {
         let ip = ipString(lease.ip), gw = ipString(lease.router)
         let orig = Self.defaultRoute(runner)
+        originalRoute = orig
         var st = State(iface: iface, bypassHost: bypassHost, gateway: gw, dnsSet: false)
         st.addedRoutes = []
         state = st
         save()
 
-        let mtuVal = lease.mtu.map(String.init) ?? "1400"
+        // The DHCP parser already ignores out-of-range option 26 values; check again for leases built elsewhere.
+        let mtuVal = lease.mtu.flatMap { (576...1500).contains($0) ? String($0) : nil } ?? "1400"
         runner.run("/sbin/ifconfig", [iface, "inet", ip, gw, "netmask", "255.255.255.255", "mtu", mtuVal, "up"])
         // Keep the tunnel's own transport outside the tunnel (never for loopback/link-local proxies).
-        if !InputValidation.isLocalAddress(bypassHost), let o = orig {
-            if let g = o.gateway { addRoute(["-host", bypassHost, g], undo: ["-host", bypassHost]) }
-            else { addRoute(["-host", bypassHost, "-interface", o.iface], undo: ["-host", bypassHost]) }
-        }
+        if !InputValidation.isLocalAddress(bypassHost), let o = orig { addBypassRoute(bypassHost, via: o) }
         addRoute(["-host", gw, "-interface", iface], undo: ["-host", gw])
         addRoute(["-net", "0.0.0.0/1", gw], undo: ["-net", "0.0.0.0/1", gw])
         addRoute(["-net", "128.0.0.0/1", gw], undo: ["-net", "128.0.0.0/1", gw])
-        if blockIPv6 {
-            // The utun reader drops every non-IPv4 packet, so pointing both halves of the IPv6 space at the
-            // tunnel makes dual-stack sites fall back to IPv4 through the VPN instead of leaking.
-            addRoute(["-inet6", "::/1", "-interface", iface], undo: ["-inet6", "::/1", "-interface", iface])
-            addRoute(["-inet6", "8000::/1", "-interface", iface], undo: ["-inet6", "8000::/1", "-interface", iface])
-        }
+        // Both halves of the IPv6 space point at the tunnel either way, so native IPv6 never leaks around it. With
+        // `blockIPv6` the utun reader drops every non-IPv4 packet and dual-stack sites fall back to IPv4 through the
+        // VPN; without it the bridge forwards IPv6 once `configureIPv6` has given the interface an address, and
+        // drops it while the hub offers no IPv6 router.
+        addRoute(["-inet6", "::/1", "-interface", iface], undo: ["-inet6", "::/1", "-interface", iface])
+        addRoute(["-inet6", "8000::/1", "-interface", iface], undo: ["-inet6", "8000::/1", "-interface", iface])
 
         if !lease.dns.isEmpty {
             st = state ?? st
@@ -129,9 +135,27 @@ final class NetConfig: NetConfiguring {
         }
     }
 
+    func addBypass(host: String) {
+        // The host ends up as a `route` argument, so only a plain IPv4 literal is accepted.
+        guard state != nil, InputValidation.isIPv4Literal(host), !InputValidation.isLocalAddress(host),
+              host != state?.bypassHost, let o = originalRoute else { return }
+        addBypassRoute(host, via: o)
+    }
+
+    func configureIPv6(address: [UInt8], prefixLength: Int) {
+        // Never a placeholder, multicast or link-local address (the kernel already has its own link-local one).
+        guard let iface = state?.iface, address.count == 16, (1...128).contains(prefixLength),
+              address.contains(where: { $0 != 0 }), address[0] != 0xff, !IPv6.isLinkLocal(address) else { return }
+        let r = runner.run("/sbin/ifconfig", [iface, "inet6", IPv6.string(address), "prefixlen", String(prefixLength)])
+        if r.status != 0 {
+            print("[ifconfig] inet6 \(IPv6.string(address)) failed (\(r.status)): \(r.out.trimmingCharacters(in: .whitespacesAndNewlines))")
+        }
+        // The address disappears with the utun, so there is nothing to undo or persist.
+    }
+
     func teardown() {
         Self.cleanup(state, runner, dns)
-        state = nil
+        state = nil; originalRoute = nil
         try? FileManager.default.removeItem(atPath: stateFile)
     }
 

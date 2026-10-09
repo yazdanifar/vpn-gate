@@ -9,8 +9,11 @@ import VPNGateCore
 
 setvbuf(stdout, nil, _IOLBF, 0)
 
-// --probe <host> [--port N]: handshake + DHCP only, no utun/routes, so it runs without root.
+// --probe <host> [--port N] [--watch-udp [N]]: handshake + DHCP only, no utun/routes, so it runs without root.
+// --watch-udp keeps the session open for N seconds (default 20) afterwards, polling whether UDP acceleration
+// (opportunistic; the client always falls back to TCP) actually became usable against this real server.
 if let (host, port) = parseProbeArgs(CommandLine.arguments) {
+    let watchSeconds = parseWatchUdpSeconds(CommandLine.arguments)
     Task {
         let c = SoftEtherClient(host: host, port: UInt16(port), proxy: ProxySettings())
         let b = EthernetBridge()
@@ -21,6 +24,24 @@ if let (host, port) = parseProbeArgs(CommandLine.arguments) {
             print("OK session \(w.sessionName) timeout \(w.timeoutMs)ms")
             let l = try await b.acquireLease()
             print("OK lease ip \(ipString(l.ip)) mask \(ipString(l.mask)) gw \(ipString(l.router)) dns \(l.dns.map(ipString)) \(l.seconds)s")
+            if let seconds = watchSeconds {
+                print("  UDP negotiated: \(c.udpAccelNegotiated) — watching for \(seconds)s (needs ~10s stable receive before it carries data)")
+                var becameUsableAt: Int? = nil
+                for elapsed in 1...seconds {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    if c.udpAccelUsable && becameUsableAt == nil {
+                        becameUsableAt = elapsed
+                        print("  UDP became usable after \(elapsed)s")
+                    }
+                }
+                if let t = becameUsableAt {
+                    print("OK udp usable after \(t)s (still usable: \(c.udpAccelUsable))")
+                } else if c.udpAccelNegotiated {
+                    print("FAIL udp negotiated by the server but never became usable in \(seconds)s (likely blocked/dropped on this network; TCP fallback is what carries traffic instead)")
+                } else {
+                    print("OK udp not negotiated by this server; nothing to watch (TCP only)")
+                }
+            }
             c.close(nil); exit(0)
         } catch { print("FAIL \(error.localizedDescription)"); exit(1) }
     }

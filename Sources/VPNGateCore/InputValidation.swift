@@ -30,4 +30,25 @@ public enum InputValidation {
         let o = s.split(separator: ".").compactMap { Int($0) }
         return o[0] == 127 || (o[0] == 169 && o[1] == 254) || o[0] == 0
     }
+
+    /// Unspecified, loopback, link-local and RFC 1918 IPv4 literals: never a usable address to advertise to a remote client.
+    public static func isNonPublicIPv4(_ s: String) -> Bool {
+        guard isIPv4Literal(s) else { return false }
+        let o = s.split(separator: ".").compactMap { Int($0) }
+        return o[0] == 0 || o[0] == 10 || o[0] == 127 || (o[0] == 169 && o[1] == 254)
+            || (o[0] == 172 && (16...31).contains(o[1])) || (o[0] == 192 && o[1] == 168)
+    }
+
+    /// A pinned server certificate fingerprint: SHA-1 (40) or SHA-256 (64) hex digits, ':' ' ' '-' separators allowed.
+    /// Returns the bare lowercase hex, or nil when the text is not such a fingerprint.
+    public static func normalizedFingerprint(_ s: String) -> String? {
+        let hex = s.filter { !$0.isWhitespace && $0 != ":" && $0 != "-" }.lowercased()
+        guard hex.count == 40 || hex.count == 64, hex.allSatisfy({ $0.isASCII && $0.isHexDigit }) else { return nil }
+        return hex
+    }
+
+    /// hub and user names travel in the SoftEther handshake: at most 255 bytes, no NUL.
+    public static func isValidIdentityField(_ s: String) -> Bool {
+        s.utf8.count <= 255 && !s.utf8.contains(0)
+    }
 }

@@ -74,17 +74,99 @@ func registerNetConfigTests() {
     test("netconfig/blocks-ipv6-through-the-tunnel") {                                 // B7
         let (n, r, _, _) = make()
         try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5")
-        expect(r.log.contains("/sbin/route -n add -inet6 ::/1 -interface utun7 -blackhole") ||
-               r.log.contains("/sbin/route -n add -inet6 ::/1 ::1 -blackhole") ||
-               r.log.contains { $0.contains("-inet6") && $0.contains("::/1") }, "no ::/1 route: \(r.log)")
-        expect(r.log.contains { $0.contains("-inet6") && $0.contains("8000::/1") }, "no 8000::/1 route")
+        expect(r.log.contains("/sbin/route -n add -inet6 ::/1 -interface utun7"), "no ::/1 route: \(r.log)")
+        expect(r.log.contains("/sbin/route -n add -inet6 8000::/1 -interface utun7"), "no 8000::/1 route: \(r.log)")
+        expect(!r.log.contains { $0.contains("ifconfig") && $0.contains("inet6") }, "blocking must not give the utun an address")
         n.teardown()
-        expect(r.log.contains { $0.contains("delete -inet6") && $0.contains("::/1") }, "ipv6 routes must be removed on teardown")
+        expect(r.log.contains("/sbin/route -n delete -inet6 ::/1 -interface utun7"), "ipv6 routes must be removed on teardown: \(r.log)")
+        expect(r.log.contains("/sbin/route -n delete -inet6 8000::/1 -interface utun7"), "\(r.log)")
     }
-    test("netconfig/ipv6-block-can-be-disabled") {
+    test("netconfig/ipv6-enabled-still-captures-the-v6-space-but-adds-no-address-until-slaac") {      // review 7
         let (n, r, _, _) = make()
         try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5", blockIPv6: false)
-        expect(!r.log.contains { $0.contains("inet6") }, "\(r.log)")
+        expect(r.log.contains("/sbin/route -n add -inet6 ::/1 -interface utun7"), "native IPv6 would leak around the tunnel: \(r.log)")
+        expect(r.log.contains("/sbin/route -n add -inet6 8000::/1 -interface utun7"), "\(r.log)")
+        expect(!r.log.contains { $0.contains("ifconfig") && $0.contains("inet6") }, "no address before a Router Advertisement")
+    }
+    test("netconfig/slaac-address-is-configured-on-the-utun") {                           // review 7
+        let (n, r, _, _) = make()
+        try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5", blockIPv6: false)
+        n.configureIPv6(address: hex6("2001:db8:1:2:5c00:11ff:fe22:3344"), prefixLength: 64)
+        expect(r.log.last == "/sbin/ifconfig utun7 inet6 2001:db8:1:2:5c00:11ff:fe22:3344 prefixlen 64", "\(r.log)")
+        let before = r.log.count
+        for bad in [hex6("::"), hex6("ff02::1"), hex6("fe80::1"), [1, 2, 3]] { n.configureIPv6(address: bad, prefixLength: 64) }
+        n.configureIPv6(address: hex6("2001:db8::1"), prefixLength: 0)
+        n.configureIPv6(address: hex6("2001:db8::1"), prefixLength: 129)
+        expectEqual(r.log.count, before, "unusable addresses must not reach ifconfig")
+        n.teardown()
+        let r2 = RecordingRunner(); let (n2, _, _, _) = make(r2)
+        n2.configureIPv6(address: hex6("2001:db8::1"), prefixLength: 64)                  // before apply / after teardown
+        expectEqual(r2.log.count, 0, "no interface to configure")
+    }
+    test("netconfig/dhcp-mtu-is-used-only-within-576-to-1500") {                           // review 11
+        for (mtu, want) in [(UInt16?.some(1280), "1280"), (576, "576"), (1500, "1500"), (575, "1400"), (1501, "1400"),
+                            (9000, "1400"), (0, "1400"), (nil, "1400")] {
+            let (n, r, _, _) = make()
+            var l = lease; l.mtu = mtu
+            try n.apply(iface: "utun7", lease: l, bypassHost: "5.5.5.5")
+            expect(r.log.contains { $0.hasPrefix("/sbin/ifconfig utun7 inet ") && $0.hasSuffix("mtu \(want) up") }, "mtu \(String(describing: mtu)): \(r.log)")
+        }
+    }
+    test("netconfig/further-peers-get-bypass-routes-that-teardown-removes") {                // addBypass
+        let (n, r, _, _) = make()
+        try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5")
+        n.addBypass(host: "6.6.6.6"); n.addBypass(host: "7.7.7.7")
+        let log = r.log
+        let i6 = log.firstIndex(of: "/sbin/route -n add -host 6.6.6.6 192.168.1.1"), i7 = log.firstIndex(of: "/sbin/route -n add -host 7.7.7.7 192.168.1.1")
+        let iCapture = log.firstIndex(of: "/sbin/route -n add -net 128.0.0.0/1 10.233.254.254")
+        expect(i6 != nil && i7 != nil && iCapture != nil, "\(log)")
+        expect(i6! > iCapture! && i7! > i6!, "added after apply, in call order: \(log)")
+        n.teardown()
+        let del = r.log.filter { $0.contains("delete -host") }
+        expect(del.contains("/sbin/route -n delete -host 6.6.6.6") && del.contains("/sbin/route -n delete -host 7.7.7.7"), "\(del)")
+        let t = r.log
+        expect(t.lastIndex(of: "/sbin/route -n delete -host 7.7.7.7")! < t.lastIndex(of: "/sbin/route -n delete -host 6.6.6.6")!, "undone in reverse order")
+    }
+    test("netconfig/bypass-route-uses-the-interface-when-the-default-route-has-no-gateway") {
+        let r = RecordingRunner()
+        r.rules = [.init(contains: "get default", status: 0, out: "    gateway: link#14\n  interface: en0\n")]
+        let (n, _, _, _) = make(r)
+        try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5")
+        n.addBypass(host: "6.6.6.6")
+        expect(r.log.contains("/sbin/route -n add -host 6.6.6.6 -interface en0"), "\(r.log)")
+    }
+    test("netconfig/bypass-hosts-survive-a-crash-via-the-state-file") {
+        let (n, _, _, path) = make()
+        try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5")
+        n.addBypass(host: "6.6.6.6")
+        let st = try JSONDecoder().decode(NetConfig.State.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
+        expect(st.addedRoutes?.contains(["-host", "6.6.6.6"]) == true, "\(String(describing: st.addedRoutes))")
+        let r2 = RecordingRunner()                                                            // the helper was killed with -9
+        NetConfig.cleanupStale(runner: r2, dns: FakeDNS(), stateFile: path)
+        expect(r2.log.contains("/sbin/route -n delete -host 6.6.6.6"), "stale recovery left the route: \(r2.log)")
+    }
+    test("netconfig/bypass-route-that-failed-or-pre-existed-is-not-deleted") {
+        let r = RecordingRunner()
+        r.rules.append(.init(contains: "add -host 6.6.6.6", status: 1, out: "File exists"))
+        let (n, _, _, _) = make(r)
+        try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5")
+        n.addBypass(host: "6.6.6.6"); n.teardown()
+        expect(!r.log.contains { $0.contains("delete -host 6.6.6.6") }, "\(r.log)")
+    }
+    test("netconfig/bypass-rejects-anything-but-a-public-ipv4-literal") {
+        let (n, r, _, _) = make()
+        n.addBypass(host: "6.6.6.6")                                                        // before apply: no tunnel, no state
+        expectEqual(r.log.count, 0, "nothing to bypass before apply")
+        try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5")
+        let before = r.log.count
+        for bad in ["", "example.com", "6.6.6.6; reboot", "6.6.6.6 -interface lo0", "-net", "::1", "2001:db8::1", "300.1.1.1",
+                    "1.2.3", "1.2.3.4.5", "127.0.0.1", "169.254.1.1", "0.0.0.0", "5.5.5.5", " 6.6.6.6", "6.6.6.6\n"] {
+            n.addBypass(host: bad)
+        }
+        expectEqual(r.log.count, before, "route was invoked for a rejected host: \(r.log.dropFirst(before))")
+        n.teardown()
+        n.addBypass(host: "8.8.8.8")                                                        // after teardown
+        expect(!r.log.contains { $0.contains("8.8.8.8") }, "\(r.log)")
     }
     test("netconfig/state-file-lists-only-routes-that-were-added") {
         let r = RecordingRunner()

@@ -1,17 +1,14 @@
 import Foundation
 import CryptoKit
 
-public enum UdpAccelFlag: UInt8 {
-    case data = 0
-    case keepAlive = 1
-}
-
 public struct UdpAccelHeader {
     public var cookie: UInt32
     public var myTick: UInt64
     public var yourTick: UInt64
     public var size: UInt16
-    public var flag: UdpAccelFlag
+    /// The flag byte is upstream's COMPRESS flag (UdpAccel.c:353, :914): nonzero means the payload is zlib-compressed.
+    /// A keep-alive is simply an empty payload with flag 0.
+    public var compressed: Bool
 }
 
 public struct UdpAccelDecodedPacket {
@@ -26,6 +23,15 @@ public enum UdpAccelPacket {
     public static let macSize = 16
     public static let minPlaintextSize = 4 + 8 + 8 + 2 + 1 // 23 bytes (Cookie + MyTick + YourTick + Size + Flag)
     public static let minPacketSize = ivSize + minPlaintextSize + macSize // 51 bytes
+    public static let maxPadding = 31                                      // upstream pads rand() % MIN(room, 32)
+
+    /// Padding length for a packet carrying `dataSize` bytes (UdpAccel.c:535-540): zero when the packet already reaches
+    /// `maxSize`, else `rand() % min(maxSize - current, 32)`. `random` receives the bound and returns a value below it.
+    public static func paddingSize(dataSize: Int, maxSize: Int, random: (Int) -> Int = { Int.random(in: 0..<$0) }) -> Int {
+        let current = minPacketSize + dataSize
+        guard current < maxSize else { return 0 }
+        return random(min(maxSize - current, 32))
+    }
 
     /// Encrypts and encodes a UDP acceleration v2 packet.
     public static func encode(
@@ -34,14 +40,15 @@ public enum UdpAccelPacket {
         cookie: UInt32,
         myTick: UInt64,
         yourTick: UInt64,
-        flag: UdpAccelFlag,
+        compressed: Bool,
         payload: [UInt8],
-        paddingSize: Int = 0
+        paddingSize: Int = 0,
+        plainMode: Bool = false
     ) throws -> (packet: [UInt8], nextIV: [UInt8]) {
-        guard key32.count >= 32 else {
+        guard plainMode || key32.count >= 32 else {
             throw StreamError.protocolError("Invalid ChaCha20-Poly1305 key size (\(key32.count) < 32)")
         }
-        guard iv.count == ivSize else {
+        guard plainMode || iv.count == ivSize else {
             throw StreamError.protocolError("Invalid IV size (\(iv.count) != \(ivSize))")
         }
 
@@ -65,15 +72,18 @@ public enum UdpAccelPacket {
         withUnsafeBytes(of: &sizeBe) { plaintext.append(contentsOf: $0) }
 
         // 5. Flag (1 byte)
-        plaintext.append(flag.rawValue)
+        plaintext.append(compressed ? 1 : 0)
 
         // 6. Data
         plaintext.append(contentsOf: payload)
 
-        // 7. Padding (0..32 bytes)
-        if paddingSize > 0 {
+        // 7. Padding (0..31 bytes; upstream never pads in plaintext mode)
+        if paddingSize > 0, !plainMode {
             plaintext.append(contentsOf: [UInt8](repeating: 0, count: min(paddingSize, 32)))
         }
+
+        // Plaintext mode (udp_acceleration_use_encryption == false): no IV, no AEAD, no MAC (UdpAccel.c:382,526).
+        if plainMode { return (plaintext, iv) }
 
         // 8. ChaCha20-Poly1305 encrypt
         let symKey = SymmetricKey(data: key32.prefix(32))
@@ -97,7 +107,17 @@ public enum UdpAccelPacket {
     }
 
     /// Decrypts and decodes a received UDP acceleration v2 packet.
-    public static func decode(packet: [UInt8], key32: [UInt8]) throws -> UdpAccelDecodedPacket {
+    public static func decode(packet: [UInt8], key32: [UInt8], plainMode: Bool = false) throws -> UdpAccelDecodedPacket {
+        let plain: [UInt8]
+        if plainMode {
+            plain = packet                         // no IV, no MAC (UdpAccel.c:738)
+        } else {
+            plain = try decrypt(packet: packet, key32: key32)
+        }
+        return try parse(plain)
+    }
+
+    private static func decrypt(packet: [UInt8], key32: [UInt8]) throws -> [UInt8] {
         guard packet.count >= minPacketSize else {
             throw StreamError.protocolError("UDP packet too short (\(packet.count) < \(minPacketSize))")
         }
@@ -117,9 +137,10 @@ public enum UdpAccelPacket {
         let symKey = SymmetricKey(data: key32.prefix(32))
         let nonce = try ChaChaPoly.Nonce(data: iv)
         let box = try ChaChaPoly.SealedBox(nonce: nonce, ciphertext: Data(ciphertext), tag: Data(tag))
-        let decrypted = try ChaChaPoly.open(box, using: symKey)
-        let plain = [UInt8](decrypted)
+        return [UInt8](try ChaChaPoly.open(box, using: symKey))
+    }
 
+    private static func parse(_ plain: [UInt8]) throws -> UdpAccelDecodedPacket {
         guard plain.count >= minPlaintextSize else {
             throw StreamError.protocolError("Decrypted UDP packet too short (\(plain.count))")
         }
@@ -128,7 +149,7 @@ public enum UdpAccelPacket {
         let myTick = rd64(plain, 4)
         let yourTick = rd64(plain, 12)
         let size = (UInt16(plain[20]) << 8) | UInt16(plain[21])
-        let flag = UdpAccelFlag(rawValue: plain[22]) ?? .data
+        let compressed = plain[22] != 0
 
         let dataOffset = 23
         let dataLen = Int(size)
@@ -137,7 +158,7 @@ public enum UdpAccelPacket {
         }
 
         let payload = Array(plain[dataOffset..<dataOffset + dataLen])
-        let header = UdpAccelHeader(cookie: cookie, myTick: myTick, yourTick: yourTick, size: size, flag: flag)
+        let header = UdpAccelHeader(cookie: cookie, myTick: myTick, yourTick: yourTick, size: size, compressed: compressed)
         return UdpAccelDecodedPacket(header: header, payload: payload)
     }
 }

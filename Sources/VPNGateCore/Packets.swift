@@ -21,6 +21,16 @@ public let broadcastMAC: MAC = [UInt8](repeating: 0xff, count: 6)
 
 public func ipString(_ ip: UInt32) -> String { be32(ip).map(String.init).joined(separator: ".") }
 
+/// IPv4 as SoftEther's `PackAddIp`/`PackAddIp32` carries it in a pack integer (the redirect `Ip` and
+/// `udp_acceleration_server_ip`): `IPToUINT` copies the four address bytes in memory order and Pack.c swaps on
+/// big-endian hosts, so the integer is always the little-endian reading and the first octet is the LOW byte.
+/// (Not the network-order reading `ipString` uses for DHCP/ARP fields.)
+public func packIPString(_ v: UInt32) -> String {
+    [v & 0xff, v >> 8 & 0xff, v >> 16 & 0xff, v >> 24 & 0xff].map(String.init).joined(separator: ".")
+}
+/// Inverse of `packIPString`'s integer reading for a dotted IPv4 literal.
+public func packIPValue(_ ip: [UInt8]) -> UInt32 { ip.reversed().reduce(0) { $0 << 8 | UInt32($1) } }
+
 public enum Ethernet {
     public static func frame(dst: MAC, src: MAC, type: Int, payload: [UInt8]) -> [UInt8] {
         dst + src + be16(type) + payload
@@ -117,7 +127,10 @@ public struct DHCPMessage {
             case 3 where l >= 4: router = rd32(p, s)
             case 6 where l >= 4: dns = stride(from: 0, to: l - 3, by: 4).map { rd32(p, s + $0) }
             case 51 where l == 4: leaseSeconds = rd32(p, s)
-            case 26 where l == 2: mtu = UInt16(rd16(p, s))
+            case 26 where l == 2:
+                // An MTU outside 576...1500 is bogus (or would exceed what the 1500-byte hub frames can carry): ignore it.
+                let m = rd16(p, s)
+                if (576...1500).contains(m) { mtu = UInt16(m) }
             default: break
             }
             i = s + l
@@ -185,6 +198,26 @@ public enum IPv6 {
         return addr
     }
 
+    /// fe80::/10
+    public static func isLinkLocal(_ ip: [UInt8]) -> Bool { ip.count == 16 && ip[0] == 0xfe && ip[1] & 0xc0 == 0x80 }
+
+    /// SLAAC address: the /64 prefix followed by the modified EUI-64 interface identifier of `mac` (RFC 4862 §5.5.3, RFC 4291 App. A).
+    public static func slaac(prefix: [UInt8], mac: MAC) -> [UInt8] {
+        guard prefix.count >= 8, mac.count == 6 else { return [UInt8](repeating: 0, count: 16) }
+        return Array(prefix[0..<8]) + Array(linkLocal(mac: mac)[8..<16])
+    }
+
+    /// Uncompressed colon-hex text (`2001:db8:0:0:...`), which `inet_pton`/`ifconfig` accept.
+    public static func string(_ ip: [UInt8]) -> String {
+        guard ip.count == 16 else { return "" }
+        return stride(from: 0, to: 16, by: 2).map { String(rd16(ip, $0), radix: 16) }.joined(separator: ":")
+    }
+
+    /// Neighbour Discovery messages must leave with hop limit 255 (RFC 4861 §6.1.1) so receivers can tell they never crossed a router.
+    public static func ndpPacket(src: [UInt8], dst: [UInt8], icmp: [UInt8]) -> [UInt8] {
+        header(src: src, dst: dst, nextHeader: 58, payloadLen: icmp.count, hopLimit: 255) + icmp
+    }
+
     /// Solicited-node multicast address for IPv6: ff02::1:ffXX:XXXX
     public static func solicitedNodeMulticast(ip: [UInt8]) -> [UInt8] {
         guard ip.count == 16 else { return [UInt8](repeating: 0, count: 16) }
@@ -205,6 +238,11 @@ public enum ICMPv6 {
         return VPNGateCore.checksum(pseudo)
     }
 
+    /// True if the checksum in `icmp` (bytes 2-3) is correct for the pseudo-header of `src`/`dst`.
+    public static func isChecksumValid(src: [UInt8], dst: [UInt8], icmp: [UInt8]) -> Bool {
+        icmp.count >= 4 && checksum(src: src, dst: dst, icmpPayload: icmp) == 0
+    }
+
     /// Router Solicitation (Type 133)
     public static func routerSolicitation(srcMAC: MAC, srcIP: [UInt8]) -> [UInt8] {
         var icmp: [UInt8] = [133, 0, 0, 0, 0, 0, 0, 0] // Type, Code, Checksum (0), Reserved
@@ -216,11 +254,22 @@ public enum ICMPv6 {
         return icmp
     }
 
-    /// Neighbor Advertisement (Type 136) in response to Neighbor Solicitation (Type 135)
-    public static func neighborAdvertisement(targetIP: [UInt8], targetMAC: MAC, srcIP: [UInt8], dstIP: [UInt8]) -> [UInt8] {
+    /// Neighbor Solicitation (Type 135); the source link-layer option is left out for the unspecified source (DAD).
+    public static func neighborSolicitation(targetIP: [UInt8], srcMAC: MAC, srcIP: [UInt8], dstIP: [UInt8]) -> [UInt8] {
+        var icmp: [UInt8] = [135, 0, 0, 0, 0, 0, 0, 0] + targetIP
+        if srcIP.contains(where: { $0 != 0 }) { icmp += [1, 1] + srcMAC }
+        let c = checksum(src: srcIP, dst: dstIP, icmpPayload: icmp)
+        icmp[2] = UInt8(c >> 8); icmp[3] = UInt8(c & 0xff)
+        return icmp
+    }
+
+    /// Neighbor Advertisement (Type 136) in response to Neighbor Solicitation (Type 135).
+    /// `solicited` is clear for the answer to a DAD probe, which goes to ff02::1 (RFC 4861 §7.2.4).
+    public static func neighborAdvertisement(targetIP: [UInt8], targetMAC: MAC, srcIP: [UInt8], dstIP: [UInt8],
+                                             solicited: Bool = true) -> [UInt8] {
         var icmp: [UInt8] = [136, 0, 0, 0] // Type, Code, Checksum
-        // Flags: Solicited (0x40) | Override (0x20) = 0x60, 3 reserved bytes
-        icmp += [0x60, 0, 0, 0]
+        // Flags: Solicited (0x40) | Override (0x20), 3 reserved bytes
+        icmp += [solicited ? 0x60 : 0x20, 0, 0, 0]
         icmp += targetIP
         // Option 2: Target Link-Layer Address (type 2, len 1, MAC 6 bytes)
         icmp += [2, 1] + targetMAC

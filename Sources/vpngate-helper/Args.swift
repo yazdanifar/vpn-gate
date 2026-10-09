@@ -12,6 +12,15 @@ func parseProbeArgs(_ args: [String]) -> (String, Int)? {
     return (args[i + 1], port)
 }
 
+/// `--watch-udp [N]` → how many seconds `--probe` should keep the session open afterwards, polling whether UDP
+/// acceleration became usable (it needs ~10 s of stable receive before data may use it). Absent → nil (no watch,
+/// today's behaviour). Present with no number, or a non-numeric one → the default, 20 s.
+func parseWatchUdpSeconds(_ args: [String]) -> Int? {
+    guard let i = args.firstIndex(of: "--watch-udp") else { return nil }
+    guard i + 1 < args.count, let n = Int(args[i + 1]), n > 0 else { return 20 }
+    return min(n, 300)
+}
+
 /// uid of the user logged in at the Mac's console (owner of /dev/console), nil when nobody is.
 func currentConsoleUID() -> uid_t? {
     var st = stat()

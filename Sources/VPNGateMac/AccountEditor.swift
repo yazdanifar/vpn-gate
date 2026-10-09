@@ -1,55 +1,22 @@
+import AppKit
 import SwiftUI
 import VPNGateCore
-
-final class AccountEditorState: ObservableObject {
-    @Published var name: String
-    @Published var host: String
-    @Published var portString: String
-    @Published var hub: String
-    @Published var username: String
-    @Published var authType: AccountAuthType
-    @Published var password: String
-
-    @Published var maxConnection: Int
-    @Published var compression: Bool
-    @Published var udpAcceleration: Bool
-    @Published var autoReconnect: Bool
-    @Published var reconnectInterval: Double
-    @Published var reconnectCount: Int
-    @Published var checkServerCert: Bool
-    @Published var mtu: Int
-
-    init(account: ClientAccount? = nil, initialPassword: String? = nil) {
-        self.name = account?.name ?? "New Connection"
-        self.host = account?.host ?? ""
-        self.portString = account?.portList.map(String.init).joined(separator: ", ") ?? "443, 992, 5555, 1194"
-        self.hub = account?.hub ?? "DEFAULT"
-        self.username = account?.username ?? ""
-        self.authType = account?.authType ?? .password
-        self.password = initialPassword ?? ""
-        self.maxConnection = account?.maxConnection ?? 8
-        self.compression = account?.compression ?? false
-        self.udpAcceleration = account?.udpAcceleration ?? true
-        self.autoReconnect = account?.autoReconnect ?? true
-        self.reconnectInterval = account?.reconnectInterval ?? 3.0
-        self.reconnectCount = account?.reconnectCount ?? 8
-        self.checkServerCert = account?.checkServerCert ?? false
-        self.mtu = account?.mtu ?? 1500
-    }
-}
 
 struct AccountEditor: View {
     @Environment(\.dismiss) private var dismiss
 
     var account: ClientAccount?
-    var onSave: (ClientAccount, String?, Data?) -> Void
+    /// (account, password, certificate DER, PKCS#1 private key DER); nil secrets keep what is stored.
+    var onSave: (ClientAccount, String?, Data?, Data?) -> Void
 
     @StateObject private var ui: AccountEditorState
 
-    init(account: ClientAccount? = nil, initialPassword: String? = nil, onSave: @escaping (ClientAccount, String?, Data?) -> Void) {
+    init(account: ClientAccount? = nil, initialPassword: String? = nil, hasStoredIdentity: Bool = false,
+         onSave: @escaping (ClientAccount, String?, Data?, Data?) -> Void) {
         self.account = account
         self.onSave = onSave
-        _ui = StateObject(wrappedValue: AccountEditorState(account: account, initialPassword: initialPassword))
+        _ui = StateObject(wrappedValue: AccountEditorState(account: account, initialPassword: initialPassword,
+                                                           hasStoredIdentity: hasStoredIdentity))
     }
 
     var body: some View {
@@ -80,17 +47,20 @@ struct AccountEditor: View {
                     if ui.authType == .password || ui.authType == .plainPassword {
                         SecureField("Password:", text: $ui.password)
                     }
+                    if ui.authType == .certificate { certificateSection }
                 }
 
                 Section("Advanced Options") {
                     Stepper("Max TCP Connections: \(ui.maxConnection)", value: $ui.maxConnection, in: 1...32)
                     Toggle("Use Data Compression", isOn: $ui.compression)
                     Toggle("Use UDP Acceleration (Fastest)", isOn: $ui.udpAcceleration)
+                    Toggle("Use QoS", isOn: $ui.useQoS)
                     Toggle("Verify Server Certificate", isOn: $ui.checkServerCert)
+                    TextField("Server certificate fingerprint (SHA-1 / SHA-256, optional):", text: $ui.fingerprint)
+                    if let e = ui.fingerprintError { Text(e).font(.caption).foregroundStyle(.red) }
+                    Text("A fingerprint is enforced whenever it is set. Without one, “Verify Server Certificate” uses the system trust store.")
+                        .font(.caption).foregroundStyle(.secondary)
                     Toggle("Auto Reconnect on disconnect", isOn: $ui.autoReconnect)
-                    if ui.autoReconnect {
-                        Stepper("Reconnect attempts: \(ui.reconnectCount)", value: $ui.reconnectCount, in: 1...50)
-                    }
                 }
             }
             .formStyle(.grouped)
@@ -107,37 +77,54 @@ struct AccountEditor: View {
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(ui.name.trimmingCharacters(in: .whitespaces).isEmpty || ui.host.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(!ui.canSave)
             }
             .padding(16)
         }
         .frame(minWidth: 480, minHeight: 520)
     }
 
+    @ViewBuilder private var certificateSection: some View {
+        Text(ui.certDer != nil && ui.privateKeyDer != nil ? "Certificate and RSA key ready to save."
+             : ui.hasStoredIdentity ? "A certificate and key are stored in the Keychain. Import again to replace them."
+             : "No certificate yet. Import a PEM/DER certificate with its RSA key, or a .p12 file.")
+            .font(.caption).foregroundStyle(.secondary)
+        HStack {
+            Button("Certificate + Key (PEM/DER)…") { importPEMPair() }
+            Button("PKCS#12 (.p12)…") { importP12() }
+        }
+        SecureField("Passphrase for the .p12 file:", text: $ui.p12Passphrase)
+        if let e = ui.importError { Text(e).font(.caption).foregroundStyle(.red) }
+    }
+
+    private func pickFile(_ message: String) -> Data? {
+        let panel = NSOpenPanel()
+        panel.message = message
+        panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        return try? Data(contentsOf: url)
+    }
+
+    private func importPEMPair() {
+        guard let cert = pickFile("Choose the certificate (PEM or DER)"),
+              let key = pickFile("Choose its RSA private key (PEM or DER, not passphrase-protected)") else { return }
+        do {
+            let id = try CertImport.identity(certificateFile: cert, keyFile: key)
+            ui.certDer = id.certDer; ui.privateKeyDer = id.privateKeyDer; ui.importError = nil
+        } catch { ui.importError = error.localizedDescription }
+    }
+
+    private func importP12() {
+        guard let data = pickFile("Choose the PKCS#12 file (.p12 / .pfx)") else { return }
+        do {
+            let id = try CertImport.importPKCS12(data, passphrase: ui.p12Passphrase)
+            ui.certDer = id.certDer; ui.privateKeyDer = id.privateKeyDer; ui.importError = nil
+        } catch { ui.importError = error.localizedDescription }
+    }
+
     private func save() {
-        let ports = ui.portString
-            .split(separator: ",")
-            .compactMap { UInt16($0.trimmingCharacters(in: .whitespaces)) }
-            .filter { $0 > 0 }
-
-        let acc = ClientAccount(
-            id: account?.id ?? UUID(),
-            name: ui.name.trimmingCharacters(in: .whitespaces),
-            host: ui.host.trimmingCharacters(in: .whitespaces),
-            portList: ports.isEmpty ? [443] : ports,
-            hub: ui.hub.trimmingCharacters(in: .whitespaces).isEmpty ? "DEFAULT" : ui.hub.trimmingCharacters(in: .whitespaces),
-            username: ui.username.trimmingCharacters(in: .whitespaces),
-            authType: ui.authType,
-            checkServerCert: ui.checkServerCert,
-            maxConnection: ui.maxConnection,
-            compression: ui.compression,
-            udpAcceleration: ui.udpAcceleration,
-            autoReconnect: ui.autoReconnect,
-            reconnectInterval: ui.reconnectInterval,
-            reconnectCount: ui.reconnectCount,
-            mtu: ui.mtu
-        )
-
-        onSave(acc, ui.password.isEmpty ? nil : ui.password, nil)
+        let acc = ui.makeAccount(base: account)
+        let isCert = acc.authType == .certificate
+        onSave(acc, ui.password.isEmpty ? nil : ui.password, isCert ? ui.certDer : nil, isCert ? ui.privateKeyDer : nil)
     }
 }
