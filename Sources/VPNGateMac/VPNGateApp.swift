@@ -1,6 +1,8 @@
 import SwiftUI
 import VPNGateCore
 
+let vpngateWebSite = URL(string: "http://www.vpngate.net/")!
+
 @main
 struct VPNGateApp: App {
     @StateObject private var model = AppModel()
@@ -29,6 +31,11 @@ struct VPNGateApp: App {
             HistoryView().environmentObject(model)
         }
         .defaultSize(width: 720, height: 380)
+
+        Window("Connection Log", id: "log") {
+            LogView().environmentObject(model)
+        }
+        .defaultSize(width: 720, height: 420)
 
         Settings { SettingsView().environmentObject(model) }
 
@@ -73,18 +80,24 @@ struct VPNGateApp: App {
 struct AppCommands: Commands {
     @ObservedObject var model: AppModel
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openURL) private var openURL
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
             Button("Refresh List") { model.refresh() }.keyboardShortcut("r").disabled(model.loading)
             Button("Disconnect") { model.disconnect() }.keyboardShortcut("d")
                 .disabled(model.event.state == .disconnected)
-        }
-        CommandGroup(after: .windowArrangement) {
             Divider()
-            Button("VPN Gate Public VPN Relay Servers") { openWindow(id: "main") }.keyboardShortcut("1")
-            Button("VPN Connection Settings") { openWindow(id: "accounts") }.keyboardShortcut("m", modifiers: [.command, .shift])
-            Button("Connection History") { openWindow(id: "history") }.keyboardShortcut("y")
+            // "Show …", not the window's own title: the Window menu already lists open windows by that title
+            // (and lets you switch to them), so a same-titled command here would just read as a duplicate. These
+            // exist to reopen a window that was fully closed, and to give each one a stable shortcut.
+            Button("Show VPN Gate") { openWindow(id: "main") }.keyboardShortcut("1")
+            Button("Show VPN Connection Settings") { openWindow(id: "accounts") }.keyboardShortcut("m", modifiers: [.command, .shift])
+            Button("Show Connection History") { openWindow(id: "history") }.keyboardShortcut("y")
+            Button("Show Connection Log") { openWindow(id: "log") }.keyboardShortcut("l", modifiers: [.command, .shift])
+        }
+        CommandGroup(replacing: .help) {
+            Button("VPN Gate Web Site") { openURL(vpngateWebSite) }
         }
     }
 }

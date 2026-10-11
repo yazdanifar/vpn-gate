@@ -41,6 +41,8 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
     /// "Virtual Network Adapter" MTU override; nil (the default) means automatic — the tunnel MTU then comes
     /// entirely from the DHCP lease (option 26). An explicit value here wins over the lease.
     public var mtu: Int?
+    /// Per-account routing rules; nil (the default) means "use the app's global rules".
+    public var routing: RoutingConfig?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -65,6 +67,7 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
         reconnectCount: Int = 8,
         virtualMacAddress: String? = nil,
         mtu: Int? = nil,
+        routing: RoutingConfig? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -88,6 +91,7 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
         self.reconnectCount = reconnectCount
         self.virtualMacAddress = virtualMacAddress
         self.mtu = mtu
+        self.routing = routing
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -99,7 +103,7 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case id, name, host, portList, hub, username, authType, proxy, checkServerCert, serverCertFingerprint
         case maxConnection, halfConnection, compression, udpAcceleration, disableQoS, autoReconnect, reconnectInterval
-        case reconnectCount, virtualMacAddress, mtu, createdAt, updatedAt
+        case reconnectCount, virtualMacAddress, mtu, routing, createdAt, updatedAt
     }
 
     /// Only `id`, `name` and `host` are required; every other field falls back to its default when missing.
@@ -127,6 +131,7 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
             reconnectCount: try c.decodeIfPresent(Int.self, forKey: .reconnectCount) ?? 8,
             virtualMacAddress: try c.decodeIfPresent(String.self, forKey: .virtualMacAddress),
             mtu: try c.decodeIfPresent(Int.self, forKey: .mtu),
+            routing: try c.decodeIfPresent(RoutingConfig.self, forKey: .routing),
             createdAt: try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? now,
             updatedAt: try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? now
         )
@@ -149,15 +154,18 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
         try c.encode(reconnectInterval, forKey: .reconnectInterval); try c.encode(reconnectCount, forKey: .reconnectCount)
         try c.encodeIfPresent(virtualMacAddress, forKey: .virtualMacAddress)
         try c.encodeIfPresent(mtu, forKey: .mtu)
+        try c.encodeIfPresent(routing, forKey: .routing)
         try c.encode(createdAt, forKey: .createdAt); try c.encode(updatedAt, forKey: .updatedAt)
     }
 
     /// Converts this account into a ConnectConfig suitable for IPC transmission to the helper.
+    /// `globalRouting` is the app-wide rule set; this account's own `routing`, when set, replaces it entirely.
     public func toConnectConfig(
         password: String? = nil,
         certDer: Data? = nil,
         privateKeyDer: Data? = nil,
-        blockIPv6: Bool = true
+        blockIPv6: Bool = true,
+        globalRouting: RoutingConfig? = nil
     ) -> ConnectConfig {
         ConnectConfig(
             host: host,
@@ -182,7 +190,8 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
             checkServerCert: checkServerCert,
             serverCertFingerprint: serverCertFingerprint,
             mtu: mtu,
-            virtualMacAddress: virtualMacAddress
+            virtualMacAddress: virtualMacAddress,
+            routing: routing ?? globalRouting
         )
     }
 }

@@ -217,6 +217,67 @@ func registerNetConfigTests() {
         expectEqual(d.removeCalls, 1)
         expect(!FileManager.default.fileExists(atPath: path))
     }
+    test("netconfig/direct-cidr-rule-carves-an-exception-out-of-the-full-capture") {
+        let (n, r, _, _) = make()
+        let routing = RoutingConfig(rules: [RoutingRule(type: .cidr, value: "93.184.216.0/24", action: .direct)])
+        try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5", routing: routing)
+        expect(r.log.contains("/sbin/route -n add -net 0.0.0.0/1 10.233.254.254"), "still captures by default: \(r.log)")
+        expect(r.log.contains("/sbin/route -n add -net 93.184.216.0/24 192.168.1.1"), "direct rule not routed via the original gateway: \(r.log)")
+        n.teardown()
+        expect(r.log.contains("/sbin/route -n delete -net 93.184.216.0/24"), "\(r.log)")
+    }
+    test("netconfig/block-ip-rule-adds-a-blackhole-route") {
+        let (n, r, _, _) = make()
+        let routing = RoutingConfig(rules: [RoutingRule(type: .ip, value: "1.2.3.4", action: .block)])
+        try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5", routing: routing)
+        expect(r.log.contains("/sbin/route -n add -host 1.2.3.4 -blackhole"), "\(r.log)")
+    }
+    test("netconfig/default-action-direct-skips-the-full-capture-and-routes-only-proxy-rules") {
+        let (n, r, _, _) = make()
+        let routing = RoutingConfig(rules: [RoutingRule(type: .cidr, value: "10.20.0.0/16", action: .proxy)], defaultAction: .direct)
+        try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5", routing: routing)
+        expect(!r.log.contains { $0.contains("-net 0.0.0.0/1") }, "must not capture everything: \(r.log)")
+        expect(!r.log.contains { $0.contains("-net 128.0.0.0/1") }, "\(r.log)")
+        expect(r.log.contains("/sbin/route -n add -net 10.20.0.0/16 10.233.254.254"), "proxy rule not routed into the tunnel: \(r.log)")
+    }
+    test("netconfig/empty-routing-config-behaves-exactly-like-no-routing-at-all") {
+        let (n, r, _, _) = make()
+        try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5", routing: RoutingConfig())
+        let (n2, r2, _, _) = make()
+        try n2.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5")
+        expectEqual(r.log, r2.log)
+    }
+    test("netconfig/dynamic-rule-adds-a-route-for-a-resolved-address-after-apply") {
+        let (n, r, _, _) = make()
+        try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5",
+                    routing: RoutingConfig(rules: [RoutingRule(type: .domainSuffix, value: "example.com", action: .direct)]))
+        n.applyDynamicRule(ip: "93.184.216.34", action: .direct)
+        expect(r.log.contains("/sbin/route -n add -host 93.184.216.34 192.168.1.1"), "\(r.log)")
+        n.teardown()
+        expect(r.log.contains("/sbin/route -n delete -host 93.184.216.34"), "dynamic route must be cleaned up too: \(r.log)")
+    }
+    test("netconfig/dynamic-rule-rejects-anything-that-is-not-a-bare-ip-literal-and-is-a-no-op-before-apply") {
+        let (n, r, _, _) = make()
+        n.applyDynamicRule(ip: "93.184.216.34", action: .direct)                 // before apply
+        expectEqual(r.log.count, 0)
+        try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5")
+        let before = r.log.count
+        for bad in ["", "not-an-ip", "93.184.216.0/24", "93.184.216.34; reboot"] { n.applyDynamicRule(ip: bad, action: .direct) }
+        expectEqual(r.log.count, before, "\(r.log.dropFirst(before))")
+    }
+    test("netconfig/physical-dns-is-captured-and-bypassed-only-when-routing-rules-are-configured") {
+        let d = FakeDNS(); d.physicalServers = ["9.9.9.9"]
+        let (n, r, _, _) = make(RecordingRunner(), d)
+        try n.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5",
+                    routing: RoutingConfig(rules: [RoutingRule(type: .domainSuffix, value: "example.com", action: .direct)]))
+        expectEqual(n.directDNSServers(), ["9.9.9.9"])
+        expect(r.log.contains("/sbin/route -n add -host 9.9.9.9 192.168.1.1"), "\(r.log)")
+        let d2 = FakeDNS(); d2.physicalServers = ["9.9.9.9"]
+        let (n2, r2, _, _) = make(RecordingRunner(), d2)
+        try n2.apply(iface: "utun7", lease: lease, bypassHost: "5.5.5.5")           // no routing configured
+        expectEqual(n2.directDNSServers(), [])
+        expect(!r2.log.contains { $0.contains("9.9.9.9") }, "must not touch an address nothing needs: \(r2.log)")
+    }
     test("netconfig/corrupt-or-missing-state-file-is-harmless") {
         let r = RecordingRunner()
         NetConfig.cleanupStale(runner: r, dns: FakeDNS(), stateFile: tempPath("missing.state"))

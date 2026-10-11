@@ -32,6 +32,27 @@ func registerSessionTests() {
         expectEqual(h.nets.value[0].tornDown, 1); expect(h.tuns.value[0].closed)
         expect(h.transports.value[0].closeCalls >= 1)
     }
+    test("session/dns-proxy-is-started-only-when-domain-routing-rules-are-configured") {
+        let h = SessionHarness(); let s = VPNSession(deps: h.deps(), timing: h.fastTiming); let r = Recorder(); r.attach(s)
+        var cfg = ConnectConfig(host: "1.2.3.4")
+        cfg.routing = RoutingConfig(rules: [RoutingRule(type: .domainSuffix, value: "example.com", action: .direct)])
+        s.connect(config: cfg)
+        await expectA(await r.waitFor(.connected))
+        expectEqual(h.dnsProxies.value.count, 1)
+        expect(h.dnsProxies.value[0].isListening, "proxy should be listening while connected")
+        s.disconnect()
+        await expectA(await s.waitUntilIdle(timeout: 3), "run task did not finish")
+        expect(!h.dnsProxies.value[0].isListening, "proxy must stop on disconnect")
+    }
+    test("session/no-dns-proxy-for-ip-only-routing-rules") {
+        let h = SessionHarness(); let s = VPNSession(deps: h.deps(), timing: h.fastTiming); let r = Recorder(); r.attach(s)
+        var cfg = ConnectConfig(host: "1.2.3.4")
+        cfg.routing = RoutingConfig(rules: [RoutingRule(type: .cidr, value: "10.0.0.0/8", action: .direct)])
+        s.connect(config: cfg)
+        await expectA(await r.waitFor(.connected))
+        expectEqual(h.dnsProxies.value.count, 0, "IP/CIDR rules alone are handled entirely by routes")
+        s.disconnect()
+    }
     test("session/uses-proxy-host-for-the-bypass-route") {
         let h = SessionHarness(); let s = VPNSession(deps: h.deps(), timing: h.fastTiming); let r = Recorder(); r.attach(s)
         var p = ProxySettings(); p.kind = .http; p.host = "10.9.9.9"; p.port = 3128

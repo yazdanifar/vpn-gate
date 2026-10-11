@@ -172,6 +172,15 @@ final class IPCServer {
             if !InputValidation.isValidHost(p.host) { return "invalid proxy host" }
             if !InputValidation.isValidPort(p.port) { return "invalid proxy port" }
         }
+        if let routing = r.config?.routing ?? r.routing, let problem = validateRouting(routing) { return problem }
+        return nil
+    }
+
+    /// Every rule must be well-formed before it reaches `route`/the DNS proxy's regex engine.
+    private static func validateRouting(_ cfg: RoutingConfig) -> String? {
+        for rule in cfg.rules {
+            if let err = rule.validationError { return "routing rule \"\(rule.value)\": \(err)" }
+        }
         return nil
     }
 
@@ -188,7 +197,7 @@ final class IPCServer {
                 session.connect(config: cfg)
             } else {
                 session.connect(host: r.host!, port: r.port, ports: r.ports, proxy: r.proxy ?? ProxySettings(),
-                                autoReconnect: r.autoReconnect ?? true, blockIPv6: r.blockIPv6 ?? true)
+                                autoReconnect: r.autoReconnect ?? true, blockIPv6: r.blockIPv6 ?? true, routing: r.routing)
             }
         case "disconnect": session.disconnect()
         default: send(client, session.snapshot)

@@ -43,10 +43,13 @@ final class FakeDNS: DNSConfigurator {
     var removeCalls: Int { state.value.removed }
     private let ifaces = Locked([String]())
     var setInterfaces: [String] { ifaces.value }
+    /// What `currentServers()` returns, i.e. the physical network's resolver(s) before the tunnel overrides them.
+    var physicalServers: [String] = []
     func set(servers: [String], iface: String, address: String, router: String) -> Bool {
         state.update { $0.set.append(servers) }; ifaces.update { $0.append(iface) }; return true
     }
     func remove() { state.update { $0.removed += 1 } }
+    func currentServers() -> [String] { physicalServers }
 }
 
 /// Transport double for session tests: handshake is instant unless gated, and DHCP/ARP is answered by `network`.
@@ -96,6 +99,7 @@ final class SessionHarness {
     let transports = Locked([FakeTransport]())
     let tuns = Locked([FakeTun]())
     let nets = Locked([FakeNet]())
+    let dnsProxies = Locked([DNSProxy]())
     var gateFor: ((String) -> Gate?)?
     var connectErrorFor: ((String, UInt16) -> Error?)?
     var tunError: Error?
@@ -122,6 +126,12 @@ final class SessionHarness {
         d.makeNet = { [unowned self] in
             let n = FakeNet(); self.nets.update { $0.append(n) }; return n
         }
+        // Port 0: the OS picks an unused, unprivileged port, so the proxy can really bind/listen without root.
+        d.makeDNSProxy = { [unowned self] net in
+            let p = DNSProxy(net: net, settings: DNSProxy.Settings(listenAddress: "127.0.0.1", port: 0))
+            self.dnsProxies.update { $0.append(p) }
+            return p
+        }
         return d
     }
 
@@ -139,8 +149,12 @@ final class FakeNet: NetConfiguring {
     var ipv6Flags: [Bool] { state.value.ipv6 }
     var mtuOverrides: [Int?] { state.value.mtuOverrides }
     var tornDown: Int { state.value.torn }
-    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool, mtuOverride: Int?) throws {
+    private let routingApplied = Locked([RoutingConfig?]())
+    var routingConfigsApplied: [RoutingConfig?] { routingApplied.value }
+    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool, mtuOverride: Int?, routing: RoutingConfig?,
+              dnsProxyAddress: String?) throws {
         state.update { $0.applied.append((iface, bypassHost)); $0.ipv6.append(blockIPv6); $0.mtuOverrides.append(mtuOverride) }
+        routingApplied.update { $0.append(routing) }
     }
     func teardown() { state.update { $0.torn += 1 } }
     private let extra = Locked([String]())
@@ -149,6 +163,9 @@ final class FakeNet: NetConfiguring {
     private let v6 = Locked([[UInt8]]())
     var ipv6Addresses: [[UInt8]] { v6.value }
     func configureIPv6(address: [UInt8], prefixLength: Int) { v6.update { $0.append(address) } }
+    private let dynamicRules = Locked([(ip: String, action: RoutingAction)]())
+    var dynamicRulesApplied: [(ip: String, action: RoutingAction)] { dynamicRules.value }
+    func applyDynamicRule(ip: String, action: RoutingAction) { dynamicRules.update { $0.append((ip, action)) } }
 }
 
 final class FakeSession: SessionControlling, @unchecked Sendable {
@@ -170,9 +187,9 @@ final class FakeSession: SessionControlling, @unchecked Sendable {
         }
     }
     func connect(host: String, port: Int?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool) {
-        connect(host: host, port: port, ports: nil, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6)
+        connect(host: host, port: port, ports: nil, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6, routing: nil)
     }
-    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool) {
+    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?) {
         state.update { $0.connects.append((host, port)); $0.blockIPv6.append(blockIPv6); $0.autoReconnects.append(autoReconnect); $0.portLists.append(ports) }
     }
     func disconnect() { state.update { $0.disconnects += 1 } }

@@ -6,17 +6,20 @@ struct SessionDependencies {
     var makeTransportConfig: ((_ config: ConnectConfig, _ port: UInt16) -> VPNTransport)?
     var makeTun: () throws -> TunDevice = { try Utun() }
     var makeNet: () -> NetConfiguring = { NetConfig() }
+    var makeDNSProxy: (NetConfiguring) -> DNSProxy = { DNSProxy(net: $0) }
 
     init(
         makeTransport: ((_ host: String, _ port: UInt16, _ proxy: ProxySettings) -> VPNTransport)? = nil,
         makeTransportConfig: ((_ config: ConnectConfig, _ port: UInt16) -> VPNTransport)? = nil,
         makeTun: @escaping () throws -> TunDevice = { try Utun() },
-        makeNet: @escaping () -> NetConfiguring = { NetConfig() }
+        makeNet: @escaping () -> NetConfiguring = { NetConfig() },
+        makeDNSProxy: @escaping (NetConfiguring) -> DNSProxy = { DNSProxy(net: $0) }
     ) {
         self.makeTransport = makeTransport
         self.makeTransportConfig = makeTransportConfig
         self.makeTun = makeTun
         self.makeNet = makeNet
+        self.makeDNSProxy = makeDNSProxy
     }
 
     func transport(config: ConnectConfig, port: UInt16) -> VPNTransport {
@@ -90,6 +93,7 @@ private final class Resources {
     var client: VPNTransport?
     var tun: TunDevice?
     var net: NetConfiguring?
+    var dnsProxy: DNSProxy?
     /// Strongly owned here: the tun/transport callbacks only hold it weakly.
     var bridge: EthernetBridge?
     var timer: DispatchSourceTimer?
@@ -173,10 +177,10 @@ final class VPNSession: SessionControlling {
     }
 
     func connect(host: String, port: Int?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool) {
-        connect(host: host, port: port, ports: nil, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6)
+        connect(host: host, port: port, ports: nil, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6, routing: nil)
     }
 
-    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool) {
+    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?) {
         var portList = ports ?? []
         if let p = port, !portList.contains(p) { portList.insert(p, at: 0) }
         let cfg = ConnectConfig(
@@ -189,7 +193,8 @@ final class VPNSession: SessionControlling {
             maxConnection: 1,                       // the VPN Gate client's own account (client_exe.c:27590)
             disableQoS: true,                       // ... and DisableQoS=1 (client_exe.c:27598)
             autoReconnect: autoReconnect,
-            blockIPv6: blockIPv6
+            blockIPv6: blockIPv6,
+            routing: routing
         )
         connect(config: cfg)
     }
@@ -320,7 +325,23 @@ final class VPNSession: SessionControlling {
         // The address the TLS connection really went to, not a second lookup of the name (which could differ, or fail).
         let primaryBypass = config.proxy.kind != .none ? config.proxy.host
             : InputValidation.isIPv4Literal(config.host) ? config.host : (client.remoteIPv4 ?? config.host)
-        try net.apply(iface: tun.name, lease: lease, bypassHost: primaryBypass, blockIPv6: config.blockIPv6, mtuOverride: config.mtu)
+        // Domain rules need a resolver of our own: IP/CIDR rules alone are handled entirely by routes.
+        let needsDNSProxy = config.routing?.effectiveRules.contains { $0.enabled && $0.type.isDomain } ?? false
+        var dnsProxy: DNSProxy?
+        if needsDNSProxy {
+            let proxy = deps.makeDNSProxy(net)
+            proxy.routing = config.routing ?? RoutingConfig()
+            try proxy.start()
+            dnsProxy = proxy
+        }
+        guard withResources(r, { $0.dnsProxy = dnsProxy }) else { dnsProxy?.stop(); throw CancellationError() }
+        try net.apply(iface: tun.name, lease: lease, bypassHost: primaryBypass, blockIPv6: config.blockIPv6,
+                      mtuOverride: config.mtu, routing: config.routing,
+                      dnsProxyAddress: needsDNSProxy ? DNSProxy.Settings().listenAddress : nil)
+        if let dnsProxy {
+            dnsProxy.tunnelDNSServers = lease.dns.map(ipString)
+            dnsProxy.directDNSServers = net.directDNSServers()
+        }
         // After a cluster redirect the data flows to another host, and UDP acceleration to its own endpoint:
         // both need their own route around the tunnel.
         for h in client.bypassHosts where h != primaryBypass { net.addBypass(host: h) }
@@ -362,13 +383,14 @@ final class VPNSession: SessionControlling {
     /// Stops traffic first, then removes routes, then closes the tun. Safe to call more than once.
     private func release(_ r: Resources) {
         lock.lock()
-        let (c, n, t, timer, renew) = (r.client, r.net, r.tun, r.timer, r.renew)
-        r.client = nil; r.net = nil; r.tun = nil; r.timer = nil; r.renew = nil; r.bridge = nil
+        let (c, n, t, timer, renew, dnsProxy) = (r.client, r.net, r.tun, r.timer, r.renew, r.dnsProxy)
+        r.client = nil; r.net = nil; r.tun = nil; r.timer = nil; r.renew = nil; r.bridge = nil; r.dnsProxy = nil
         lock.unlock()
         timer?.cancel(); renew?.cancel()
         c?.onClose = nil
         c?.close()
         r.linkDown.fire()
+        dnsProxy?.stop()
         n?.teardown()
         t?.close()
     }

@@ -61,4 +61,10 @@ public enum InputValidation {
     public static func isValidIdentityField(_ s: String) -> Bool {
         s.utf8.count <= 255 && !s.utf8.contains(0)
     }
+
+    /// A bare IPv4 or IPv6 address literal (no "/prefix"); used to validate an address (e.g. a resolved DNS
+    /// answer) before it reaches a `route` command line.
+    public static func isIPLiteral(_ s: String) -> Bool {
+        !s.contains("/") && CIDRMatcher(s) != nil
+    }
 }

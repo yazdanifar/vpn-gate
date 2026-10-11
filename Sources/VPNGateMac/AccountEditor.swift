@@ -57,6 +57,17 @@ struct AccountEditor: View {
                             .font(.caption).foregroundStyle(.red)
                     }
                 }
+
+                Section("Routing") {
+                    Toggle("Use custom routing rules for this connection", isOn: $ui.useCustomRouting)
+                    if !ui.useCustomRouting {
+                        Text("Uses the app's global routing rules (Settings → Routing).")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                if ui.useCustomRouting {
+                    Section { RoutingRulesEditor(config: $ui.routing) }
+                }
             }
             .formStyle(.grouped)
             .padding(.horizontal, 8)

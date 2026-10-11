@@ -2,7 +2,7 @@ import Foundation
 
 public let helperSocketPath = "/var/run/vpngate-mac.sock"
 /// Bumped whenever the helper's behaviour or IPC changes; the app offers to reinstall an outdated helper.
-public let helperVersion = 6
+public let helperVersion = 7
 
 public enum ConnectionState: String, Codable {
     case disconnected, connecting, authenticating, dhcp, connected, reconnecting
@@ -54,6 +54,9 @@ public struct ConnectConfig: Codable, Equatable {
     public var mtu: Int?
     /// "Virtual Network Adapter" MAC override ("aa:bb:cc:dd:ee:ff"); nil (the default) uses a random one.
     public var virtualMacAddress: String?
+    /// User-defined routing rules (domains/IPs to proxy, bypass or block); nil or empty means "everything
+    /// through the tunnel", the pre-existing behaviour.
+    public var routing: RoutingConfig?
 
     public init(
         host: String,
@@ -78,7 +81,8 @@ public struct ConnectConfig: Codable, Equatable {
         checkServerCert: Bool = false,
         serverCertFingerprint: String? = nil,
         mtu: Int? = nil,
-        virtualMacAddress: String? = nil
+        virtualMacAddress: String? = nil,
+        routing: RoutingConfig? = nil
     ) {
         self.host = host
         self.ports = ports
@@ -103,6 +107,7 @@ public struct ConnectConfig: Codable, Equatable {
         self.serverCertFingerprint = serverCertFingerprint
         self.mtu = mtu
         self.virtualMacAddress = virtualMacAddress
+        self.routing = routing
     }
 
     /// Tolerant like the account file: a request from an older app (without `disableQoS`) still decodes.
@@ -131,7 +136,8 @@ public struct ConnectConfig: Codable, Equatable {
             checkServerCert: try c.decodeIfPresent(Bool.self, forKey: .checkServerCert) ?? false,
             serverCertFingerprint: try c.decodeIfPresent(String.self, forKey: .serverCertFingerprint),
             mtu: try c.decodeIfPresent(Int.self, forKey: .mtu),
-            virtualMacAddress: try c.decodeIfPresent(String.self, forKey: .virtualMacAddress)
+            virtualMacAddress: try c.decodeIfPresent(String.self, forKey: .virtualMacAddress),
+            routing: try c.decodeIfPresent(RoutingConfig.self, forKey: .routing)
         )
     }
 }
@@ -144,6 +150,7 @@ public struct HelperRequest: Codable {
     public var proxy: ProxySettings?
     public var autoReconnect: Bool?
     public var blockIPv6: Bool?
+    public var routing: RoutingConfig?
     public var config: ConnectConfig?
     public init(cmd: String) { self.cmd = cmd }
 }

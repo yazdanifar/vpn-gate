@@ -61,7 +61,27 @@ with VPN Gate or SoftEther and does not claim full parity with the Windows clien
   drop), per-block zlib compression, cluster redirects, UDP acceleration v2 (opportunistic, TCP fallback if UDP is not
   stable for 10 s; honours the compress flag; no NAT traversal, so only servers given as an IPv4 address, host-name
   servers use TCP only).
-- Universal binary (arm64 + x86_64), privileged helper LaunchDaemon (`vpngate-helper`, IPC version 6), menu-bar extra.
+- Universal binary (arm64 + x86_64), privileged helper LaunchDaemon (`vpngate-helper`, IPC version 7), menu-bar extra.
+
+### Routing rules
+Settings → Routing (and, per connection setting, its own editor) lets you send specific domains, IP addresses or
+CIDR ranges **through the tunnel** (`Proxy`), **around it** (`Direct`, the original default route), or drop them
+(`Block`) — the same idea as V2rayN's routing rules. Domain rules match by suffix, exact name, keyword or regular
+expression; IP/CIDR rules match IPv4 and IPv6 literals and ranges. Rules are checked top to bottom, first match
+wins; "Bypass private networks" adds the RFC 1918/CGNAT/link-local ranges as low-priority `Direct` rules. A
+connection setting can use its own rules instead of the app-wide list (its editor's "Routing" section).
+
+- **How it stays safe to use somewhere that censors by domain**: a rule's domain is resolved by a small DNS proxy
+  the helper runs on `127.0.0.1` (published as the system resolver while one is needed). A domain matched `Direct`
+  is looked up through the physical network's own resolver, captured before the tunnel overrides it — never the
+  tunnel's resolver. Every other domain (the default, and anything matched `Proxy`) is looked up only through the
+  tunnel, so nothing but an explicitly `Direct` domain's name is ever exposed to an ISP-controlled resolver. A
+  lookup that cannot be answered safely (no usable resolver, a timeout, an unparsable query) gets SERVFAIL, never a
+  guess that could leak. IP/CIDR rules need no DNS proxy; they are plain routes (or a blackhole route, for `Block`).
+- **Known limits**: resolution is UDP only (no TCP DNS fallback yet); an app that does its own DNS (DNS-over-HTTPS,
+  a hardcoded resolver) bypasses domain matching, though IP/CIDR rules still apply to its traffic once connected;
+  there is no bundled country IP/domain list (V2rayN-style "bypass mainland China" equivalents) — build one with
+  custom CIDR/domain rules if you need it; V2rayN rule-set import/export is not implemented.
 
 ### IPv6
 - **Block IPv6 on (default)**: `::/1` and `8000::/1` are routed into the tunnel and all IPv6 is dropped, so nothing leaks

@@ -58,6 +58,16 @@ struct SystemDNS: DNSConfigurator {
         SCDynamicStoreRemoveValue(store, Self.ipv4Key as CFString)
         SCDynamicStoreRemoveValue(store, Self.dnsKey as CFString)
     }
+
+    /// The primary service's resolvers right now, read before `set()` has published the tunnel's own entities.
+    func currentServers() -> [String] {
+        guard let store = SCDynamicStoreCreate(nil, "vpngate-mac" as CFString, nil, nil),
+              let global = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString) as? [String: Any],
+              let serviceID = global["PrimaryService"] as? String,
+              let dns = SCDynamicStoreCopyValue(store, "State:/Network/Service/\(serviceID)/DNS" as CFString) as? [String: Any],
+              let servers = dns["ServerAddresses"] as? [String] else { return [] }
+        return servers
+    }
 }
 
 /// Interface address, routes and DNS for the tunnel. State is persisted so a crashed helper can clean up.
@@ -79,6 +89,9 @@ final class NetConfig: NetConfiguring {
     private let stateFile: String
     private var state: State?
     private var originalRoute: (gateway: String?, iface: String)?
+    private var routing: RoutingConfig = RoutingConfig()
+    private var tunnelGateway: String?
+    private var capturedPhysicalDNS: [String] = []
 
     init(runner: CommandRunner = SystemRunner(), dns: DNSConfigurator = SystemDNS(),
          stateFile: String = NetConfig.defaultStateFile) {
@@ -106,10 +119,15 @@ final class NetConfig: NetConfiguring {
 
     /// `mtuOverride` is the account's own "Virtual Network Adapter" MTU setting (SoftEther Client Manager), when
     /// the user set one explicitly; it wins over whatever the DHCP lease offers, matching the real client.
-    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool = true, mtuOverride: Int? = nil) throws {
+    /// `routing` is the user's routing rules; nil/empty keeps the pre-existing full-tunnel behaviour. `dnsProxyAddress`
+    /// publishes that address as the resolver instead of the lease's own DNS (used when a `DNSProxy` is running).
+    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool = true, mtuOverride: Int? = nil,
+              routing: RoutingConfig? = nil, dnsProxyAddress: String? = nil) throws {
         let ip = ipString(lease.ip), gw = ipString(lease.router)
         let orig = Self.defaultRoute(runner)
         originalRoute = orig
+        tunnelGateway = gw
+        self.routing = routing ?? RoutingConfig()
         var st = State(iface: iface, bypassHost: bypassHost, gateway: gw, dnsSet: false)
         st.addedRoutes = []
         state = st
@@ -123,8 +141,21 @@ final class NetConfig: NetConfiguring {
         // Keep the tunnel's own transport outside the tunnel (never for loopback/link-local proxies).
         if !InputValidation.isLocalAddress(bypassHost), let o = orig { addBypassRoute(bypassHost, via: o) }
         addRoute(["-host", gw, "-interface", iface], undo: ["-host", gw])
-        addRoute(["-net", "0.0.0.0/1", gw], undo: ["-net", "0.0.0.0/1", gw])
-        addRoute(["-net", "128.0.0.0/1", gw], undo: ["-net", "128.0.0.0/1", gw])
+
+        if self.routing.defaultAction == .direct {
+            // Nothing is captured: the original default route is left alone, so unmatched traffic keeps going
+            // the way it always did. Explicit `.proxy` rules get a specific route back into the tunnel instead.
+            for rule in self.routing.effectiveRules where rule.enabled && !rule.type.isDomain && rule.action != .direct {
+                addRuleRoute(rule.value, action: rule.action, iface: iface, gw: gw, orig: orig)
+            }
+        } else {
+            addRoute(["-net", "0.0.0.0/1", gw], undo: ["-net", "0.0.0.0/1", gw])
+            addRoute(["-net", "128.0.0.0/1", gw], undo: ["-net", "128.0.0.0/1", gw])
+            // Everything is captured by default: explicit `.direct`/`.block` rules carve an exception back out.
+            for rule in self.routing.effectiveRules where rule.enabled && !rule.type.isDomain && rule.action != .proxy {
+                addRuleRoute(rule.value, action: rule.action, iface: iface, gw: gw, orig: orig)
+            }
+        }
         // Both halves of the IPv6 space point at the tunnel either way, so native IPv6 never leaks around it. With
         // `blockIPv6` the utun reader drops every non-IPv4 packet and dual-stack sites fall back to IPv4 through the
         // VPN; without it the bridge forwards IPv6 once `configureIPv6` has given the interface an address, and
@@ -132,11 +163,51 @@ final class NetConfig: NetConfiguring {
         addRoute(["-inet6", "::/1", "-interface", iface], undo: ["-inet6", "::/1", "-interface", iface])
         addRoute(["-inet6", "8000::/1", "-interface", iface], undo: ["-inet6", "8000::/1", "-interface", iface])
 
+        // Captured before the resolver is switched over, so a `.direct` domain rule can still be resolved by the
+        // physical network's own DNS (never the tunnel's) once the DNS proxy is listening.
+        if !self.routing.isEmpty {
+            capturedPhysicalDNS = dns.currentServers().filter { InputValidation.isIPv4Literal($0) }
+            for server in capturedPhysicalDNS where !InputValidation.isLocalAddress(server) {
+                if let o = orig { addBypassRoute(server, via: o) }
+            }
+        }
+
         if !lease.dns.isEmpty {
             st = state ?? st
-            st.dnsSet = dns.set(servers: lease.dns.map(ipString), iface: iface, address: ip, router: gw)
+            let published = dnsProxyAddress.map { [$0] } ?? lease.dns.map(ipString)
+            st.dnsSet = dns.set(servers: published, iface: iface, address: ip, router: gw)
             state = st; save()
         }
+    }
+
+    func directDNSServers() -> [String] { capturedPhysicalDNS }
+
+    /// Adds an explicit route for one IP/CIDR routing rule, overriding whatever the default capture (or its
+    /// absence, with `defaultAction: .direct`) would otherwise do with that address.
+    private func addRuleRoute(_ value: String, action: RoutingAction, iface: String, gw: String,
+                              orig: (gateway: String?, iface: String)?) {
+        let isV6 = value.contains(":")
+        let netArgs: [String]
+        if value.contains("/") { netArgs = (isV6 ? ["-inet6"] : []) + ["-net", value] }
+        else { netArgs = (isV6 ? ["-inet6"] : []) + ["-host", value] }
+        switch action {
+        case .direct:
+            guard let o = orig else { return }
+            if let g = o.gateway, !isV6 { addRoute(netArgs + [g], undo: netArgs) }
+            else { addRoute(netArgs + ["-interface", o.iface], undo: netArgs) }
+        case .proxy:
+            if isV6 { addRoute(netArgs + ["-interface", iface], undo: netArgs) }
+            else { addRoute(netArgs + [gw], undo: netArgs) }
+        case .block:
+            addRoute(netArgs + ["-blackhole"], undo: netArgs)
+        }
+    }
+
+    /// Routes a single resolved address (from the DNS proxy) the way a domain rule asked for. A no-op before
+    /// `apply()` or when the address does not parse as a bare IPv4/IPv6 literal.
+    func applyDynamicRule(ip: String, action: RoutingAction) {
+        guard state != nil, let gw = tunnelGateway, InputValidation.isIPLiteral(ip) else { return }
+        addRuleRoute(ip, action: action, iface: state!.iface, gw: gw, orig: originalRoute)
     }
 
     func addBypass(host: String) {
@@ -159,7 +230,7 @@ final class NetConfig: NetConfiguring {
 
     func teardown() {
         Self.cleanup(state, runner, dns)
-        state = nil; originalRoute = nil
+        state = nil; originalRoute = nil; tunnelGateway = nil; capturedPhysicalDNS = []; routing = RoutingConfig()
         try? FileManager.default.removeItem(atPath: stateFile)
     }
 

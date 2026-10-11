@@ -28,6 +28,9 @@ final class AccountEditorState: ObservableObject {
     @Published var mtuString: String
     /// Random when empty, otherwise the "Virtual Network Adapter" MAC override.
     @Published var macString: String
+    /// When on, `routing` replaces the app's global rules for this account; when off, the global rules apply.
+    @Published var useCustomRouting: Bool
+    @Published var routing: RoutingConfig
 
     /// Certificate login: freshly imported material (nil = keep what is stored) and whether something is stored already.
     @Published var certDer: Data?
@@ -56,6 +59,8 @@ final class AccountEditorState: ObservableObject {
         self.fingerprint = account?.serverCertFingerprint ?? ""
         self.mtuString = account?.mtu.map(String.init) ?? ""
         self.macString = account?.virtualMacAddress ?? ""
+        self.useCustomRouting = account?.routing != nil
+        self.routing = account?.routing ?? RoutingConfig()
         self.hasStoredIdentity = hasStoredIdentity
     }
 
@@ -116,6 +121,7 @@ final class AccountEditorState: ObservableObject {
         acc.reconnectCount = max(1, reconnectCount)
         acc.mtu = trimmedMtu.isEmpty ? nil : Int(trimmedMtu)
         acc.virtualMacAddress = trimmedMac.isEmpty ? nil : trimmedMac
+        acc.routing = useCustomRouting ? routing : nil
         return acc
     }
 }

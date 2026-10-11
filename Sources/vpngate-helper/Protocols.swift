@@ -46,20 +46,38 @@ protocol DNSConfigurator {
     /// Makes the tunnel the primary DNS resolver while connected.
     func set(servers: [String], iface: String, address: String, router: String) -> Bool
     func remove()
+    /// The resolver(s) in effect right before `set()` overrides them (the physical network's own DNS); used to
+    /// resolve domains a routing rule marks `.direct` without ever asking the tunnel's resolver.
+    func currentServers() -> [String]
+}
+
+extension DNSConfigurator {
+    func currentServers() -> [String] { [] }
 }
 
 protocol NetConfiguring: AnyObject {
-    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool, mtuOverride: Int?) throws
+    /// `dnsProxyAddress`, when given, is published as the system's resolver instead of the DHCP lease's own DNS
+    /// (the caller has a `DNSProxy` already listening there; domain routing rules need one to work at all).
+    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool, mtuOverride: Int?, routing: RoutingConfig?,
+              dnsProxyAddress: String?) throws
     /// Adds a host route around the tunnel for a further peer (redirect target, UDP acceleration endpoint); removed by `teardown()`.
     func addBypass(host: String)
     /// Puts the SLAAC address learned from a Router Advertisement on the tunnel interface (only used when IPv6 is not blocked).
     func configureIPv6(address: [UInt8], prefixLength: Int)
+    /// Routes one resolved address according to a domain rule's action (called by the DNS proxy once it has an
+    /// answer); overrides whatever the static capture set up by `apply` would otherwise do with it.
+    func applyDynamicRule(ip: String, action: RoutingAction)
+    /// The physical network's own DNS servers, captured just before `apply` pointed the system at the tunnel's
+    /// resolver; used to resolve `.direct` domains without ever asking the tunnel's (or the hub's) resolver.
+    func directDNSServers() -> [String]
     func teardown()
 }
 
 extension NetConfiguring {
     func addBypass(host: String) {}
     func configureIPv6(address: [UInt8], prefixLength: Int) {}
+    func applyDynamicRule(ip: String, action: RoutingAction) {}
+    func directDNSServers() -> [String] { [] }
 }
 
 /// What the IPC layer needs from a session.
@@ -68,6 +86,6 @@ protocol SessionControlling: AnyObject {
     var snapshot: HelperEvent { get }
     func connect(config: ConnectConfig)
     func connect(host: String, port: Int?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool)
-    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool)
+    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?)
     func disconnect()
 }

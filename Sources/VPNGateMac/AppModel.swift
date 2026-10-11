@@ -34,6 +34,10 @@ final class AppModel: ObservableObject {
     @Published var proxyPassword: String { didSet { Keychain.set(proxyPassword, account: "proxy") } }
     /// While connected, route IPv6 into the tunnel (and drop it) so dual-stack sites cannot bypass the VPN.
     @Published var blockIPv6: Bool { didSet { defaults.set(blockIPv6, forKey: "blockIPv6") } }
+    /// Global routing rules (domains/IPs to proxy, bypass or block); an account with its own rules ignores this.
+    @Published var routingConfig: RoutingConfig {
+        didSet { if let d = try? JSONEncoder().encode(routingConfig) { defaults.set(d, forKey: "routingConfig") } }
+    }
     @Published var lastServerID: String? { didSet { defaults.set(lastServerID, forKey: "lastServerID") } }
     /// Hide servers that keep logs longer than this many weeks (-1 = show all).
     @Published var maxLogWeeks: Int { didSet { defaults.set(maxLogWeeks, forKey: "maxLogWeeks") } }
@@ -113,6 +117,7 @@ final class AppModel: ObservableObject {
         proxyUsername = d.string(forKey: "proxyUsername") ?? ""
         proxyPassword = autoStart ? (Keychain.get("proxy") ?? "") : ""
         blockIPv6 = d.object(forKey: "blockIPv6") as? Bool ?? true
+        routingConfig = d.data(forKey: "routingConfig").flatMap { try? JSONDecoder().decode(RoutingConfig.self, from: $0) } ?? RoutingConfig()
         listFetchedAt = d.object(forKey: "listFetchedAt") as? Date
         lastServerID = d.string(forKey: "lastServerID")
         maxLogWeeks = d.object(forKey: "maxLogWeeks") as? Int ?? -1
@@ -326,6 +331,7 @@ final class AppModel: ObservableObject {
         if !s.sslPorts.isEmpty { r.ports = s.prioritizedSslPorts.map(Int.init) }
         // Retrying is done here (see considerReconnect), so the helper makes a single attempt.
         r.proxy = currentProxy; r.autoReconnect = false; r.blockIPv6 = blockIPv6
+        if !routingConfig.isEmpty { r.routing = routingConfig }
         lastServerID = s.id
         let sentAt = Date()
         helper.send(r)
@@ -358,7 +364,8 @@ final class AppModel: ObservableObject {
         }
         var acc = account
         if acc.proxy.kind != .none, acc.proxy.password == nil { acc.proxy.password = accountManager.proxyPassword(for: account) }
-        let cfg = acc.toConnectConfig(password: pw, certDer: cert, privateKeyDer: key, blockIPv6: blockIPv6)
+        let cfg = acc.toConnectConfig(password: pw, certDer: cert, privateKeyDer: key, blockIPv6: blockIPv6,
+                                      globalRouting: routingConfig.isEmpty ? nil : routingConfig)
         var r = HelperRequest(cmd: "connect")
         r.config = cfg
         activeAccount = account

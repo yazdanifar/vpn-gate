@@ -9,7 +9,6 @@ final class ListState: ObservableObject {
     @Published var sortOrder = [KeyPathComparator(\VPNServer.score, order: .reverse)]
     @Published var showingDetails = false
     @Published var selectedServerForDetails: VPNServer? = nil
-    @Published var showingProxy = false
     /// Which of the 15 columns are shown and in what order; right-click the table header to change it.
     @Published var columns: TableColumnCustomization<VPNServer> {
         didSet {
@@ -29,14 +28,12 @@ final class ListState: ObservableObject {
 }
 
 private let logChoices: [(label: String, weeks: Int)] = [("Any logging policy", -1), ("2 weeks or less", 2), ("Up to 1 month", 5), ("No logs only", 0)]
-private let vpngateWebSite = URL(string: "http://www.vpngate.net/")!
 
 /// The window of the Windows client's VPN Gate plug-in (D_VGC_LIST): title, intro, the relay list, and the
-/// buttons Connect / Proxy Settings / Refresh List / Web Site. Wording is from the client's own string table.
+/// Connect button. Proxy Settings and VPN Connection Settings live in the macOS-native Settings window and the
+/// Window menu instead of a button row here; VPN Gate Web Site is in the Help menu.
 struct ServerListView: View {
     @EnvironmentObject var model: AppModel
-    @Environment(\.openWindow) private var openWindow
-    @Environment(\.openURL) private var openURL
     // @State is a macro whose plugin only ships with full Xcode, so view state lives in an ObservableObject.
     @StateObject private var ui = ListState()
 
@@ -195,10 +192,6 @@ struct ServerListView: View {
 
             Divider()
             HStack(spacing: 10) {
-                Button("Proxy Settings…") { ui.showingProxy = true }
-                Button("VPN Gate Web Site") { openURL(vpngateWebSite) }
-                Button("VPN Connection Settings…") { openWindow(id: "accounts") }
-                    .help("The SoftEther Client Manager: connect to your own VPN servers")
                 Spacer()
                 connectionButton
             }
@@ -246,7 +239,6 @@ struct ServerListView: View {
         .sheet(isPresented: $ui.showingDetails) {
             if let s = ui.selectedServerForDetails { ServerDetailsSheet(server: s) }
         }
-        .sheet(isPresented: $ui.showingProxy) { ProxySheet().environmentObject(model) }
         .alert(setupTitle, isPresented: Binding(get: { model.setupPrompt != nil }, set: { if !$0 { model.cancelSetup() } })) {
             Button("Continue") { model.beginSetup() }
             Button("Not Now", role: .cancel) { model.cancelSetup() }

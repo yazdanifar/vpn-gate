@@ -19,6 +19,7 @@ let allRegistrars: [() -> Void] = [
     registerPackTests, registerPacketTests, registerServerListTests, registerVGDatTests, registerAccountTests, registerTelemetryTests, registerIPv6Tests, registerDataPhaseTests,
     registerValidationTests, registerBridgeTests, registerBridgeIPv6Tests, registerHandshakeTests, registerProtocolFixTests, registerSessionTests,
     registerNetConfigTests, registerIPCTests, registerDaemonTests, registerFuzzTests, registerSystemTests, registerPackagingTests, registerAppModelTests, registerAppFixTests, registerLoginParityTests, registerTLSPinTests, registerParityTests, registerProbeTests, registerLiveTests,
+    registerRoutingRuleTests, registerDNSProxyTests,
 ]
 allRegistrars.forEach { $0() }
 

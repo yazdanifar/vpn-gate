@@ -11,16 +11,19 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             ProxyForm()
                 .tabItem { Label("Proxy", systemImage: "network") }
+            RoutingSettings()
+                .tabItem { Label("Routing", systemImage: "arrow.triangle.branch") }
             AdvancedSettings()
                 .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
         }
         .environmentObject(model)
-        .frame(width: 540, height: 460)
+        .frame(width: 560, height: 480)
     }
 }
 
 private struct GeneralSettings: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Form {
@@ -31,6 +34,11 @@ private struct GeneralSettings: View {
                 Text(model.blockIPv6
                      ? "On: IPv6 is captured and dropped, which prevents IPv6 leaks; dual-stack sites fall back to IPv4 through the VPN."
                      : "Off: IPv6 only works if the VPN network provides it (a router advertising an IPv6 prefix). Otherwise IPv6 is still captured and dropped, so nothing leaks.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("VPN connections") {
+                Button("Open VPN Connection Settings…") { openWindow(id: "accounts") }
+                Text("Manage your own SoftEther servers and accounts in a separate window.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("VPN component") {
@@ -73,21 +81,9 @@ struct ProxyForm: View {
     }
 }
 
-struct ProxySheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ProxyForm()
-            Divider()
-            HStack { Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction) }.padding(12)
-        }
-        .frame(width: 480, height: 380)
-    }
-}
-
 private struct AdvancedSettings: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Form {
@@ -111,10 +107,7 @@ private struct AdvancedSettings: View {
                 }
             }
             Section("Log") {
-                ScrollView {
-                    Text(model.logLines.joined(separator: "\n")).font(.system(.caption, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
-                }.frame(height: 110)
+                Button("Show Log…") { openWindow(id: "log") }
             }
         }
         .formStyle(.grouped)
