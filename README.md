@@ -61,7 +61,19 @@ with VPN Gate or SoftEther and does not claim full parity with the Windows clien
   drop), per-block zlib compression, cluster redirects, UDP acceleration v2 (opportunistic, TCP fallback if UDP is not
   stable for 10 s; honours the compress flag; no NAT traversal, so only servers given as an IPv4 address, host-name
   servers use TCP only).
-- Universal binary (arm64 + x86_64), privileged helper LaunchDaemon (`vpngate-helper`, IPC version 7), menu-bar extra.
+- Universal binary (arm64 + x86_64), privileged helper LaunchDaemon (`vpngate-helper`, IPC version 8), menu-bar extra.
+
+### SOCKS5 proxy mode
+Settings → General → Mode lets you use the VPN as a **SOCKS5 proxy only** instead of a full tunnel. The system's default
+route, DNS and IPv6 are left alone: the tunnel interface gets its DHCP address and an interface-scoped default route
+(`route add -ifscope utunN default <gw>`), and the helper listens on `127.0.0.1:<port>` (default 1080, 1024–65535).
+Each proxied connection is a socket bound to the tunnel interface (`IP_BOUND_IF`), so only apps you point at the proxy
+use the VPN. Supported: SOCKS5 CONNECT, no authentication, IPv4 and host-name destinations (names are resolved through
+the VPN's own DNS, so use the app's "remote DNS" option). Not supported: UDP ASSOCIATE, BIND, IPv6 destinations,
+proxy authentication. Any local process can use the port while connected. Routing rules and IPv6 blocking do not apply
+in this mode. The mode is app-wide (not per connection setting) and takes effect on the next connection. Like the rest
+of the tunnel code, this is covered by loopback tests only (the interface binding is exercised on `lo0`); it has not
+been run over a live VPN Gate tunnel.
 
 ### Routing rules
 Settings → Routing (and, per connection setting, its own editor) lets you send specific domains, IP addresses or

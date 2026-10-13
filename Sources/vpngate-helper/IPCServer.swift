@@ -172,6 +172,10 @@ final class IPCServer {
             if !InputValidation.isValidHost(p.host) { return "invalid proxy host" }
             if !InputValidation.isValidPort(p.port) { return "invalid proxy port" }
         }
+        // Only SOCKS mode uses the port; a stale value saved in the app must not block full-tunnel connects.
+        let socksPort = r.config?.socksPort ?? r.socksPort
+        let mode = r.config?.tunnelMode ?? r.tunnelMode ?? .fullTunnel
+        if mode == .socksProxy, let port = socksPort, !(1024...65535).contains(port) { return "invalid SOCKS port (use 1024-65535)" }
         if let routing = r.config?.routing ?? r.routing, let problem = validateRouting(routing) { return problem }
         return nil
     }
@@ -197,7 +201,8 @@ final class IPCServer {
                 session.connect(config: cfg)
             } else {
                 session.connect(host: r.host!, port: r.port, ports: r.ports, proxy: r.proxy ?? ProxySettings(),
-                                autoReconnect: r.autoReconnect ?? true, blockIPv6: r.blockIPv6 ?? true, routing: r.routing)
+                                autoReconnect: r.autoReconnect ?? true, blockIPv6: r.blockIPv6 ?? true, routing: r.routing,
+                                tunnelMode: r.tunnelMode ?? .fullTunnel, socksPort: r.socksPort ?? defaultSocksPort)
             }
         case "disconnect": session.disconnect()
         default: send(client, session.snapshot)

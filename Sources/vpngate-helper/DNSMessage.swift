@@ -19,6 +19,18 @@ enum DNSMessage {
         return readName(p, 12)?.name.lowercased()
     }
 
+    /// A recursive type-A query for `name` (a plain dotted DNS name).
+    static func aQuery(name: String, id: UInt16) -> [UInt8] {
+        var q: [UInt8] = [UInt8(id >> 8), UInt8(id & 0xFF), 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0]
+        for label in name.split(separator: ".") {
+            let bytes = Array(label.utf8.prefix(63))
+            q.append(UInt8(bytes.count)); q.append(contentsOf: bytes)
+        }
+        q.append(0)
+        q.append(contentsOf: [0, 1, 0, 1])                  // QTYPE A, QCLASS IN
+        return q
+    }
+
     /// Resolved IPv4 addresses (type-A records) in the answer section of a response.
     static func resolvedIPv4Addresses(_ p: [UInt8]) -> [String] {
         guard let h = header(p) else { return [] }

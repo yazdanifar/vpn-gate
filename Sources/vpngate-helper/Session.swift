@@ -7,14 +7,22 @@ struct SessionDependencies {
     var makeTun: () throws -> TunDevice = { try Utun() }
     var makeNet: () -> NetConfiguring = { NetConfig() }
     var makeDNSProxy: (NetConfiguring) -> DNSProxy = { DNSProxy(net: $0) }
+    /// SOCKS mode: the proxy server for (listen port, tunnel interface name, the VPN's DNS servers).
+    var makeSocks: (_ port: UInt16, _ iface: String, _ dns: [String]) -> SocksServer = { port, iface, dns in
+        let index = if_nametoindex(iface)
+        return SocksServer(port: port, connector: TunnelConnector(
+            interfaceIndex: index, dnsServers: dns, upstream: SystemDNSUpstream(boundInterface: index)))
+    }
 
     init(
         makeTransport: ((_ host: String, _ port: UInt16, _ proxy: ProxySettings) -> VPNTransport)? = nil,
         makeTransportConfig: ((_ config: ConnectConfig, _ port: UInt16) -> VPNTransport)? = nil,
         makeTun: @escaping () throws -> TunDevice = { try Utun() },
         makeNet: @escaping () -> NetConfiguring = { NetConfig() },
-        makeDNSProxy: @escaping (NetConfiguring) -> DNSProxy = { DNSProxy(net: $0) }
+        makeDNSProxy: @escaping (NetConfiguring) -> DNSProxy = { DNSProxy(net: $0) },
+        makeSocks: ((_ port: UInt16, _ iface: String, _ dns: [String]) -> SocksServer)? = nil
     ) {
+        if let makeSocks { self.makeSocks = makeSocks }
         self.makeTransport = makeTransport
         self.makeTransportConfig = makeTransportConfig
         self.makeTun = makeTun
@@ -94,6 +102,7 @@ private final class Resources {
     var tun: TunDevice?
     var net: NetConfiguring?
     var dnsProxy: DNSProxy?
+    var socks: SocksServer?
     /// Strongly owned here: the tun/transport callbacks only hold it weakly.
     var bridge: EthernetBridge?
     var timer: DispatchSourceTimer?
@@ -181,6 +190,12 @@ final class VPNSession: SessionControlling {
     }
 
     func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?) {
+        connect(host: host, port: port, ports: ports, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6, routing: routing,
+                tunnelMode: .fullTunnel, socksPort: defaultSocksPort)
+    }
+
+    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?,
+                 tunnelMode: TunnelMode, socksPort: Int) {
         var portList = ports ?? []
         if let p = port, !portList.contains(p) { portList.insert(p, at: 0) }
         let cfg = ConnectConfig(
@@ -194,7 +209,9 @@ final class VPNSession: SessionControlling {
             disableQoS: true,                       // ... and DisableQoS=1 (client_exe.c:27598)
             autoReconnect: autoReconnect,
             blockIPv6: blockIPv6,
-            routing: routing
+            routing: routing,
+            tunnelMode: tunnelMode,
+            socksPort: socksPort
         )
         connect(config: cfg)
     }
@@ -299,8 +316,10 @@ final class VPNSession: SessionControlling {
         let tun = try deps.makeTun()
         guard withResources(r, { $0.tun = tun }) else { tun.close(); throw CancellationError() }
         let bridge = EthernetBridge(timing: timing.bridge, mac: config.virtualMacAddress.flatMap(InputValidation.parseMacAddress))
-        bridge.handleIPv6 = !config.blockIPv6
-        tun.forwardIPv6 = !config.blockIPv6
+        let socksMode = config.tunnelMode == .socksProxy
+        // In SOCKS mode only IPv4 sockets bound to the interface ever use it, so there is no IPv6 to carry.
+        bridge.handleIPv6 = !config.blockIPv6 && !socksMode
+        tun.forwardIPv6 = !config.blockIPv6 && !socksMode
         guard withResources(r, { $0.bridge = bridge }) else { throw CancellationError() }
         bridge.sendFrame = { [weak client] in client?.sendFrame($0) }
         bridge.deliverIPv4 = { [weak tun] in tun?.write(ipv4: $0) }
@@ -322,34 +341,46 @@ final class VPNSession: SessionControlling {
         bridge.gratuitousARP()
         let net = deps.makeNet()
         guard withResources(r, { $0.net = net }) else { throw CancellationError() }
-        // The address the TLS connection really went to, not a second lookup of the name (which could differ, or fail).
-        let primaryBypass = config.proxy.kind != .none ? config.proxy.host
-            : InputValidation.isIPv4Literal(config.host) ? config.host : (client.remoteIPv4 ?? config.host)
-        // Domain rules need a resolver of our own: IP/CIDR rules alone are handled entirely by routes.
-        let needsDNSProxy = config.routing?.effectiveRules.contains { $0.enabled && $0.type.isDomain } ?? false
-        var dnsProxy: DNSProxy?
-        if needsDNSProxy {
-            let proxy = deps.makeDNSProxy(net)
-            proxy.routing = config.routing ?? RoutingConfig()
-            try proxy.start()
-            dnsProxy = proxy
-        }
-        guard withResources(r, { $0.dnsProxy = dnsProxy }) else { dnsProxy?.stop(); throw CancellationError() }
-        try net.apply(iface: tun.name, lease: lease, bypassHost: primaryBypass, blockIPv6: config.blockIPv6,
-                      mtuOverride: config.mtu, routing: config.routing,
-                      dnsProxyAddress: needsDNSProxy ? DNSProxy.Settings().listenAddress : nil)
-        if let dnsProxy {
-            dnsProxy.tunnelDNSServers = lease.dns.map(ipString)
-            dnsProxy.directDNSServers = net.directDNSServers()
-        }
-        // After a cluster redirect the data flows to another host, and UDP acceleration to its own endpoint:
-        // both need their own route around the tunnel.
-        for h in client.bypassHosts where h != primaryBypass { net.addBypass(host: h) }
-        // IPv6 (only when not blocked): put the SLAAC address on the utun once a router advertises a prefix.
-        bridge.startIPv6 { [weak net] address, prefixLength in net?.configureIPv6(address: address, prefixLength: prefixLength) }
-        tun.startReading()
+        var connectedLog = "Connected via \(tun.name), gateway \(ipString(lease.router))"
+        if socksMode {
+            // Nothing global changes: no default route, resolver or IPv6 capture. The proxy is the only way in.
+            try net.applySocks(iface: tun.name, lease: lease, mtuOverride: config.mtu)
+            let server = deps.makeSocks(UInt16(clamping: config.socksPort), tun.name, lease.dns.map(ipString))
+            try server.start()
+            guard withResources(r, { $0.socks = server }) else { server.stop(); throw CancellationError() }
+            connectedLog = "SOCKS5 proxy on 127.0.0.1:\(server.boundPort) via \(tun.name)"
+            tun.startReading()
+        } else {
+            // The address the TLS connection really went to, not a second lookup of the name (which could differ, or fail).
+            let primaryBypass = config.proxy.kind != .none ? config.proxy.host
+                : InputValidation.isIPv4Literal(config.host) ? config.host : (client.remoteIPv4 ?? config.host)
+            // Domain rules need a resolver of our own: IP/CIDR rules alone are handled entirely by routes.
+            let needsDNSProxy = config.routing?.effectiveRules.contains { $0.enabled && $0.type.isDomain } ?? false
+            var dnsProxy: DNSProxy?
+            if needsDNSProxy {
+                let proxy = deps.makeDNSProxy(net)
+                proxy.routing = config.routing ?? RoutingConfig()
+                try proxy.start()
+                dnsProxy = proxy
+            }
+            guard withResources(r, { $0.dnsProxy = dnsProxy }) else { dnsProxy?.stop(); throw CancellationError() }
+            try net.apply(iface: tun.name, lease: lease, bypassHost: primaryBypass, blockIPv6: config.blockIPv6,
+                          mtuOverride: config.mtu, routing: config.routing,
+                          dnsProxyAddress: needsDNSProxy ? DNSProxy.Settings().listenAddress : nil)
+            if let dnsProxy {
+                dnsProxy.tunnelDNSServers = lease.dns.map(ipString)
+                dnsProxy.directDNSServers = net.directDNSServers()
+            }
+            // After a cluster redirect the data flows to another host, and UDP acceleration to its own endpoint:
+            // both need their own route around the tunnel.
+            for h in client.bypassHosts where h != primaryBypass { net.addBypass(host: h) }
+            // IPv6 (only when not blocked): put the SLAAC address on the utun once a router advertises a prefix.
+            bridge.startIPv6 { [weak net] address, prefixLength in net?.configureIPv6(address: address, prefixLength: prefixLength) }
+            tun.startReading()
 
-        set(gen, .connected, ip: ipString(lease.ip), log: "Connected via \(tun.name), gateway \(ipString(lease.router))")
+        }
+
+        set(gen, .connected, ip: ipString(lease.ip), log: connectedLog)
         let timer = makeCounterTimer(r, client)
         let wait = max(Double(lease.seconds) / 2, timing.minRenewSeconds)
         let renew = Task.detached { [weak bridge] in
@@ -383,13 +414,14 @@ final class VPNSession: SessionControlling {
     /// Stops traffic first, then removes routes, then closes the tun. Safe to call more than once.
     private func release(_ r: Resources) {
         lock.lock()
-        let (c, n, t, timer, renew, dnsProxy) = (r.client, r.net, r.tun, r.timer, r.renew, r.dnsProxy)
-        r.client = nil; r.net = nil; r.tun = nil; r.timer = nil; r.renew = nil; r.bridge = nil; r.dnsProxy = nil
+        let (c, n, t, timer, renew, dnsProxy, socks) = (r.client, r.net, r.tun, r.timer, r.renew, r.dnsProxy, r.socks)
+        r.client = nil; r.net = nil; r.tun = nil; r.timer = nil; r.renew = nil; r.bridge = nil; r.dnsProxy = nil; r.socks = nil
         lock.unlock()
         timer?.cancel(); renew?.cancel()
         c?.onClose = nil
         c?.close()
         r.linkDown.fire()
+        socks?.stop()
         dnsProxy?.stop()
         n?.teardown()
         t?.close()

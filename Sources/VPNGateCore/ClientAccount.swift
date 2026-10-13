@@ -165,7 +165,9 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
         certDer: Data? = nil,
         privateKeyDer: Data? = nil,
         blockIPv6: Bool = true,
-        globalRouting: RoutingConfig? = nil
+        globalRouting: RoutingConfig? = nil,
+        tunnelMode: TunnelMode = .fullTunnel,
+        socksPort: Int = defaultSocksPort
     ) -> ConnectConfig {
         ConnectConfig(
             host: host,
@@ -191,7 +193,9 @@ public struct ClientAccount: Identifiable, Codable, Equatable, Hashable {
             serverCertFingerprint: serverCertFingerprint,
             mtu: mtu,
             virtualMacAddress: virtualMacAddress,
-            routing: routing ?? globalRouting
+            routing: routing ?? globalRouting,
+            tunnelMode: tunnelMode,
+            socksPort: socksPort
         )
     }
 }

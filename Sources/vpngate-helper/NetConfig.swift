@@ -180,6 +180,22 @@ final class NetConfig: NetConfiguring {
         }
     }
 
+    /// SOCKS mode: the interface gets its address, and a default route that exists only for sockets bound to it
+    /// (`-ifscope`). Nothing global changes — no unscoped route, no resolver, no IPv6 capture.
+    func applySocks(iface: String, lease: Lease, mtuOverride: Int?) throws {
+        let ip = ipString(lease.ip), gw = ipString(lease.router)
+        tunnelGateway = gw
+        var st = State(iface: iface, bypassHost: "", gateway: gw, dnsSet: false)
+        st.addedRoutes = []
+        state = st
+        save()
+        func validMtu(_ v: Int?) -> String? { v.flatMap { (576...1500).contains($0) ? String($0) : nil } }
+        let mtuVal = validMtu(mtuOverride) ?? validMtu(lease.mtu.map(Int.init)) ?? "1400"
+        runner.run("/sbin/ifconfig", [iface, "inet", ip, gw, "netmask", "255.255.255.255", "mtu", mtuVal, "up"])
+        addRoute(["-ifscope", iface, "-host", gw, "-interface", iface], undo: ["-ifscope", iface, "-host", gw])
+        addRoute(["-ifscope", iface, "default", gw], undo: ["-ifscope", iface, "default", gw])
+    }
+
     func directDNSServers() -> [String] { capturedPhysicalDNS }
 
     /// Adds an explicit route for one IP/CIDR routing rule, overriding whatever the default capture (or its

@@ -10,10 +10,16 @@ protocol DNSUpstream {
 
 /// A plain UDP DNS client: one query, one answer, no retries (the OS resolver that's asking us will retry).
 struct SystemDNSUpstream: DNSUpstream {
+    /// When set, the query leaves through this interface only (`IP_BOUND_IF`), whatever the routing table says.
+    var boundInterface: UInt32?
+
     func query(_ message: [UInt8], server: String, timeoutMs: Int32) -> [UInt8]? {
         let fd = socket(AF_INET, SOCK_DGRAM, 0)
         guard fd >= 0 else { return nil }
         defer { Darwin.close(fd) }
+        if var idx = boundInterface {
+            guard setsockopt(fd, IPPROTO_IP, IP_BOUND_IF, &idx, socklen_t(MemoryLayout<UInt32>.size)) == 0 else { return nil }
+        }
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
         addr.sin_port = in_port_t(53).bigEndian

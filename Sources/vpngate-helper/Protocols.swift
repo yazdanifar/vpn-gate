@@ -70,10 +70,14 @@ protocol NetConfiguring: AnyObject {
     /// The physical network's own DNS servers, captured just before `apply` pointed the system at the tunnel's
     /// resolver; used to resolve `.direct` domains without ever asking the tunnel's (or the hub's) resolver.
     func directDNSServers() -> [String]
+    /// SOCKS mode: gives the tunnel interface its address and a default route that only sockets bound to that
+    /// interface can use (`route -ifscope`). The system's own default route, DNS and IPv6 are left untouched.
+    func applySocks(iface: String, lease: Lease, mtuOverride: Int?) throws
     func teardown()
 }
 
 extension NetConfiguring {
+    func applySocks(iface: String, lease: Lease, mtuOverride: Int?) throws {}
     func addBypass(host: String) {}
     func configureIPv6(address: [UInt8], prefixLength: Int) {}
     func applyDynamicRule(ip: String, action: RoutingAction) {}
@@ -87,5 +91,14 @@ protocol SessionControlling: AnyObject {
     func connect(config: ConnectConfig)
     func connect(host: String, port: Int?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool)
     func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?)
+    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?,
+                 tunnelMode: TunnelMode, socksPort: Int)
     func disconnect()
+}
+
+extension SessionControlling {
+    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?,
+                 tunnelMode: TunnelMode, socksPort: Int) {
+        connect(host: host, port: port, ports: ports, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6, routing: routing)
+    }
 }

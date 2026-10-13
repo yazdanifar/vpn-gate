@@ -100,6 +100,7 @@ final class SessionHarness {
     let tuns = Locked([FakeTun]())
     let nets = Locked([FakeNet]())
     let dnsProxies = Locked([DNSProxy]())
+    let socksServers = Locked([SocksServer]())
     var gateFor: ((String) -> Gate?)?
     var connectErrorFor: ((String, UInt16) -> Error?)?
     var tunError: Error?
@@ -132,6 +133,11 @@ final class SessionHarness {
             self.dnsProxies.update { $0.append(p) }
             return p
         }
+        d.makeSocks = { [unowned self] port, _, _ in
+            let s = SocksServer(port: port, connector: LoopbackConnector())
+            self.socksServers.update { $0.append(s) }
+            return s
+        }
         return d
     }
 
@@ -157,6 +163,9 @@ final class FakeNet: NetConfiguring {
         routingApplied.update { $0.append(routing) }
     }
     func teardown() { state.update { $0.torn += 1 } }
+    private let socksApplied = Locked([String]())
+    var socksIfaces: [String] { socksApplied.value }
+    func applySocks(iface: String, lease: Lease, mtuOverride: Int?) throws { socksApplied.update { $0.append(iface) } }
     private let extra = Locked([String]())
     var bypassed: [String] { extra.value }
     func addBypass(host: String) { extra.update { $0.append(host) } }

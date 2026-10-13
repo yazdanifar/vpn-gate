@@ -2,7 +2,7 @@ import Foundation
 
 public let helperSocketPath = "/var/run/vpngate-mac.sock"
 /// Bumped whenever the helper's behaviour or IPC changes; the app offers to reinstall an outdated helper.
-public let helperVersion = 7
+public let helperVersion = 8
 
 public enum ConnectionState: String, Codable {
     case disconnected, connecting, authenticating, dhcp, connected, reconnecting
@@ -17,6 +17,17 @@ public struct ProxySettings: Codable, Equatable, Hashable {
     public var password: String?
     public init() {}
 }
+
+/// How a connection exposes the VPN: capture the whole machine, or only serve a local SOCKS5 proxy.
+public enum TunnelMode: String, Codable, Equatable {
+    /// Default route, DNS and routing rules are pointed at the tunnel (the original behaviour).
+    case fullTunnel
+    /// The system's routes and DNS are left alone; the helper listens for SOCKS5 on `127.0.0.1:socksPort` and sends
+    /// only the connections made through it into the tunnel.
+    case socksProxy
+}
+
+public let defaultSocksPort = 1080
 
 /// Full configuration for establishing a SoftEther session (general accounts or VPN Gate relays).
 public struct ConnectConfig: Codable, Equatable {
@@ -57,6 +68,11 @@ public struct ConnectConfig: Codable, Equatable {
     /// User-defined routing rules (domains/IPs to proxy, bypass or block); nil or empty means "everything
     /// through the tunnel", the pre-existing behaviour.
     public var routing: RoutingConfig?
+    /// `.socksProxy` serves a local SOCKS5 proxy instead of capturing the machine's traffic (routing rules and
+    /// IPv6 blocking do not apply then, as nothing is captured).
+    public var tunnelMode: TunnelMode
+    /// Loopback port of the SOCKS5 proxy in `.socksProxy` mode.
+    public var socksPort: Int
 
     public init(
         host: String,
@@ -82,7 +98,9 @@ public struct ConnectConfig: Codable, Equatable {
         serverCertFingerprint: String? = nil,
         mtu: Int? = nil,
         virtualMacAddress: String? = nil,
-        routing: RoutingConfig? = nil
+        routing: RoutingConfig? = nil,
+        tunnelMode: TunnelMode = .fullTunnel,
+        socksPort: Int = defaultSocksPort
     ) {
         self.host = host
         self.ports = ports
@@ -108,6 +126,8 @@ public struct ConnectConfig: Codable, Equatable {
         self.mtu = mtu
         self.virtualMacAddress = virtualMacAddress
         self.routing = routing
+        self.tunnelMode = tunnelMode
+        self.socksPort = socksPort
     }
 
     /// Tolerant like the account file: a request from an older app (without `disableQoS`) still decodes.
@@ -137,7 +157,9 @@ public struct ConnectConfig: Codable, Equatable {
             serverCertFingerprint: try c.decodeIfPresent(String.self, forKey: .serverCertFingerprint),
             mtu: try c.decodeIfPresent(Int.self, forKey: .mtu),
             virtualMacAddress: try c.decodeIfPresent(String.self, forKey: .virtualMacAddress),
-            routing: try c.decodeIfPresent(RoutingConfig.self, forKey: .routing)
+            routing: try c.decodeIfPresent(RoutingConfig.self, forKey: .routing),
+            tunnelMode: try c.decodeIfPresent(TunnelMode.self, forKey: .tunnelMode) ?? .fullTunnel,
+            socksPort: try c.decodeIfPresent(Int.self, forKey: .socksPort) ?? defaultSocksPort
         )
     }
 }
@@ -151,6 +173,8 @@ public struct HelperRequest: Codable {
     public var autoReconnect: Bool?
     public var blockIPv6: Bool?
     public var routing: RoutingConfig?
+    public var tunnelMode: TunnelMode?
+    public var socksPort: Int?
     public var config: ConnectConfig?
     public init(cmd: String) { self.cmd = cmd }
 }

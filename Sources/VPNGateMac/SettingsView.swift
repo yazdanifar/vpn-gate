@@ -36,6 +36,22 @@ private struct GeneralSettings: View {
                      : "Off: IPv6 only works if the VPN network provides it (a router advertising an IPv6 prefix). Otherwise IPv6 is still captured and dropped, so nothing leaks.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Mode") {
+                Picker("Use the VPN as", selection: $model.tunnelMode) {
+                    Text("Full tunnel (whole Mac)").tag(TunnelMode.fullTunnel)
+                    Text("SOCKS5 proxy only").tag(TunnelMode.socksProxy)
+                }
+                if model.tunnelMode == .socksProxy {
+                    TextField("SOCKS port", value: $model.socksPort, format: .number.grouping(.never))
+                    if !(1024...65535).contains(model.socksPort) {
+                        Text("Use a port from 1024 to 65535.").font(.caption).foregroundStyle(.red)
+                    }
+                }
+                Text(model.tunnelMode == .fullTunnel
+                     ? "All traffic from this Mac goes through the VPN (subject to your routing rules)."
+                     : "Your routes and DNS stay untouched. Point an app or browser at SOCKS5 127.0.0.1:\(model.socksPort) and only that app's connections use the VPN; use “remote DNS” in the app so names resolve through the VPN too. Any program on this Mac can use the port while connected. Routing rules and IPv6 blocking do not apply. Applies to the next connection.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("VPN connections") {
                 Button("Open VPN Connection Settings…") { openWindow(id: "accounts") }
                 Text("Manage your own SoftEther servers and accounts in a separate window.")
