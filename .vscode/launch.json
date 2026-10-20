@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:vpn-gate}",
+            "name": "Debug vpngate-helper",
+            "target": "vpngate-helper",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug vpngate-helper"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:vpn-gate}",
+            "name": "Release vpngate-helper",
+            "target": "vpngate-helper",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release vpngate-helper"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:vpn-gate}",
+            "name": "Debug VPNGateMac",
+            "target": "VPNGateMac",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug VPNGateMac"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:vpn-gate}",
+            "name": "Release VPNGateMac",
+            "target": "VPNGateMac",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release VPNGateMac"
+        }
+    ]
+}

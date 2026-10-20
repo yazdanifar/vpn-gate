@@ -29,6 +29,83 @@ final class ListState: ObservableObject {
 
 private let logChoices: [(label: String, weeks: Int)] = [("Any logging policy", -1), ("2 weeks or less", 2), ("Up to 1 month", 5), ("No logs only", 0)]
 
+final class TrafficCounter: ObservableObject {
+    @Published private(set) var bytesIn: UInt64 = 0
+    @Published private(set) var bytesOut: UInt64 = 0
+    /// Bytes per second, smoothed over recent samples.
+    @Published private(set) var speedIn: Double = 0
+    @Published private(set) var speedOut: Double = 0
+    private var sample: (at: Date, i: UInt64, o: UInt64)?
+
+    func set(_ i: UInt64, _ o: UInt64) {
+        if bytesIn != i { bytesIn = i }
+        if bytesOut != o { bytesOut = o }
+        let now = Date()
+        guard let prev = sample else { sample = (now, i, o); return }
+        let dt = now.timeIntervalSince(prev.at)
+        guard dt >= 1 else { return }  // wait for a long enough window; events may arrive faster
+        sample = (now, i, o)
+        if i < prev.i || o < prev.o { speedIn = 0; speedOut = 0; return }  // counters restarted (new session)
+        let alpha = 0.5
+        let newIn = Double(i - prev.i) / dt, newOut = Double(o - prev.o) / dt
+        speedIn = speedIn * (1 - alpha) + newIn * alpha
+        speedOut = speedOut * (1 - alpha) + newOut * alpha
+        if speedIn < 1 { speedIn = 0 }
+        if speedOut < 1 { speedOut = 0 }
+    }
+}
+
+/// "duration ↓ in ↑ out"; observes only the counters.
+struct TrafficText: View {
+    @ObservedObject var traffic: TrafficCounter
+    var since: Date? = nil
+    var body: some View {
+        let io = "↓ \(Fmt.bytes(traffic.bytesIn))  ↑ \(Fmt.bytes(traffic.bytesOut))"
+        let rate = "↓ \(Fmt.rate(traffic.speedIn))  ↑ \(Fmt.rate(traffic.speedOut))"
+        VStack(alignment: .leading, spacing: 2) {
+            Text(since == nil ? io : "\(Fmt.duration(since))  \(io)")
+            if since != nil { Text(rate) }
+        }
+    }
+}
+
+/// The toolbar Filter menu. It takes plain values and is Equatable on them (closures are ignored), so model updates
+/// that don't change what it shows (log lines, probes, helper polling) don't rebuild it while it is open.
+private struct FilterMenu: View, Equatable {
+    let countries: [String]
+    let country: String
+    let maxLogWeeks: Int
+    let favoritesOnly: Bool
+    let active: Bool
+    let setCountry: (String) -> Void
+    let setLogWeeks: (Int) -> Void
+    let setFavoritesOnly: (Bool) -> Void
+    let clear: () -> Void
+
+    static func == (a: FilterMenu, b: FilterMenu) -> Bool {
+        a.countries == b.countries && a.country == b.country && a.maxLogWeeks == b.maxLogWeeks
+            && a.favoritesOnly == b.favoritesOnly && a.active == b.active
+    }
+
+    var body: some View {
+        Menu {
+            Picker("Country", selection: Binding(get: { country }, set: setCountry)) {
+                ForEach(countries, id: \.self) { Text($0 == "All" ? "All countries" : $0).tag($0) }
+            }
+            Picker("Logging", selection: Binding(get: { maxLogWeeks }, set: setLogWeeks)) {
+                ForEach(logChoices, id: \.weeks) { Text($0.label).tag($0.weeks) }
+            }
+            Toggle("Favorites only", isOn: Binding(get: { favoritesOnly }, set: setFavoritesOnly))
+            if active {
+                Divider()
+                Button("Clear Filters", action: clear)
+            }
+        } label: {
+            Label("Filter", systemImage: active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+        }
+    }
+}
+
 /// The window of the Windows client's VPN Gate plug-in (D_VGC_LIST): title, intro, the relay list, and the
 /// Connect button. Proxy Settings and VPN Connection Settings live in the macOS-native Settings window and the
 /// Window menu instead of a button row here; VPN Gate Web Site is in the Help menu.
@@ -211,21 +288,12 @@ struct ServerListView: View {
         .searchable(text: $ui.search, placement: .toolbar, prompt: "Search host, IP, country, operator")
         .toolbar {
             ToolbarItemGroup {
-                Menu {
-                    Picker("Country", selection: $ui.country) {
-                        ForEach(countries, id: \.self) { Text($0 == "All" ? "All countries" : $0).tag($0) }
-                    }
-                    Picker("Logging", selection: $model.maxLogWeeks) {
-                        ForEach(logChoices, id: \.weeks) { Text($0.label).tag($0.weeks) }
-                    }
-                    Toggle("Favorites only", isOn: $ui.favoritesOnly)
-                    if filterActive {
-                        Divider()
-                        Button("Clear Filters") { ui.country = "All"; ui.favoritesOnly = false; model.maxLogWeeks = -1 }
-                    }
-                } label: {
-                    Label("Filter", systemImage: filterActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                }
+                FilterMenu(countries: countries, country: ui.country, maxLogWeeks: model.maxLogWeeks,
+                           favoritesOnly: ui.favoritesOnly, active: filterActive,
+                           setCountry: { ui.country = $0 }, setLogWeeks: { model.maxLogWeeks = $0 },
+                           setFavoritesOnly: { ui.favoritesOnly = $0 },
+                           clear: { ui.country = "All"; ui.favoritesOnly = false; model.maxLogWeeks = -1 })
+                    .equatable()
                 Button { if let s = selected { ui.selectedServerForDetails = s; ui.showingDetails = true } } label: {
                     Label("Details", systemImage: "info.circle")
                 }
@@ -279,7 +347,7 @@ struct ConnectionCard: View {
                     if let ip = model.event.virtualIP { Text("Virtual IP \(ip)").font(.caption).foregroundStyle(.secondary) }
                     if state == .connected {
                         TimelineView(.periodic(from: .now, by: 1)) { _ in
-                            Text("\(Fmt.duration(model.connectedAt))  ↓ \(Fmt.bytes(model.event.bytesIn))  ↑ \(Fmt.bytes(model.event.bytesOut))")
+                            TrafficText(traffic: model.traffic, since: model.connectedAt)
                                 .monospacedDigit().font(.caption).foregroundStyle(.secondary)
                         }
                     }

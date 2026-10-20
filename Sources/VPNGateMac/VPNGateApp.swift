@@ -47,7 +47,7 @@ struct VPNGateApp: App {
             }
             if let ip = s.virtualIP { Text("Virtual IP \(ip)") }
             if s.state == .connected {
-                Text("↓ \(Fmt.bytes(s.bytesIn))  ↑ \(Fmt.bytes(s.bytesOut))")
+                TrafficText(traffic: model.traffic)
             }
             Divider()
             if s.state == .disconnected {

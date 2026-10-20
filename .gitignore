@@ -41,6 +41,9 @@ Icon?
 # Editors
 .idea/
 
+# Claude Code per-user settings
+.claude/settings.local.json
+
 # Installers / logs
 *.pkg
 *.dmg

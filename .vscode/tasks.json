@@ -1,0 +1,41 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "swift: Build Debug vpngate-helper",
+            "type": "shell",
+            "command": "swift",
+            "args": ["build", "-c", "debug", "--product", "vpngate-helper"],
+            "options": { "cwd": "${workspaceFolder}" },
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "swift: Build Release vpngate-helper",
+            "type": "shell",
+            "command": "swift",
+            "args": ["build", "-c", "release", "--product", "vpngate-helper"],
+            "options": { "cwd": "${workspaceFolder}" },
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "swift: Build Debug VPNGateMac",
+            "type": "shell",
+            "command": "swift",
+            "args": ["build", "-c", "debug", "--product", "VPNGateMac"],
+            "options": { "cwd": "${workspaceFolder}" },
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "swift: Build Release VPNGateMac",
+            "type": "shell",
+            "command": "swift",
+            "args": ["build", "-c", "release", "--product", "VPNGateMac"],
+            "options": { "cwd": "${workspaceFolder}" },
+            "group": "build",
+            "problemMatcher": []
+        }
+    ]
+}

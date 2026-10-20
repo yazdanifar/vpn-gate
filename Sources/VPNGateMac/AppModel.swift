@@ -11,6 +11,8 @@ final class AppModel: ObservableObject {
     @Published var loading = false
     @Published var loadError: String?
     @Published var event = HelperEvent(state: .disconnected)
+    /// Live byte counters, kept out of `event` so their once-a-second updates only redraw the views that show them.
+    let traffic = TrafficCounter()
     @Published var helperRunning = false
     @Published var helperInstalled = HelperInstaller.isInstalled
     @Published var logLines: [String] = []
@@ -172,8 +174,14 @@ final class AppModel: ObservableObject {
     // MARK: helper
 
     func pollHelper() {
-        helperInstalled = HelperInstaller.isInstalled
-        if !helper.isConnected { helperRunning = helper.connect() }
+        // Assigning a @Published value republishes even when unchanged; that re-rendered the list view every 2 s
+        // and dismissed the open Filter menu.
+        let installed = HelperInstaller.isInstalled
+        if helperInstalled != installed { helperInstalled = installed }
+        if !helper.isConnected {
+            let running = helper.connect()
+            if helperRunning != running { helperRunning = running }
+        }
         resumeAfterSetup()
     }
 
@@ -209,12 +217,19 @@ final class AppModel: ObservableObject {
 
     private func handle(_ e: HelperEvent) {
         lastEventAt = Date()
-        helperRunning = true
+        if !helperRunning { helperRunning = true }
+        traffic.set(e.bytesIn, e.bytesOut)
         if let l = e.log { appendLog(l) }
         if let err = e.error { appendLog("Error: \(err)"); notice = err }
         if e.state == .connected && connectedAt == nil { connectedAt = Date(); notice = nil }
         if e.state != .connected { connectedAt = nil }
         trackHistory(e)
+        // The helper reports the byte counters every second. Publishing each of those would re-render the whole
+        // list window (and dismiss its open toolbar menu), so a counters-only event only updates `traffic`.
+        if e.log == nil, e.error == nil, e.state == event.state, e.server == event.server, e.virtualIP == event.virtualIP,
+           e.helperVersion == event.helperVersion {
+            return
+        }
         event = e
         considerReconnect(after: e)
     }

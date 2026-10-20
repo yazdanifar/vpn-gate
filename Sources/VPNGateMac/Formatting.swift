@@ -4,6 +4,9 @@ import VPNGateCore
 enum Fmt {
     static func speed(_ bps: Int) -> String { String(format: "%.1f Mbps", Double(bps) / 1_000_000) }
     static func bytes(_ n: UInt64) -> String { ByteCountFormatter.string(fromByteCount: Int64(n), countStyle: .binary) }
+    static func rate(_ bytesPerSecond: Double) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytesPerSecond), countStyle: .binary) + "/s"
+    }
     static func traffic(_ n: Int) -> String { ByteCountFormatter.string(fromByteCount: Int64(n), countStyle: .decimal) }
     static func duration(_ since: Date?) -> String {
         guard let since = since else { return "" }
