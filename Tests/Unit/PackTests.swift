@@ -4,9 +4,11 @@ import VPNGateCore
 func registerPackTests() {
     test("pack/golden-bytes") {
         var p = Pack(); p.addInt("a", 1); p.addStr("s", "hi")
-        let expect: [UInt8] = [0,0,0,2,
-            0,0,0,2, 0x61, 0,0,0,0, 0,0,0,1, 0,0,0,1,
-            0,0,0,2, 0x73, 0,0,0,2, 0,0,0,1, 0,0,0,2, 0x68, 0x69]
+        let expect: [UInt8] = [
+            0, 0, 0, 2,
+            0, 0, 0, 2, 0x61, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1,
+            0, 0, 0, 2, 0x73, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 2, 0x68, 0x69,
+        ]
         expectEqual([UInt8](p.serialize()), expect)
     }
     test("pack/golden-unistr-and-int64") {
@@ -41,15 +43,15 @@ func registerPackTests() {
     }
     test("pack/rejects-bad-type-and-name") {
         // one element, name "a", type 9
-        expectThrows(try Pack(parsing: Data([0,0,0,1, 0,0,0,2, 0x61, 0,0,0,9, 0,0,0,1, 0,0,0,0])))
+        expectThrows(try Pack(parsing: Data([0, 0, 0, 1, 0, 0, 0, 2, 0x61, 0, 0, 0, 9, 0, 0, 0, 1, 0, 0, 0, 0])))
         // name length 0 (len+1 == 0 underflow)
-        expectThrows(try Pack(parsing: Data([0,0,0,1, 0,0,0,0])))
+        expectThrows(try Pack(parsing: Data([0, 0, 0, 1, 0, 0, 0, 0])))
         // absurd name length
-        expectThrows(try Pack(parsing: Data([0,0,0,1, 0,0,1,0])))
+        expectThrows(try Pack(parsing: Data([0, 0, 0, 1, 0, 0, 1, 0])))
     }
     test("pack/rejects-huge-counts") {
         expectThrows(try Pack(parsing: Data([0xff, 0xff, 0xff, 0xff])))
-        expectThrows(try Pack(parsing: Data([0,0,0,1, 0,0,0,2, 0x61, 0,0,0,0, 0xff,0xff,0xff,0xff])))
+        expectThrows(try Pack(parsing: Data([0, 0, 0, 1, 0, 0, 0, 2, 0x61, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff])))
     }
     test("login/pack-has-no-duplicate-names") {
         let c = SoftEtherClient(host: "h", port: 443, proxy: ProxySettings())
@@ -66,7 +68,7 @@ func registerPackTests() {
         expectEqual(p.int("use_compress"), 0)
         expectEqual(p.data("unique_id")?.count, 20)
     }
-    test("login/hostile-proxy-port-does-not-trap") {          // B4
+    test("login/hostile-proxy-port-does-not-trap") {  // B4
         var proxy = ProxySettings(); proxy.kind = .http; proxy.host = "p"; proxy.port = -1
         let p = SoftEtherClient(host: "h", port: 443, proxy: proxy).loginPack()
         expect(p.int("ProxyPort") != nil)

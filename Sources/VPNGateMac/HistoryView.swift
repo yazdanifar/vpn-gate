@@ -24,7 +24,9 @@ struct HistoryView: View {
                         Text(e.durationSeconds.map { Fmt.duration(Date().addingTimeInterval(-$0)) } ?? "active")
                     }
                     TableColumn("Traffic") { e in Text("↓ \(Fmt.bytes(e.bytesIn))  ↑ \(Fmt.bytes(e.bytesOut))").monospacedDigit() }
-                    TableColumn("Result") { e in Text(e.error ?? (e.disconnectedAt == nil ? "" : "ended")).foregroundStyle(e.error == nil ? Color.secondary : Color.red) }
+                    TableColumn("Result") { e in
+                        Text(e.error ?? (e.disconnectedAt == nil ? "" : "ended")).foregroundStyle(e.error == nil ? Color.secondary : Color.red)
+                    }
                 }
             }
         }

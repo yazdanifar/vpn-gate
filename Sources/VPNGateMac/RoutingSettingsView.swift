@@ -36,10 +36,12 @@ struct RoutingRulesEditor: View {
                     Text("Direct (bypass the tunnel)").tag(RoutingAction.direct)
                 }
                 Toggle("Bypass private networks (LAN, link-local, CGNAT)", isOn: $config.bypassPrivateNetworks)
-                Text(config.defaultAction == .proxy
-                     ? "Everything goes through the tunnel except what the rules below send elsewhere."
-                     : "Everything bypasses the tunnel except what the rules below send into it. IPv6 keeps being captured and dropped regardless (see “Block IPv6” in General).")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(
+                    config.defaultAction == .proxy
+                        ? "Everything goes through the tunnel except what the rules below send elsewhere."
+                        : "Everything bypasses the tunnel except what the rules below send into it. IPv6 keeps being captured and dropped regardless (see “Block IPv6” in General)."
+                )
+                .font(.caption).foregroundStyle(.secondary)
             }
             Section("Rules") {
                 if config.rules.isEmpty {
@@ -55,11 +57,13 @@ struct RoutingRulesEditor: View {
                 .onDelete { indices in config.rules.remove(atOffsets: indices) }
                 Button("Add Rule…") { ui.showingNewRule = true }
             }
-            Text("Rules are checked in order from top to bottom; the first one that matches wins. Domain rules need "
-                 + "the DNS proxy, which only runs while one is configured. A domain marked “Direct” is looked up "
-                 + "through your regular network connection, never through the VPN or its DNS — everything else is "
-                 + "resolved only through the tunnel.")
-                .font(.caption).foregroundStyle(.secondary)
+            Text(
+                "Rules are checked in order from top to bottom; the first one that matches wins. Domain rules need "
+                    + "the DNS proxy, which only runs while one is configured. A domain marked “Direct” is looked up "
+                    + "through your regular network connection, never through the VPN or its DNS — everything else is "
+                    + "resolved only through the tunnel."
+            )
+            .font(.caption).foregroundStyle(.secondary)
         }
         .sheet(item: $ui.editing) { rule in
             RoutingRuleSheet(rule: rule) { updated in
@@ -158,7 +162,9 @@ private struct RoutingRuleSheet: View {
             Divider()
             HStack {
                 if !ui.isNew {
-                    Button("Delete", role: .destructive) { onDone(nil); dismiss() }
+                    Button("Delete", role: .destructive) {
+                        onDone(nil); dismiss()
+                    }
                 }
                 Spacer()
                 Button("Cancel") { dismiss() }

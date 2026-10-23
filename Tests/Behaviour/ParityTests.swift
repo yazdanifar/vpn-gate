@@ -111,8 +111,9 @@ func registerParityTests() {
 
     // MARK: 3. relay choice
     test("relays/port-priority-order-matches-the-windows-client") {
-        expectEqual(VPNServer.portPriority([9008, 22, 993, 465, 1195, 443, 585, 995, 992]),
-                    [443, 992, 995, 465, 585, 993, 22, 9008, 1195])
+        expectEqual(
+            VPNServer.portPriority([9008, 22, 993, 465, 1195, 443, 585, 995, 992]),
+            [443, 992, 995, 465, 585, 993, 22, 9008, 1195])
         expectEqual(VPNServer.portPriority([1195, 9008]), [1195, 9008])
         expectEqual(VPNServer.portPriority([]), [])
         let s = host(1, ports: [465, 995, 1195])
@@ -120,9 +121,9 @@ func registerParityTests() {
     }
     test("relays/selection-443-first-up-to-13-then-others-up-to-13-on-their-best-port") {
         var servers = [VPNServer]()
-        for i in 0..<20 { servers.append(host(i, ports: [8000, 443])) }            // 20 with 443 -> only 13 used
+        for i in 0..<20 { servers.append(host(i, ports: [8000, 443])) }  // 20 with 443 -> only 13 used
         for i in 20..<40 { servers.append(host(i, ports: [22, 993, 1195, 585])) }  // best port is 585
-        servers.append(host(99, ports: []))                                         // no SSL port: never asked
+        servers.append(host(99, ports: []))  // no SSL port: never asked
         let t = VGDatFetcher.selectTargets(from: servers, limit: 12, shuffle: { $0 })
         expectEqual(t.count, 26)
         expect(t.prefix(13).allSatisfy { $0.port == 443 }, "443 hosts first")
@@ -130,16 +131,20 @@ func registerParityTests() {
         expect(t.suffix(13).allSatisfy { $0.port == 585 }, "others on the first port of the priority order")
         expect(!t.contains { $0.ip == servers.last!.ip })
         // lists without any SSL port (CSV) keep working through the OpenVPN-config port
-        let csv = ServerList.parse("#h\nv,1.2.3.4,1,1,1,Japan,JP,1,1,1,1,2weeks,Op,msg,\(Data("proto tcp\nremote 1.2.3.4 1443\n".utf8).base64EncodedString())\n")
+        let csv = ServerList.parse(
+            "#h\nv,1.2.3.4,1,1,1,Japan,JP,1,1,1,1,2weeks,Op,msg,\(Data("proto tcp\nremote 1.2.3.4 1443\n".utf8).base64EncodedString())\n")
         expectEqual(VGDatFetcher.selectTargets(from: csv, limit: 12, shuffle: { $0 }), [RelayTarget(ip: "1.2.3.4", port: 1443)])
     }
     test("relays/fetch-asks-in-that-order-and-the-count-follows-the-dat-tunable") {
         let dir = tmpDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let asked = Locked([RelayTarget]())
         let servers = (0..<30).map { host($0, ports: [443, 22]) } + (30..<60).map { host($0, ports: [22, 993]) }
-        let f = VGDatFetcher(makeStream: { h, p, _ in asked.update { $0.append(RelayTarget(ip: h, port: p)) }; return ScriptedStream(payload: nil) },
-                             httpGet: neverHTTP, cacheURL: dir.appendingPathComponent("c.dat"), bundleURLs: [],
-                             defaults: throwawayDefaults(), shuffle: { $0 })
+        let f = VGDatFetcher(
+            makeStream: { h, p, _ in
+                asked.update { $0.append(RelayTarget(ip: h, port: p)) }; return ScriptedStream(payload: nil)
+            },
+            httpGet: neverHTTP, cacheURL: dir.appendingPathComponent("c.dat"), bundleURLs: [],
+            defaults: throwawayDefaults(), shuffle: { $0 })
         do { _ = try await f.fetchFromRelays(candidates: servers, proxy: ProxySettings()); expect(false, "all relays fail") } catch {}
         expectEqual(asked.value.count, 26)
         expectEqual(asked.value.prefix(13).map(\.port), Array(repeating: 443, count: 13))
@@ -159,11 +164,12 @@ func registerParityTests() {
         let working = Locked(true)
         let fileTime = try VGDat.parse(data: rawDat).timestamp
         func fetcher() -> VGDatFetcher {
-            VGDatFetcher(makeStream: { h, _, _ in
-                asked.update { $0.append(h) }
-                return ScriptedStream(payload: (h == good && working.value) ? rawDat : nil)
-            }, httpGet: neverHTTP, cacheURL: dir.appendingPathComponent("c.dat"), bundleURLs: [],
-                         now: { fileTime.addingTimeInterval(60) }, defaults: defaults, shuffle: { $0 })
+            VGDatFetcher(
+                makeStream: { h, _, _ in
+                    asked.update { $0.append(h) }
+                    return ScriptedStream(payload: (h == good && working.value) ? rawDat : nil)
+                }, httpGet: neverHTTP, cacheURL: dir.appendingPathComponent("c.dat"), bundleURLs: [],
+                now: { fileTime.addingTimeInterval(60) }, defaults: defaults, shuffle: { $0 })
         }
         let first = fetcher()
         _ = try await first.fetchFromRelays(candidates: servers, proxy: ProxySettings())
@@ -172,7 +178,7 @@ func registerParityTests() {
         expectEqual(defaults.string(forKey: "lastGoodRelay"), "\(good):443", "persisted in the injected defaults")
 
         asked.update { $0 = [] }
-        _ = try await fetcher().fetchFromRelays(candidates: servers, proxy: ProxySettings())     // a new fetcher = a new launch
+        _ = try await fetcher().fetchFromRelays(candidates: servers, proxy: ProxySettings())  // a new fetcher = a new launch
         expectEqual(asked.value, [good], "last-good first, and nothing else needed")
 
         asked.update { $0 = [] }; working.update { $0 = false }
@@ -187,12 +193,13 @@ func registerParityTests() {
         let dir = tmpDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let fileTime = try VGDat.parse(data: rawDat).timestamp
         let urls = Locked([URL]())
-        let f = VGDatFetcher(httpGet: { url, connect, data, max in
-            urls.update { $0.append(url) }
-            expectEqual(connect, 7.0); expectEqual(data, 60.0); expectEqual(max, 32 * 1024 * 1024)
-            return rawDat
-        }, cacheURL: dir.appendingPathComponent("c.dat"), bundleURLs: [], now: { fileTime.addingTimeInterval(60) },
-                             defaults: throwawayDefaults(), apiDigits: ("a", "7"))
+        let f = VGDatFetcher(
+            httpGet: { url, connect, data, max in
+                urls.update { $0.append(url) }
+                expectEqual(connect, 7.0); expectEqual(data, 60.0); expectEqual(max, 32 * 1024 * 1024)
+                return rawDat
+            }, cacheURL: dir.appendingPathComponent("c.dat"), bundleURLs: [], now: { fileTime.addingTimeInterval(60) },
+            defaults: throwawayDefaults(), apiDigits: ("a", "7"))
         let dat = try await f.fetchFromHTTPApi()
         expectEqual(dat.servers.count, 200)
         let u = urls.value[0].absoluteString
@@ -207,9 +214,12 @@ func registerParityTests() {
         let dir = tmpDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let fileTime = try VGDat.parse(data: rawDat).timestamp
         let streams = Locked(0)
-        let f = VGDatFetcher(makeStream: { _, _, _ in streams.update { $0 += 1 }; return ScriptedStream(payload: nil) },
-                             httpGet: { _, _, _, _ in rawDat }, cacheURL: dir.appendingPathComponent("c.dat"),
-                             bundleURLs: [fixtureFileURL("VPNGate.dat")], now: { fileTime.addingTimeInterval(60) }, defaults: throwawayDefaults())
+        let f = VGDatFetcher(
+            makeStream: { _, _, _ in
+                streams.update { $0 += 1 }; return ScriptedStream(payload: nil)
+            },
+            httpGet: { _, _, _, _ in rawDat }, cacheURL: dir.appendingPathComponent("c.dat"),
+            bundleURLs: [fixtureFileURL("VPNGate.dat")], now: { fileTime.addingTimeInterval(60) }, defaults: throwawayDefaults())
         let r = await f.sync(currentServers: [host(1, ports: [443])], proxy: ProxySettings())
         expect(r.source == .httpApi); expectEqual(r.servers.count, 200); expectEqual(streams.value, 0)
         expect(r.outcome == .synced)
@@ -218,14 +228,22 @@ func registerParityTests() {
         let dir = tmpDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let fileTime = try VGDat.parse(data: rawDat).timestamp
         var tampered = rawDat; tampered[0x200] ^= 0x55
-        let bodies: [(String, Data?, TimeInterval)] = [("unreachable", nil, 60), ("corrupt", tampered, 60), ("not a list", Data("<html>".utf8), 60),
-                                                         ("stale", rawDat, 40 * 3600)]
+        let bodies: [(String, Data?, TimeInterval)] = [
+            ("unreachable", nil, 60), ("corrupt", tampered, 60), ("not a list", Data("<html>".utf8), 60),
+            ("stale", rawDat, 40 * 3600),
+        ]
         for (label, body, age) in bodies {
             let streams = Locked(0)
-            let f = VGDatFetcher(makeStream: { _, _, _ in streams.update { $0 += 1 }; return ScriptedStream(payload: rawDat) },
-                                 httpGet: { _, _, _, _ in if let body { return body }; throw NoNetwork() },
-                                 cacheURL: dir.appendingPathComponent("c-\(label).dat"), bundleURLs: [fixtureFileURL("VPNGate.dat")],   // never fall through to the CSV mirror (network)
-                                 now: { fileTime.addingTimeInterval(age) }, defaults: throwawayDefaults(), shuffle: { $0 })
+            let f = VGDatFetcher(
+                makeStream: { _, _, _ in
+                    streams.update { $0 += 1 }; return ScriptedStream(payload: rawDat)
+                },
+                httpGet: { _, _, _, _ in
+                    if let body { return body }; throw NoNetwork()
+                },
+                // never fall through to the CSV mirror (network)
+                cacheURL: dir.appendingPathComponent("c-\(label).dat"), bundleURLs: [fixtureFileURL("VPNGate.dat")],
+                now: { fileTime.addingTimeInterval(age) }, defaults: throwawayDefaults(), shuffle: { $0 })
             // for the stale case the relay serves the same old list, so it is rejected there too and the bundle is used
             let r = await f.sync(currentServers: [host(1, ports: [443])], proxy: ProxySettings())
             expectEqual(streams.value, 1, "\(label): the relays are asked after a bad HTTP reply")
@@ -236,15 +254,21 @@ func registerParityTests() {
         let dir = tmpDir(); defer { try? FileManager.default.removeItem(at: dir) }
         for alt in [false, true] {
             let urls = Locked([String]())
-            let f = VGDatFetcher(httpGet: { url, _, _, _ in urls.update { $0.append(url.scheme!) }; throw NoNetwork() },
-                                 cacheURL: dir.appendingPathComponent("c.dat"), bundleURLs: [fixtureFileURL("VPNGate.dat")],
-                                 defaults: throwawayDefaults(), alternativeMode: alt)
+            let f = VGDatFetcher(
+                httpGet: { url, _, _, _ in
+                    urls.update { $0.append(url.scheme!) }; throw NoNetwork()
+                },
+                cacheURL: dir.appendingPathComponent("c.dat"), bundleURLs: [fixtureFileURL("VPNGate.dat")],
+                defaults: throwawayDefaults(), alternativeMode: alt)
             _ = try? await f.fetchFromHTTPApi()
             expectEqual(urls.value, alt ? ["http", "https"] : ["http"])
         }
         let calls = Locked(0)
-        let f = VGDatFetcher(httpGet: { _, _, _, _ in calls.update { $0 += 1 }; throw NoNetwork() },
-                             cacheURL: dir.appendingPathComponent("c.dat"), bundleURLs: [fixtureFileURL("VPNGate.dat")], defaults: throwawayDefaults())
+        let f = VGDatFetcher(
+            httpGet: { _, _, _, _ in
+                calls.update { $0 += 1 }; throw NoNetwork()
+            },
+            cacheURL: dir.appendingPathComponent("c.dat"), bundleURLs: [fixtureFileURL("VPNGate.dat")], defaults: throwawayDefaults())
         var proxy = ProxySettings(); proxy.kind = .socks5; proxy.host = "127.0.0.1"; proxy.port = 1080
         _ = await f.sync(currentServers: [], proxy: proxy)
         expectEqual(calls.value, 0, "URLSession cannot honour the app's proxy, so the API is not asked")
@@ -320,16 +344,21 @@ func registerParityTests() {
 
     // MARK: 6. reconnect of VPN Gate connections
     func ready(_ m: AppModel, _ fake: FakeSession) async {
-        await expectA(await eventuallyA(3) { await MainActor.run { m.pollHelper() }; return await MainActor.run { m.helperRunning } }, "helper never connected")
+        await expectA(
+            await eventuallyA(3) {
+                await MainActor.run { m.pollHelper() }; return await MainActor.run { m.helperRunning }
+            }, "helper never connected")
     }
     func makeModel(_ path: String, defaults: UserDefaults? = nil, delay: TimeInterval = 0.03) async -> AppModel {
         await MainActor.run {
-            AppModel(socketPath: path, defaults: defaults ?? throwawayDefaults(), autoStart: false, openInstaller: { true },
-                     accountManager: AccountManager(fileURL: URL(fileURLWithPath: tempPath("pacc-\(UUID().uuidString.prefix(6)).json"))),
-                     connectionLog: ConnectionLogStore(fileURL: URL(fileURLWithPath: tempPath("phist-\(UUID().uuidString.prefix(6)).json"))),
-                     datFetcher: VGDatFetcher(httpGet: neverHTTP, cacheURL: URL(fileURLWithPath: tempPath("pc-\(UUID().uuidString.prefix(6)).dat")),
-                                              bundleURLs: [], defaults: throwawayDefaults()),
-                     reconnectDelay: delay)
+            AppModel(
+                socketPath: path, defaults: defaults ?? throwawayDefaults(), autoStart: false, openInstaller: { true },
+                accountManager: AccountManager(fileURL: URL(fileURLWithPath: tempPath("pacc-\(UUID().uuidString.prefix(6)).json"))),
+                connectionLog: ConnectionLogStore(fileURL: URL(fileURLWithPath: tempPath("phist-\(UUID().uuidString.prefix(6)).json"))),
+                datFetcher: VGDatFetcher(
+                    httpGet: neverHTTP, cacheURL: URL(fileURLWithPath: tempPath("pc-\(UUID().uuidString.prefix(6)).dat")),
+                    bundleURLs: [], defaults: throwawayDefaults()),
+                reconnectDelay: delay)
         }
     }
     func startFake(_ path: String) -> (IPCServer, FakeSession) {
@@ -399,7 +428,7 @@ func registerParityTests() {
         expect(st == .disconnected, "\(st)")
         try await Task.sleep(nanoseconds: 600_000_000)
         expectEqual(fake.connects.count, 1, "no attempt after the user disconnected")
-        drop(fake)                                  // a late error from the helper must not revive it either
+        drop(fake)  // a late error from the helper must not revive it either
         try await Task.sleep(nanoseconds: 300_000_000)
         expectEqual(fake.connects.count, 1)
     }
@@ -408,7 +437,9 @@ func registerParityTests() {
         let (srv, fake) = startFake(path); defer { srv.stop() }
         let m = await makeModel(path)
         await ready(m, fake)
-        await MainActor.run { m.autoReconnect = false; m.connect(vpnServer()) }
+        await MainActor.run {
+            m.autoReconnect = false; m.connect(vpnServer())
+        }
         await expectA(await eventuallyA(3) { fake.connects.count == 1 })
         drop(fake)
         try await Task.sleep(nanoseconds: 400_000_000)
@@ -432,11 +463,13 @@ func registerParityTests() {
         let dir = tmpDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let fileTime = try VGDat.parse(data: rawDat).timestamp
         let m = await MainActor.run {
-            AppModel(socketPath: tempPath("p.sock"), defaults: throwawayDefaults(), autoStart: false, openInstaller: { true },
-                     accountManager: AccountManager(fileURL: URL(fileURLWithPath: tempPath("pacc2-\(UUID().uuidString.prefix(6)).json"))),
-                     connectionLog: ConnectionLogStore(fileURL: URL(fileURLWithPath: tempPath("phist2-\(UUID().uuidString.prefix(6)).json"))),
-                     datFetcher: VGDatFetcher(httpGet: { _, _, _, _ in rawDat }, cacheURL: dir.appendingPathComponent("c.dat"), bundleURLs: [],
-                                              now: { fileTime.addingTimeInterval(60) }, defaults: throwawayDefaults()))
+            AppModel(
+                socketPath: tempPath("p.sock"), defaults: throwawayDefaults(), autoStart: false, openInstaller: { true },
+                accountManager: AccountManager(fileURL: URL(fileURLWithPath: tempPath("pacc2-\(UUID().uuidString.prefix(6)).json"))),
+                connectionLog: ConnectionLogStore(fileURL: URL(fileURLWithPath: tempPath("phist2-\(UUID().uuidString.prefix(6)).json"))),
+                datFetcher: VGDatFetcher(
+                    httpGet: { _, _, _, _ in rawDat }, cacheURL: dir.appendingPathComponent("c.dat"), bundleURLs: [],
+                    now: { fileTime.addingTimeInterval(60) }, defaults: throwawayDefaults()))
         }
         await MainActor.run { m.refresh() }
         await expectA(await eventuallyA(5) { await MainActor.run { m.listSource == .httpApi && m.scheduledPollDelay != nil } }, "refresh never finished")

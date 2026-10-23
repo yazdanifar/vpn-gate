@@ -34,7 +34,7 @@ func registerTelemetryTests() {
         let server = LocalHTTPServer(body: Data()); defer { server.stop() }
         let defaults = UserDefaults(suiteName: "telemetry-test-\(UUID().uuidString)")!
         let stats = await MainActor.run { VGStatistics(defaults: defaults, startIfEnabled: false) }
-        await MainActor.run { stats.isEnabled = true }   // opt in, but nothing is scheduled (startIfEnabled: false)
+        await MainActor.run { stats.isEnabled = true }  // opt in, but nothing is scheduled (startIfEnabled: false)
         let hostKey = await MainActor.run { stats.hostKey }
 
         let ok = await stats.sendStatistics(overrideURL: server.url)

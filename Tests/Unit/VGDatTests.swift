@@ -1,11 +1,13 @@
-import Foundation
 import CryptoKit
+import Foundation
 import VPNGateCore
 
 /// zlib.compress(b"hello vpngate " * 20) from Python: an independent vector for the inflate path.
 private let zlibPlain = [UInt8](Array(repeating: Array("hello vpngate ".utf8), count: 20).joined())
-private let zlibFixture: [UInt8] = [0x78, 0x9c, 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x57, 0x28, 0x2b, 0xc8, 0x4b, 0x4f, 0x2c, 0x49,
-                                    0x55, 0xc8, 0x18, 0xe5, 0x41, 0x79, 0x00, 0x25, 0x32, 0x69, 0xb5]
+private let zlibFixture: [UInt8] = [
+    0x78, 0x9c, 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x57, 0x28, 0x2b, 0xc8, 0x4b, 0x4f, 0x2c, 0x49,
+    0x55, 0xc8, 0x18, 0xe5, 0x41, 0x79, 0x00, 0x25, 0x32, 0x69, 0xb5,
+]
 
 private func fixtureURL(_ name: String, file: String = #filePath) -> URL {
     URL(fileURLWithPath: file).deletingLastPathComponent().deletingLastPathComponent()
@@ -140,17 +142,19 @@ func registerVGDatTests() {
         let good = try VGDat.decompress(data: zlibFixture, expectedSize: zlibPlain.count)
         expectEqual(good, zlibPlain)
         // too large an expected size, too small, bad Adler-32, bad header, absurd size
-        for (bytes, size) in [(zlibFixture, zlibPlain.count + 1), (zlibFixture, zlibPlain.count - 1),
-                              (zlibFixture.dropLast() + [zlibFixture.last! ^ 1], zlibPlain.count),
-                              ([0x00] + zlibFixture.dropFirst(), zlibPlain.count),
-                              (zlibFixture, VGDat.maxInflatedSize + 1)] as [([UInt8], Int)] {
+        for (bytes, size) in [
+            (zlibFixture, zlibPlain.count + 1), (zlibFixture, zlibPlain.count - 1),
+            (zlibFixture.dropLast() + [zlibFixture.last! ^ 1], zlibPlain.count),
+            ([0x00] + zlibFixture.dropFirst(), zlibPlain.count),
+            (zlibFixture, VGDat.maxInflatedSize + 1),
+        ] as [([UInt8], Int)] {
             do { _ = try VGDat.decompress(data: bytes, expectedSize: size); expect(false, "must reject") } catch {}
         }
     }
 
     test("vgdat/invalid-header-is-rejected") {
         var data = fixtureData("VPNGate.dat")
-        data[0] = 0x58 // replace '[' with 'X'
+        data[0] = 0x58  // replace '[' with 'X'
         var failed = false
         do {
             _ = try VGDat.parse(data: data)
@@ -163,8 +167,9 @@ func registerVGDatTests() {
     test("vgdat/fetcher-bootstrap-picks-the-newest-stored-list") {
         let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let fileTime = try VGDat.parse(data: fixtureData("VPNGate.dat")).timestamp
-        let fetcher = VGDatFetcher(httpGet: { _, _, _, _ in throw StreamError.closed }, cacheURL: dir.appendingPathComponent("VPNGate.dat"),
-                                   bundleURLs: [fixtureURL("VPNGate.dat")], now: { fileTime.addingTimeInterval(3600) })
+        let fetcher = VGDatFetcher(
+            httpGet: { _, _, _, _ in throw StreamError.closed }, cacheURL: dir.appendingPathComponent("VPNGate.dat"),
+            bundleURLs: [fixtureURL("VPNGate.dat")], now: { fileTime.addingTimeInterval(3600) })
         expect(fetcher.loadCached() == nil, "empty temp cache")
         let bundled = fetcher.loadBundleDat()
         expectEqual(bundled?.servers.count, 200)
@@ -175,8 +180,9 @@ func registerVGDatTests() {
         expect(result.isFresh, "an hour old is fresh")
 
         // Past 36 h the list is still used (it is signed) but is flagged stale.
-        let stale = VGDatFetcher(httpGet: { _, _, _, _ in throw StreamError.closed }, cacheURL: dir.appendingPathComponent("VPNGate.dat"),
-                                 bundleURLs: [fixtureURL("VPNGate.dat")], now: { fileTime.addingTimeInterval(40 * 3600) })
+        let stale = VGDatFetcher(
+            httpGet: { _, _, _, _ in throw StreamError.closed }, cacheURL: dir.appendingPathComponent("VPNGate.dat"),
+            bundleURLs: [fixtureURL("VPNGate.dat")], now: { fileTime.addingTimeInterval(40 * 3600) })
         let staleResult = await stale.sync(currentServers: [], proxy: ProxySettings())
         expectEqual(staleResult.servers.count, 200)
         expect(!staleResult.isFresh, "40 h old must be flagged stale")
@@ -218,8 +224,9 @@ func registerVGDatTests() {
         let rawPayload = fixtureData("VPNGate.dat")
         let fileTime = try VGDat.parse(data: rawPayload).timestamp
         let stream = RelayStream(payload: rawPayload)
-        let fetcher = VGDatFetcher(makeStream: { _, _, _ in stream }, cacheURL: cache,
-                                   bundleURLs: [], now: { fileTime.addingTimeInterval(60) })
+        let fetcher = VGDatFetcher(
+            makeStream: { _, _, _ in stream }, cacheURL: cache,
+            bundleURLs: [], now: { fileTime.addingTimeInterval(60) })
 
         let dat = try await fetcher.downloadFromHost(host: "1.2.3.4", port: 443, proxy: ProxySettings())
         expectEqual(dat.servers.count, 200)
@@ -245,8 +252,9 @@ func registerVGDatTests() {
         let rawPayload = fixtureData("VPNGate.dat")
         let fileTime = try VGDat.parse(data: rawPayload).timestamp
         let stream = RelayStream(payload: rawPayload)
-        let fetcher = VGDatFetcher(makeStream: { _, _, _ in stream }, cacheURL: cache,
-                                   bundleURLs: [], now: { fileTime.addingTimeInterval(40 * 3600) })
+        let fetcher = VGDatFetcher(
+            makeStream: { _, _, _ in stream }, cacheURL: cache,
+            bundleURLs: [], now: { fileTime.addingTimeInterval(40 * 3600) })
         do { _ = try await fetcher.downloadFromHost(host: "1.2.3.4", port: 443, proxy: ProxySettings()); expect(false, "stale must throw") } catch {}
         expect(!FileManager.default.fileExists(atPath: cache.path), "a stale list must not be cached")
         expect(stream.isCancelled)
@@ -255,11 +263,13 @@ func registerVGDatTests() {
     test("vgdat/fetcher-gives-up-on-a-relay-that-stops-answering") {
         let stream = RelayStream(payload: Data(), hangAfterStart: true)
         let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
-        let fetcher = VGDatFetcher(makeStream: { _, _, _ in stream }, cacheURL: dir.appendingPathComponent("x.dat"),
-                                   bundleURLs: [], timeoutScale: 0.005)   // 60 s -> 0.3 s
+        let fetcher = VGDatFetcher(
+            makeStream: { _, _, _ in stream }, cacheURL: dir.appendingPathComponent("x.dat"),
+            bundleURLs: [], timeoutScale: 0.005)  // 60 s -> 0.3 s
         let started = Date()
-        do { _ = try await fetcher.downloadFromHost(host: "1.2.3.4", port: 443, proxy: ProxySettings()); expect(false, "must time out") }
-        catch let e as StreamError { expect(String(describing: e).contains("timeout"), "expected timeout, got \(e)") }
+        do { _ = try await fetcher.downloadFromHost(host: "1.2.3.4", port: 443, proxy: ProxySettings()); expect(false, "must time out") } catch let e
+            as StreamError
+        { expect(String(describing: e).contains("timeout"), "expected timeout, got \(e)") }
         expect(Date().timeIntervalSince(started) < 5, "must not hang")
         expect(stream.isCancelled, "socket released after timeout")
     }

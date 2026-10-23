@@ -1,5 +1,5 @@
-import Foundation
 import Darwin
+import Foundation
 import VPNGateCore
 
 // Usage:
@@ -37,7 +37,9 @@ if let (host, port) = parseProbeArgs(CommandLine.arguments) {
                 if let t = becameUsableAt {
                     print("OK udp usable after \(t)s (still usable: \(c.udpAccelUsable))")
                 } else if c.udpAccelNegotiated {
-                    print("FAIL udp negotiated by the server but never became usable in \(seconds)s (likely blocked/dropped on this network; TCP fallback is what carries traffic instead)")
+                    print(
+                        "FAIL udp negotiated by the server but never became usable in \(seconds)s (likely blocked/dropped on this network; TCP fallback is what carries traffic instead)"
+                    )
                 } else {
                     print("OK udp not negotiated by this server; nothing to watch (TCP only)")
                 }
@@ -79,13 +81,15 @@ if let host = opt("--connect") {
         if e.state == .connected, e.bytesIn == 0, e.bytesOut == 0 { print("[connected] virtual IP \(e.virtualIP ?? "?")") }
     }
     guard InputValidation.isValidHost(host) else { print("invalid host"); exit(2) }
-    session.connect(host: host, port: opt("--port").flatMap(Int.init), proxy: ProxySettings(),
-                    autoReconnect: false, blockIPv6: !args.contains("--allow-ipv6"))
+    session.connect(
+        host: host, port: opt("--port").flatMap(Int.init), proxy: ProxySettings(),
+        autoReconnect: false, blockIPv6: !args.contains("--allow-ipv6"))
 } else if args.contains("--daemon") {
     // Kept in a global: a local here is released when this block ends, which silently stopped IPC.
     let fixedUID = opt("--uid").flatMap { uid_t($0) }
-    ipcServer = IPCServer(path: socketPath, allowedUID: fixedUID,
-                          consoleUID: fixedUID == nil ? currentConsoleUID : { nil }, session: session)
+    ipcServer = IPCServer(
+        path: socketPath, allowedUID: fixedUID,
+        consoleUID: fixedUID == nil ? currentConsoleUID : { nil }, session: session)
     do { try ipcServer!.start() } catch { print("IPC: \(error)"); exit(1) }
     print("vpngate-helper listening on \(socketPath)")
 } else {

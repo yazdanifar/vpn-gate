@@ -87,7 +87,7 @@ final class ConnectionPool {
         }
 
         let watchdog = Task.detached { [weak self] in
-            guard direction.canReceive else { return }   // send-only: never receiving is expected, not a timeout
+            guard direction.canReceive else { return }  // send-only: never receiving is expected, not a timeout
             let pollNs = UInt64(max(timeoutMs / 2, 50)) * 1_000_000
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: pollNs)

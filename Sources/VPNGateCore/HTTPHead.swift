@@ -2,7 +2,7 @@ import Foundation
 
 public struct HTTPHead: Equatable {
     public var status: String
-    public var headers: [String: String]      // names lowercased
+    public var headers: [String: String]  // names lowercased
 
     public var statusCode: Int? {
         let p = status.split(separator: " ")

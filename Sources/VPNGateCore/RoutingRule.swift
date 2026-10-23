@@ -73,7 +73,7 @@ public struct RoutingRule: Identifiable, Codable, Equatable, Hashable {
         case .domainSuffix, .domainFull:
             return isPlausibleDomain(v) ? nil : "Not a valid domain name."
         case .domainKeyword:
-            return nil                                    // any substring is valid
+            return nil  // any substring is valid
         case .domainRegex:
             return (try? NSRegularExpression(pattern: v)) != nil ? nil : "Not a valid regular expression."
         case .ip:
@@ -154,7 +154,10 @@ public enum RoutingMatcher {
                 if d.contains(rule.value.lowercased()) { return rule }
             case .domainRegex:
                 if let re = try? NSRegularExpression(pattern: rule.value, options: [.caseInsensitive]),
-                   re.firstMatch(in: d, range: NSRange(d.startIndex..., in: d)) != nil { return rule }
+                    re.firstMatch(in: d, range: NSRange(d.startIndex..., in: d)) != nil
+                {
+                    return rule
+                }
             default: break
             }
         }
@@ -181,8 +184,8 @@ public enum RoutingMatcher {
 
 /// A parsed IPv4/IPv6 address or CIDR range, compared as raw bytes so v4 and v6 share one implementation.
 struct CIDRMatcher {
-    let bytes: [UInt8]           // 4 (v4) or 16 (v6)
-    let prefixLength: Int        // bits that must match; bytes.count * 8 for a bare address
+    let bytes: [UInt8]  // 4 (v4) or 16 (v6)
+    let prefixLength: Int  // bits that must match; bytes.count * 8 for a bare address
 
     init?(_ text: String) {
         let parts = text.split(separator: "/", maxSplits: 1)

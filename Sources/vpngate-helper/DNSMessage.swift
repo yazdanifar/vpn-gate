@@ -27,7 +27,7 @@ enum DNSMessage {
             q.append(UInt8(bytes.count)); q.append(contentsOf: bytes)
         }
         q.append(0)
-        q.append(contentsOf: [0, 1, 0, 1])                  // QTYPE A, QCLASS IN
+        q.append(contentsOf: [0, 1, 0, 1])  // QTYPE A, QCLASS IN
         return q
     }
 
@@ -37,7 +37,7 @@ enum DNSMessage {
         var offset = 12
         for _ in 0..<h.qdcount {
             guard let afterName = skipName(p, offset) else { return [] }
-            offset = afterName + 4                               // QTYPE + QCLASS
+            offset = afterName + 4  // QTYPE + QCLASS
         }
         var out = [String]()
         for _ in 0..<h.ancount {
@@ -64,11 +64,11 @@ enum DNSMessage {
     private static func fixedRCodeResponse(for query: [UInt8], rcode: UInt8) -> [UInt8] {
         guard query.count >= 12 else { return query }
         var out = query
-        out[2] |= 0x80                                    // QR = 1 (this is a response)
+        out[2] |= 0x80  // QR = 1 (this is a response)
         out[3] = (out[3] & 0xF0) | (rcode & 0x0F)
-        out[6] = 0; out[7] = 0                             // ANCOUNT = 0
-        out[8] = 0; out[9] = 0                             // NSCOUNT = 0
-        out[10] = 0; out[11] = 0                           // ARCOUNT = 0
+        out[6] = 0; out[7] = 0  // ANCOUNT = 0
+        out[8] = 0; out[9] = 0  // NSCOUNT = 0
+        out[10] = 0; out[11] = 0  // ARCOUNT = 0
         // Drop anything past the question section (there should be no answers to drop from a query, but be safe).
         if let afterQuestion = skipName(out, 12).map({ $0 + 4 }), afterQuestion <= out.count {
             return Array(out[0..<afterQuestion])
@@ -84,7 +84,7 @@ enum DNSMessage {
             steps += 1
             let len = Int(p[o])
             if len == 0 { return o + 1 }
-            if len & 0xC0 == 0xC0 { return o + 2 }         // pointer: 2 bytes, terminal
+            if len & 0xC0 == 0xC0 { return o + 2 }  // pointer: 2 bytes, terminal
             o += 1 + len
         }
     }

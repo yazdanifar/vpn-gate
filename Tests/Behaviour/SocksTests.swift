@@ -1,5 +1,5 @@
-import Foundation
 import Darwin
+import Foundation
 import VPNGateCore
 
 /// Connects straight to loopback (no interface binding) and records what was asked for.
@@ -83,8 +83,9 @@ private struct StubDNS: DNSUpstream {
     func query(_ message: [UInt8], server: String, timeoutMs: Int32) -> [UInt8]? { ip.map { dnsAnswer(for: message, ip: $0) } }
 }
 
-private let socksLease = Lease(ip: 0x0AE991B6, mask: 0xFFFF0000, router: 0x0AE9FEFE,
-                               dns: [0x0AE9FEFE], seconds: 3600, serverID: 0x0AE9FEFE)
+private let socksLease = Lease(
+    ip: 0x0AE991B6, mask: 0xFFFF0000, router: 0x0AE9FEFE,
+    dns: [0x0AE9FEFE], seconds: 3600, serverID: 0x0AE9FEFE)
 
 func registerSocksTests() {
     test("socks/relays-both-directions-for-an-ipv4-destination") {
@@ -119,7 +120,7 @@ func registerSocksTests() {
         }
         do {
             let fd = dial(server.boundPort); defer { close(fd) }
-            _ = SocksServer.writeAll(fd, [5, 1, 2])                          // only username/password offered
+            _ = SocksServer.writeAll(fd, [5, 1, 2])  // only username/password offered
             expectEqual(SocksServer.readExactly(fd, 2), [5, 0xFF])
         }
         do {
@@ -164,7 +165,9 @@ func registerSocksTests() {
         let fd = dial(server.boundPort); defer { close(fd) }
         expectEqual(socksConnect(fd, atyp: 1, dest: [127, 0, 0, 1], port: echo.port), 0)
         let total = 4 * 1024 * 1024
-        let writer = Thread { _ = SocksServer.writeAll(fd, [UInt8](repeating: 7, count: total)); shutdown(fd, SHUT_WR) }
+        let writer = Thread {
+            _ = SocksServer.writeAll(fd, [UInt8](repeating: 7, count: total)); shutdown(fd, SHUT_WR)
+        }
         writer.start()
         var got = 0
         var buf = [UInt8](repeating: 0, count: 65536)
@@ -174,8 +177,9 @@ func registerSocksTests() {
     test("socks/tunnel-connector-resolves-through-the-vpn-dns-and-binds-the-interface") {
         let echo = EchoServer()
         // lo0 stands in for the utun: the socket is really bound to it with IP_BOUND_IF.
-        let c = TunnelConnector(interfaceIndex: if_nametoindex("lo0"), dnsServers: ["10.233.254.254"],
-                                upstream: StubDNS(ip: [127, 0, 0, 1]))
+        let c = TunnelConnector(
+            interfaceIndex: if_nametoindex("lo0"), dnsServers: ["10.233.254.254"],
+            upstream: StubDNS(ip: [127, 0, 0, 1]))
         switch c.connect(host: "example.test", port: echo.port) {
         case .success(let fd): close(fd)
         case .failure(let f): fail("connect failed: \(f)")
@@ -198,8 +202,9 @@ func registerSocksTests() {
         expect(r.log.contains("/sbin/route -n add -ifscope utun7 default 10.233.254.254"), "log: \(r.log)")
         expect(r.log.contains("/sbin/route -n add -ifscope utun7 -host 10.233.254.254 -interface utun7"), "log: \(r.log)")
         expect(r.log.filter { $0.contains("route -n add") }.allSatisfy { $0.contains("-ifscope") }, "every route must be scoped: \(r.log)")
-        expect(!r.log.contains { $0.contains("0.0.0.0/1") || $0.contains("128.0.0.0/1") || $0.contains("::/1") || $0.contains("get default") },
-               "no global route may be touched: \(r.log)")
+        expect(
+            !r.log.contains { $0.contains("0.0.0.0/1") || $0.contains("128.0.0.0/1") || $0.contains("::/1") || $0.contains("get default") },
+            "no global route may be touched: \(r.log)")
         expectEqual(d.setCalls.count, 0)
         n.teardown()
         expect(r.log.contains("/sbin/route -n delete -ifscope utun7 default 10.233.254.254"), "log: \(r.log)")
@@ -229,7 +234,7 @@ func registerSocksTests() {
     test("socks/ipc-rejects-ports-outside-1024-65535") {
         var r = HelperRequest(cmd: "connect"); r.host = "1.2.3.4"
         r.socksPort = 80
-        expectEqual(IPCServer.validate(r), nil)            // full tunnel ignores the port
+        expectEqual(IPCServer.validate(r), nil)  // full tunnel ignores the port
         r.tunnelMode = .socksProxy
         expect(IPCServer.validate(r) != nil)
         r.socksPort = 1080

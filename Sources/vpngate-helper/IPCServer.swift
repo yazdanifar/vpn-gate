@@ -1,5 +1,5 @@
-import Foundation
 import Darwin
+import Foundation
 import VPNGateCore
 
 /// One connected app. Writes go through a bounded outbox drained on the client's own queue with a
@@ -26,7 +26,7 @@ private final class IPCClient {
     func send(_ d: Data) {
         lock.lock()
         if closed { lock.unlock(); return }
-        if outbox.count >= Self.maxQueued { outbox.removeFirst() }       // events are state snapshots: newest wins
+        if outbox.count >= Self.maxQueued { outbox.removeFirst() }  // events are state snapshots: newest wins
         outbox.append(d)
         let start = !draining
         draining = true
@@ -50,7 +50,7 @@ private final class IPCClient {
                     var p = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
                     if poll(&p, 1, Self.stallTimeoutMs) > 0 { continue }
                 }
-                close()                                                  // stalled or broken: drop this client only
+                close()  // stalled or broken: drop this client only
                 return
             }
         }
@@ -105,7 +105,7 @@ final class IPCServer {
             while isRunning {
                 let c = accept(fd, nil, nil)
                 if c < 0 {
-                    if errno != EINTR && errno != ECONNABORTED { Thread.sleep(forTimeInterval: 0.05) }   // e.g. EMFILE: don't spin
+                    if errno != EINTR && errno != ECONNABORTED { Thread.sleep(forTimeInterval: 0.05) }  // e.g. EMFILE: don't spin
                     continue
                 }
                 var uid: uid_t = 0, gid: gid_t = 0
@@ -143,7 +143,7 @@ final class IPCServer {
             if n == 0 || (n < 0 && errno != EAGAIN && errno != EINTR) { break }
             if n < 0 { continue }
             buf.append(contentsOf: chunk[0..<n])
-            if buf.count > 1 << 20 { break }                             // runaway line: drop the client
+            if buf.count > 1 << 20 { break }  // runaway line: drop the client
             while let nl = buf.firstIndex(of: 10) {
                 let line = buf[buf.startIndex..<nl]
                 buf = Data(buf[buf.index(after: nl)...])
@@ -200,9 +200,10 @@ final class IPCServer {
             if let cfg = r.config {
                 session.connect(config: cfg)
             } else {
-                session.connect(host: r.host!, port: r.port, ports: r.ports, proxy: r.proxy ?? ProxySettings(),
-                                autoReconnect: r.autoReconnect ?? true, blockIPv6: r.blockIPv6 ?? true, routing: r.routing,
-                                tunnelMode: r.tunnelMode ?? .fullTunnel, socksPort: r.socksPort ?? defaultSocksPort)
+                session.connect(
+                    host: r.host!, port: r.port, ports: r.ports, proxy: r.proxy ?? ProxySettings(),
+                    autoReconnect: r.autoReconnect ?? true, blockIPv6: r.blockIPv6 ?? true, routing: r.routing,
+                    tunnelMode: r.tunnelMode ?? .fullTunnel, socksPort: r.socksPort ?? defaultSocksPort)
             }
         case "disconnect": session.disconnect()
         default: send(client, session.snapshot)

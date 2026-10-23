@@ -40,7 +40,10 @@ public struct ByteBuffer {
     }
 
     private mutating func compactIfNeeded() {
-        if head == storage.count { storage.removeAll(keepingCapacity: true); head = 0 }
-        else if head > 1 << 16 && head * 2 > storage.count { storage.removeFirst(head); head = 0 }
+        if head == storage.count {
+            storage.removeAll(keepingCapacity: true); head = 0
+        } else if head > 1 << 16 && head * 2 > storage.count {
+            storage.removeFirst(head); head = 0
+        }
     }
 }

@@ -84,8 +84,9 @@ func registerRoutingRuleTests() {
         expect(!RoutingConfig(rules: [RoutingRule(type: .ip, value: "1.1.1.1", action: .direct)]).isEmpty)
     }
     test("routing/codable-roundtrip-and-tolerant-decoding") {
-        let cfg = RoutingConfig(rules: [RoutingRule(type: .domainSuffix, value: "example.com", action: .direct)],
-                                defaultAction: .proxy, bypassPrivateNetworks: true)
+        let cfg = RoutingConfig(
+            rules: [RoutingRule(type: .domainSuffix, value: "example.com", action: .direct)],
+            defaultAction: .proxy, bypassPrivateNetworks: true)
         let data = try JSONEncoder().encode(cfg)
         let decoded = try JSONDecoder().decode(RoutingConfig.self, from: data)
         expectEqual(decoded, cfg)
@@ -95,8 +96,8 @@ func registerRoutingRuleTests() {
     }
     test("routing/validation-catches-malformed-values") {
         expect(RoutingRule.validationError(type: .ip, value: "not-an-ip") != nil)
-        expect(RoutingRule.validationError(type: .cidr, value: "10.0.0.0") != nil)         // missing /prefix
-        expect(RoutingRule.validationError(type: .cidr, value: "10.0.0.0/33") != nil)      // out of range
+        expect(RoutingRule.validationError(type: .cidr, value: "10.0.0.0") != nil)  // missing /prefix
+        expect(RoutingRule.validationError(type: .cidr, value: "10.0.0.0/33") != nil)  // out of range
         expect(RoutingRule.validationError(type: .domainRegex, value: "(unterminated") != nil)
         expect(RoutingRule.validationError(type: .domainFull, value: "") != nil)
         expect(RoutingRule.validationError(type: .ip, value: "8.8.8.8") == nil)

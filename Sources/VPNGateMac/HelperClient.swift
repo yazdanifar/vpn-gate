@@ -1,5 +1,5 @@
-import Foundation
 import Darwin
+import Foundation
 import VPNGateCore
 
 /// Talks to the privileged helper over its Unix socket.

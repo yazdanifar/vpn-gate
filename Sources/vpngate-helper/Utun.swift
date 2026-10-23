@@ -1,5 +1,5 @@
-import Foundation
 import Darwin
+import Foundation
 
 enum UtunError: Error, LocalizedError {
     case failed(String)
@@ -37,11 +37,13 @@ final class FDPacketReader {
         Thread.detachNewThread { [weak self] in
             var buf = [UInt8](repeating: 0, count: 65536)
             loop: while true {
-                var fds = [pollfd(fd: fd, events: Int16(POLLIN), revents: 0),
-                           pollfd(fd: p[0], events: Int16(POLLIN), revents: 0)]
+                var fds = [
+                    pollfd(fd: fd, events: Int16(POLLIN), revents: 0),
+                    pollfd(fd: p[0], events: Int16(POLLIN), revents: 0),
+                ]
                 let r = poll(&fds, 2, -1)
                 if r < 0 { if errno == EINTR { continue }; break }
-                if fds[1].revents != 0 { break }                       // close() asked us to stop
+                if fds[1].revents != 0 { break }  // close() asked us to stop
                 if fds[0].revents & Int16(POLLIN) == 0 { if fds[0].revents != 0 { break }; continue }
                 let n = read(fd, &buf, buf.count)
                 if n < 0 { if errno == EAGAIN || errno == EINTR { continue }; break loop }
@@ -67,7 +69,7 @@ final class FDPacketReader {
     func write(ipv6 packet: [UInt8]) {
         lock.lock(); defer { lock.unlock() }
         guard fd >= 0 else { return }
-        let out: [UInt8] = [0, 0, 0, 30] + packet // 30 = AF_INET6 on macOS
+        let out: [UInt8] = [0, 0, 0, 30] + packet  // 30 = AF_INET6 on macOS
         _ = out.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, out.count) }
     }
 
@@ -114,8 +116,8 @@ final class Utun: TunDevice {
 
         // struct sockaddr_ctl { u8 len; u8 family; u16 sysaddr; u32 id; u32 unit; u32 reserved[5]; }
         var addr = [UInt8](repeating: 0, count: 32)
-        addr[0] = 32; addr[1] = 32            // sc_len, AF_SYSTEM
-        addr[2] = 2                           // AF_SYS_CONTROL (little endian u16)
+        addr[0] = 32; addr[1] = 32  // sc_len, AF_SYSTEM
+        addr[2] = 2  // AF_SYS_CONTROL (little endian u16)
         withUnsafeBytes(of: ctlID) { addr.replaceSubrange(4..<8, with: $0) }
         // sc_unit = 0 lets the kernel pick the next free utunN
         let rc = addr.withUnsafeBytes { connect(s, $0.baseAddress!.assumingMemoryBound(to: sockaddr.self), 32) }

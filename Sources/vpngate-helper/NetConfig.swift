@@ -50,7 +50,7 @@ struct SystemDNS: DNSConfigurator {
         if !(okDNS && okIPv4) {
             print("[dns] publishing resolver failed: \(String(cString: SCErrorString(SCError())))")
         }
-        return okDNS || okIPv4          // record partial success too, so teardown removes whatever was set
+        return okDNS || okIPv4  // record partial success too, so teardown removes whatever was set
     }
 
     func remove() {
@@ -62,10 +62,11 @@ struct SystemDNS: DNSConfigurator {
     /// The primary service's resolvers right now, read before `set()` has published the tunnel's own entities.
     func currentServers() -> [String] {
         guard let store = SCDynamicStoreCreate(nil, "vpngate-mac" as CFString, nil, nil),
-              let global = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString) as? [String: Any],
-              let serviceID = global["PrimaryService"] as? String,
-              let dns = SCDynamicStoreCopyValue(store, "State:/Network/Service/\(serviceID)/DNS" as CFString) as? [String: Any],
-              let servers = dns["ServerAddresses"] as? [String] else { return [] }
+            let global = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString) as? [String: Any],
+            let serviceID = global["PrimaryService"] as? String,
+            let dns = SCDynamicStoreCopyValue(store, "State:/Network/Service/\(serviceID)/DNS" as CFString) as? [String: Any],
+            let servers = dns["ServerAddresses"] as? [String]
+        else { return [] }
         return servers
     }
 }
@@ -93,8 +94,10 @@ final class NetConfig: NetConfiguring {
     private var tunnelGateway: String?
     private var capturedPhysicalDNS: [String] = []
 
-    init(runner: CommandRunner = SystemRunner(), dns: DNSConfigurator = SystemDNS(),
-         stateFile: String = NetConfig.defaultStateFile) {
+    init(
+        runner: CommandRunner = SystemRunner(), dns: DNSConfigurator = SystemDNS(),
+        stateFile: String = NetConfig.defaultStateFile
+    ) {
         self.runner = runner; self.dns = dns; self.stateFile = stateFile
     }
 
@@ -113,16 +116,21 @@ final class NetConfig: NetConfiguring {
 
     /// Host route that keeps traffic to `host` on the original default path instead of the tunnel.
     private func addBypassRoute(_ host: String, via o: (gateway: String?, iface: String)) {
-        if let g = o.gateway { addRoute(["-host", host, g], undo: ["-host", host]) }
-        else { addRoute(["-host", host, "-interface", o.iface], undo: ["-host", host]) }
+        if let g = o.gateway {
+            addRoute(["-host", host, g], undo: ["-host", host])
+        } else {
+            addRoute(["-host", host, "-interface", o.iface], undo: ["-host", host])
+        }
     }
 
     /// `mtuOverride` is the account's own "Virtual Network Adapter" MTU setting (SoftEther Client Manager), when
     /// the user set one explicitly; it wins over whatever the DHCP lease offers, matching the real client.
     /// `routing` is the user's routing rules; nil/empty keeps the pre-existing full-tunnel behaviour. `dnsProxyAddress`
     /// publishes that address as the resolver instead of the lease's own DNS (used when a `DNSProxy` is running).
-    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool = true, mtuOverride: Int? = nil,
-              routing: RoutingConfig? = nil, dnsProxyAddress: String? = nil) throws {
+    func apply(
+        iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool = true, mtuOverride: Int? = nil,
+        routing: RoutingConfig? = nil, dnsProxyAddress: String? = nil
+    ) throws {
         let ip = ipString(lease.ip), gw = ipString(lease.router)
         let orig = Self.defaultRoute(runner)
         originalRoute = orig
@@ -200,20 +208,19 @@ final class NetConfig: NetConfiguring {
 
     /// Adds an explicit route for one IP/CIDR routing rule, overriding whatever the default capture (or its
     /// absence, with `defaultAction: .direct`) would otherwise do with that address.
-    private func addRuleRoute(_ value: String, action: RoutingAction, iface: String, gw: String,
-                              orig: (gateway: String?, iface: String)?) {
+    private func addRuleRoute(
+        _ value: String, action: RoutingAction, iface: String, gw: String,
+        orig: (gateway: String?, iface: String)?
+    ) {
         let isV6 = value.contains(":")
         let netArgs: [String]
-        if value.contains("/") { netArgs = (isV6 ? ["-inet6"] : []) + ["-net", value] }
-        else { netArgs = (isV6 ? ["-inet6"] : []) + ["-host", value] }
+        if value.contains("/") { netArgs = (isV6 ? ["-inet6"] : []) + ["-net", value] } else { netArgs = (isV6 ? ["-inet6"] : []) + ["-host", value] }
         switch action {
         case .direct:
             guard let o = orig else { return }
-            if let g = o.gateway, !isV6 { addRoute(netArgs + [g], undo: netArgs) }
-            else { addRoute(netArgs + ["-interface", o.iface], undo: netArgs) }
+            if let g = o.gateway, !isV6 { addRoute(netArgs + [g], undo: netArgs) } else { addRoute(netArgs + ["-interface", o.iface], undo: netArgs) }
         case .proxy:
-            if isV6 { addRoute(netArgs + ["-interface", iface], undo: netArgs) }
-            else { addRoute(netArgs + [gw], undo: netArgs) }
+            if isV6 { addRoute(netArgs + ["-interface", iface], undo: netArgs) } else { addRoute(netArgs + [gw], undo: netArgs) }
         case .block:
             addRoute(netArgs + ["-blackhole"], undo: netArgs)
         }
@@ -229,14 +236,16 @@ final class NetConfig: NetConfiguring {
     func addBypass(host: String) {
         // The host ends up as a `route` argument, so only a plain IPv4 literal is accepted.
         guard state != nil, InputValidation.isIPv4Literal(host), !InputValidation.isLocalAddress(host),
-              host != state?.bypassHost, let o = originalRoute else { return }
+            host != state?.bypassHost, let o = originalRoute
+        else { return }
         addBypassRoute(host, via: o)
     }
 
     func configureIPv6(address: [UInt8], prefixLength: Int) {
         // Never a placeholder, multicast or link-local address (the kernel already has its own link-local one).
         guard let iface = state?.iface, address.count == 16, (1...128).contains(prefixLength),
-              address.contains(where: { $0 != 0 }), address[0] != 0xff, !IPv6.isLinkLocal(address) else { return }
+            address.contains(where: { $0 != 0 }), address[0] != 0xff, !IPv6.isLinkLocal(address)
+        else { return }
         let r = runner.run("/sbin/ifconfig", [iface, "inet6", IPv6.string(address), "prefixlen", String(prefixLength)])
         if r.status != 0 {
             print("[ifconfig] inet6 \(IPv6.string(address)) failed (\(r.status)): \(r.out.trimmingCharacters(in: .whitespacesAndNewlines))")
@@ -251,10 +260,13 @@ final class NetConfig: NetConfiguring {
     }
 
     /// Remove leftovers from a previous run that did not shut down cleanly.
-    static func cleanupStale(runner: CommandRunner = SystemRunner(), dns: DNSConfigurator = SystemDNS(),
-                             stateFile: String = defaultStateFile) {
+    static func cleanupStale(
+        runner: CommandRunner = SystemRunner(), dns: DNSConfigurator = SystemDNS(),
+        stateFile: String = defaultStateFile
+    ) {
         guard let d = try? Data(contentsOf: URL(fileURLWithPath: stateFile)),
-              let st = try? JSONDecoder().decode(State.self, from: d) else { return }
+            let st = try? JSONDecoder().decode(State.self, from: d)
+        else { return }
         cleanup(st, runner, dns)
         try? FileManager.default.removeItem(atPath: stateFile)
     }
@@ -263,7 +275,7 @@ final class NetConfig: NetConfiguring {
         guard let st = st else { return }
         if let added = st.addedRoutes {
             for undo in added.reversed() { runner.run("/sbin/route", ["-n", "delete"] + undo) }
-        } else {            // state written by an older version: remove what it would have added
+        } else {  // state written by an older version: remove what it would have added
             runner.run("/sbin/route", ["-n", "delete", "-net", "0.0.0.0/1", st.gateway])
             runner.run("/sbin/route", ["-n", "delete", "-net", "128.0.0.0/1", st.gateway])
             runner.run("/sbin/route", ["-n", "delete", "-host", st.gateway])

@@ -58,8 +58,9 @@ extension DNSConfigurator {
 protocol NetConfiguring: AnyObject {
     /// `dnsProxyAddress`, when given, is published as the system's resolver instead of the DHCP lease's own DNS
     /// (the caller has a `DNSProxy` already listening there; domain routing rules need one to work at all).
-    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool, mtuOverride: Int?, routing: RoutingConfig?,
-              dnsProxyAddress: String?) throws
+    func apply(
+        iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool, mtuOverride: Int?, routing: RoutingConfig?,
+        dnsProxyAddress: String?) throws
     /// Adds a host route around the tunnel for a further peer (redirect target, UDP acceleration endpoint); removed by `teardown()`.
     func addBypass(host: String)
     /// Puts the SLAAC address learned from a Router Advertisement on the tunnel interface (only used when IPv6 is not blocked).
@@ -91,14 +92,17 @@ protocol SessionControlling: AnyObject {
     func connect(config: ConnectConfig)
     func connect(host: String, port: Int?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool)
     func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?)
-    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?,
-                 tunnelMode: TunnelMode, socksPort: Int)
+    func connect(
+        host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?,
+        tunnelMode: TunnelMode, socksPort: Int)
     func disconnect()
 }
 
 extension SessionControlling {
-    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?,
-                 tunnelMode: TunnelMode, socksPort: Int) {
+    func connect(
+        host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?,
+        tunnelMode: TunnelMode, socksPort: Int
+    ) {
         connect(host: host, port: port, ports: ports, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6, routing: routing)
     }
 }

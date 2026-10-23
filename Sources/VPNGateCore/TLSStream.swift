@@ -68,21 +68,23 @@ public final class TLSStream: ByteStream {
         let tls = NWProtocolTLS.Options()
         let sec = tls.securityProtocolOptions
         let failure = verifyFailure
-        sec_protocol_options_set_verify_block(sec, { metadata, trust, complete in
-            var leaf: Data?
-            sec_protocol_metadata_access_peer_certificate_chain(metadata) { cert in
-                if leaf == nil { leaf = SecCertificateCopyData(sec_certificate_copy_ref(cert).takeRetainedValue()) as Data }
-            }
-            if let why = policy.rejection(leafDER: leaf) { failure.set(why); complete(false); return }
-            if policy == .systemTrust {
-                var err: CFError?
-                if !SecTrustEvaluateWithError(sec_trust_copy_ref(trust).takeRetainedValue(), &err) {
-                    failure.set("Server certificate is not trusted: \(err.map { CFErrorCopyDescription($0) as String } ?? "unknown reason")")
-                    complete(false); return
+        sec_protocol_options_set_verify_block(
+            sec,
+            { metadata, trust, complete in
+                var leaf: Data?
+                sec_protocol_metadata_access_peer_certificate_chain(metadata) { cert in
+                    if leaf == nil { leaf = SecCertificateCopyData(sec_certificate_copy_ref(cert).takeRetainedValue()) as Data }
                 }
-            }
-            complete(true)
-        }, .global())
+                if let why = policy.rejection(leafDER: leaf) { failure.set(why); complete(false); return }
+                if policy == .systemTrust {
+                    var err: CFError?
+                    if !SecTrustEvaluateWithError(sec_trust_copy_ref(trust).takeRetainedValue(), &err) {
+                        failure.set("Server certificate is not trusted: \(err.map { CFErrorCopyDescription($0) as String } ?? "unknown reason")")
+                        complete(false); return
+                    }
+                }
+                complete(true)
+            }, .global())
         sec_protocol_options_set_min_tls_protocol_version(sec, .TLSv12)
         if host.contains(where: { $0.isLetter && $0 != "." }) && IPv4Address(host) == nil {
             sec_protocol_options_set_tls_server_name(sec, host)
@@ -94,7 +96,8 @@ public final class TLSStream: ByteStream {
 
         if proxy.kind != .none, !proxy.host.isEmpty, let p = NWEndpoint.Port(rawValue: UInt16(clamping: proxy.port)) {
             let ep = NWEndpoint.hostPort(host: NWEndpoint.Host(proxy.host), port: p)
-            let cfg = proxy.kind == .http
+            let cfg =
+                proxy.kind == .http
                 ? ProxyConfiguration(httpCONNECTProxy: ep)
                 : ProxyConfiguration(socksv5Proxy: ep)
             if let u = proxy.username, let pw = proxy.password, !u.isEmpty { cfg.applyCredential(username: u, password: pw) }
@@ -103,8 +106,9 @@ public final class TLSStream: ByteStream {
             ctx.proxyConfigurations = [cfg]
             params.setPrivacyContext(ctx)
         }
-        conn = NWConnection(host: NWEndpoint.Host(host),
-                            port: NWEndpoint.Port(rawValue: port) ?? 443, using: params)
+        conn = NWConnection(
+            host: NWEndpoint.Host(host),
+            port: NWEndpoint.Port(rawValue: port) ?? 443, using: params)
     }
 
     public func start() async throws { try await start(timeout: 15) }
@@ -123,7 +127,7 @@ public final class TLSStream: ByteStream {
                 switch state {
                 case .ready: finish(.success(()))
                 case .failed(let e): finish(.failure(e))
-                case .waiting(let e): finish(.failure(e))   // no route / refused: fail fast
+                case .waiting(let e): finish(.failure(e))  // no route / refused: fail fast
                 case .cancelled: finish(.failure(StreamError.closed))
                 default: break
                 }
@@ -137,19 +141,26 @@ public final class TLSStream: ByteStream {
 
     public func send(_ data: Data) async throws {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
-            conn.send(content: data, completion: .contentProcessed { err in
-                if let err = err { c.resume(throwing: err) } else { c.resume() }
-            })
+            conn.send(
+                content: data,
+                completion: .contentProcessed { err in
+                    if let err = err { c.resume(throwing: err) } else { c.resume() }
+                })
         }
     }
 
     public func readChunk() async throws -> Data {
         try await withCheckedThrowingContinuation { c in
             conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, err in
-                if let err = err { c.resume(throwing: err) }
-                else if let data = data, !data.isEmpty { c.resume(returning: data) }
-                else if isComplete { c.resume(throwing: StreamError.closed) }
-                else { c.resume(returning: Data()) }
+                if let err = err {
+                    c.resume(throwing: err)
+                } else if let data = data, !data.isEmpty {
+                    c.resume(returning: data)
+                } else if isComplete {
+                    c.resume(throwing: StreamError.closed)
+                } else {
+                    c.resume(returning: Data())
+                }
             }
         }
     }
@@ -168,5 +179,9 @@ private final class OnceFlag: @unchecked Sendable {
     private let lock = NSLock()
     private var claimed = false
     /// True exactly once, for the first caller.
-    func claim() -> Bool { lock.withLock { if claimed { return false }; claimed = true; return true } }
+    func claim() -> Bool {
+        lock.withLock {
+            if claimed { return false }; claimed = true; return true
+        }
+    }
 }

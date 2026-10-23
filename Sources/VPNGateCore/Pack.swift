@@ -161,14 +161,14 @@ public struct Pack: Equatable {
         var pos = 0
         func u32() throws -> UInt32 {
             guard pos + 4 <= bytes.count else { throw PackError.truncated }
-            let v = bytes[pos..<pos+4].reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+            let v = bytes[pos..<pos + 4].reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
             pos += 4
             return v
         }
         func take(_ n: Int) throws -> [UInt8] {
             guard n >= 0, pos + n <= bytes.count else { throw PackError.truncated }
             defer { pos += n }
-            return Array(bytes[pos..<pos+n])
+            return Array(bytes[pos..<pos + n])
         }
         let count = try u32()
         guard count < 4096 else { throw PackError.truncated }

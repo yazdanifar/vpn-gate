@@ -1,5 +1,5 @@
-import Foundation
 import Darwin
+import Foundation
 import VPNGateCore
 
 /// Async byte-chunk queue used by the in-memory stream.
@@ -11,8 +11,7 @@ final class AsyncQueue {
 
     func push(_ d: Data) {
         lock.lock()
-        if let w = waiter { waiter = nil; lock.unlock(); w.resume(returning: d) }
-        else { items.append(d); lock.unlock() }
+        if let w = waiter { waiter = nil; lock.unlock(); w.resume(returning: d) } else { items.append(d); lock.unlock() }
     }
 
     func finish(_ e: Error = StreamError.closed) {
@@ -26,15 +25,19 @@ final class AsyncQueue {
     func next() async throws -> Data {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<Data, Error>) in
             lock.lock()
-            if !items.isEmpty { let d = items.removeFirst(); lock.unlock(); c.resume(returning: d) }
-            else if let e = finished { lock.unlock(); c.resume(throwing: e) }
-            else { waiter = c; lock.unlock() }
+            if !items.isEmpty {
+                let d = items.removeFirst(); lock.unlock(); c.resume(returning: d)
+            } else if let e = finished {
+                lock.unlock(); c.resume(throwing: e)
+            } else {
+                waiter = c; lock.unlock()
+            }
         }
     }
 }
 
 /// Simple thread-safe box for values mutated from callbacks.
-final class Locked<T>: @unchecked Sendable {   // every access goes through `lock`
+final class Locked<T>: @unchecked Sendable {  // every access goes through `lock`
     private let lock = NSLock()
     private var v: T
     init(_ v: T) { self.v = v }

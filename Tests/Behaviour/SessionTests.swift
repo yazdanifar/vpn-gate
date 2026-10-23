@@ -79,7 +79,7 @@ func registerSessionTests() {
         await expectA(await s2.waitUntilIdle(timeout: 5))
         expectEqual(h2.transports.value.map { Int($0.port) }, [443, 992, 5555, 1194], "no duplicate of the listed port")
     }
-    test("session/out-of-range-ports-do-not-trap") {                      // B4
+    test("session/out-of-range-ports-do-not-trap") {  // B4
         for bad in [70000, -5, 0, 65536] {
             let h = SessionHarness(); h.connectErrorFor = { _, _ in TestError() }
             let s = VPNSession(deps: h.deps(), timing: h.fastTiming)
@@ -151,8 +151,9 @@ func registerSessionTests() {
         // must win instead, independent of the session-wide default.
         let h = SessionHarness(); h.connectErrorFor = { _, _ in TestError() }
         let s = VPNSession(deps: h.deps(), timing: h.fastTiming); let r = Recorder(); r.attach(s)
-        let cfg = ConnectConfig(host: "1.2.3.4", authType: "anonymous", autoReconnect: true,
-                                 reconnectInterval: 0.01, reconnectCount: 3)
+        let cfg = ConnectConfig(
+            host: "1.2.3.4", authType: "anonymous", autoReconnect: true,
+            reconnectInterval: 0.01, reconnectCount: 3)
         s.connect(config: cfg)
         await expectA(await s.waitUntilIdle(timeout: 5), "states \(r.states)")
         expectEqual(r.last?.error, "Gave up reconnecting")
@@ -181,7 +182,7 @@ func registerSessionTests() {
         try await Task.sleep(nanoseconds: 300_000_000)
         expectEqual(h.transports.value.count, n, "no attempts after disconnect")
     }
-    test("session/connect-disconnect-cycles-do-not-leak-threads-or-tasks", timeout: 60) {   // B1
+    test("session/connect-disconnect-cycles-do-not-leak-threads-or-tasks", timeout: 60) {  // B1
         let h = SessionHarness(); let s = VPNSession(deps: h.deps(), timing: h.fastTiming); let r = Recorder(); r.attach(s)
         let before = threadCount()
         for i in 0..<40 {
@@ -195,7 +196,7 @@ func registerSessionTests() {
         expectEqual(h.nets.value.count, h.nets.value.filter { $0.tornDown == 1 }.count, "every applied config torn down once")
         expect(h.tuns.value.allSatisfy { $0.closed })
     }
-    test("session/reconnect-to-another-server-replaces-the-stale-attempt") {      // B2
+    test("session/reconnect-to-another-server-replaces-the-stale-attempt") {  // B2
         let h = SessionHarness()
         let gate = Gate(); h.gateFor = { $0 == "1.1.1.1" ? gate : nil }
         let s = VPNSession(deps: h.deps(), timing: h.fastTiming); let r = Recorder(); r.attach(s)
@@ -203,7 +204,7 @@ func registerSessionTests() {
         await expectA(await eventually(3) { h.transports.value.count == 1 })
         s.connect(host: "2.2.2.2", port: nil, proxy: ProxySettings(), autoReconnect: true, blockIPv6: true)
         await expectA(await r.waitFor(.connected, server: "2.2.2.2"), "states \(r.states)")
-        gate.release()                                               // the stale handshake now completes
+        gate.release()  // the stale handshake now completes
         try await Task.sleep(nanoseconds: 400_000_000)
         expectEqual(h.tuns.value.count, 1, "stale attempt must not create a tun")
         expectEqual(h.nets.value.count, 1, "stale attempt must not touch routes")
@@ -236,7 +237,7 @@ func registerSessionTests() {
         expectEqual(h.nets.value[0].mtuOverrides, [nil])
         s.disconnect()
     }
-    test("session/ipv6-is-forwarded-and-addressed-only-when-not-blocked") {              // review 7
+    test("session/ipv6-is-forwarded-and-addressed-only-when-not-blocked") {  // review 7
         for block in [true, false] {
             let h = SessionHarness(); let s = VPNSession(deps: h.deps(), timing: h.fastTiming); let r = Recorder(); r.attach(s)
             s.connect(host: "1.2.3.4", port: nil, proxy: ProxySettings(), autoReconnect: false, blockIPv6: block)
@@ -280,7 +281,7 @@ func registerSessionTests() {
         let s = VPNSession(deps: h.deps(), timing: t); let r = Recorder(); r.attach(s)
         s.connect(host: "1.2.3.4", port: nil, proxy: ProxySettings(), autoReconnect: true, blockIPv6: true)
         await expectA(await r.waitFor(.connected))
-        h.network.silent = true                                   // the server stops answering renewals
+        h.network.silent = true  // the server stops answering renewals
         await expectA(await eventually(6) { h.transports.value.count >= 2 }, "no reconnect after the lease was lost; states \(r.states)")
         expectEqual(h.nets.value[0].tornDown, 1, "routes of the dead lease removed")
         s.disconnect()
@@ -298,7 +299,7 @@ func registerSessionTests() {
         s.connect(host: "1.2.3.4", port: nil, proxy: ProxySettings(), autoReconnect: false, blockIPv6: true)
         await expectA(await r.waitFor(.connected))
         let tun = h.tuns.value[0], t = h.transports.value[0]
-        tun.inject(hostPacket(to: 0x08080808))                         // host → internet (gateway resolved via fake ARP)
+        tun.inject(hostPacket(to: 0x08080808))  // host → internet (gateway resolved via fake ARP)
         await expectA(await eventually { h.network.ipv4Packets.count == 1 }, "packet not forwarded to the hub")
         // hub → host: find our MAC from what we sent
         let ours = Array(t.sent.last![6..<12])

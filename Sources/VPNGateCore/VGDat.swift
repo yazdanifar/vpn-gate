@@ -1,6 +1,6 @@
-import Foundation
 import Compression
 import CryptoKit
+import Foundation
 import Security
 
 public enum VGDatError: Error, LocalizedError {
@@ -75,28 +75,29 @@ public enum VGDat {
     /// It does not appear as text in client_exe.c (the CN=Root cert at line 281993 is a different one); it was
     /// confirmed instead by verifying the shipped VPNGate.dat signature with it (see Tests/Unit/VGDatTests.swift).
     public static let apiCertificatePEM = """
-    -----BEGIN CERTIFICATE-----
-    MIIB/zCCAWgCAQAwDQYJKoZIhvcNAQEFBQAwSDEZMBcGA1UEAxQQdnBuZ2F0ZV9h
-    cGlfY2VydDEeMBwGA1UEChMVU29mdEV0aGVyIENvcnBvcmF0aW9uMQswCQYDVQQG
-    EwJKUDAeFw0xMzAxMTUwNjM4MTVaFw0zNzAxMDkwNjM4MTVaMEgxGTAXBgNVBAMU
-    EHZwbmdhdGVfYXBpX2NlcnQxHjAcBgNVBAoTFVNvZnRFdGhlciBDb3Jwb3JhdGlv
-    bjELMAkGA1UEBhMCSlAwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBANKvJddX
-    AO7XIt+ZXBvzH10R/nlFV9RRG7nW0Kge6/FVVlfgYuninG/s9RF6rloWh4v7sotp
-    GUKFJ7jD76NAzkemvsNpcQfkddxZD/Nv6k3ZoWK1Z2Wm77UkhBiI34/Ez9uLPgiJ
-    rc10hwkeixpO2V5ewi0RvWEayq79xGS1jLpnAgMBAAEwDQYJKoZIhvcNAQEFBQAD
-    gYEAMKQNaIw5eusl1sOZ6BlcqVCXRAFG+/rF9ZFUHQzdu3hO2k1F08naMpoO9PIE
-    d8yEiIuOzeylfCReS34JclCWOz/IVVgk9gYNDKeGZpM17ZuXes1EkG4SrCDqUnaN
-    /gl7JR92FEfGHsyteExq/09Q7b1BfHCHSmXfKhoOBD/TlV4=
-    -----END CERTIFICATE-----
-    """
+        -----BEGIN CERTIFICATE-----
+        MIIB/zCCAWgCAQAwDQYJKoZIhvcNAQEFBQAwSDEZMBcGA1UEAxQQdnBuZ2F0ZV9h
+        cGlfY2VydDEeMBwGA1UEChMVU29mdEV0aGVyIENvcnBvcmF0aW9uMQswCQYDVQQG
+        EwJKUDAeFw0xMzAxMTUwNjM4MTVaFw0zNzAxMDkwNjM4MTVaMEgxGTAXBgNVBAMU
+        EHZwbmdhdGVfYXBpX2NlcnQxHjAcBgNVBAoTFVNvZnRFdGhlciBDb3Jwb3JhdGlv
+        bjELMAkGA1UEBhMCSlAwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBANKvJddX
+        AO7XIt+ZXBvzH10R/nlFV9RRG7nW0Kge6/FVVlfgYuninG/s9RF6rloWh4v7sotp
+        GUKFJ7jD76NAzkemvsNpcQfkddxZD/Nv6k3ZoWK1Z2Wm77UkhBiI34/Ez9uLPgiJ
+        rc10hwkeixpO2V5ewi0RvWEayq79xGS1jLpnAgMBAAEwDQYJKoZIhvcNAQEFBQAD
+        gYEAMKQNaIw5eusl1sOZ6BlcqVCXRAFG+/rF9ZFUHQzdu3hO2k1F08naMpoO9PIE
+        d8yEiIuOzeylfCReS34JclCWOz/IVVgk9gYNDKeGZpM17ZuXes1EkG4SrCDqUnaN
+        /gl7JR92FEfGHsyteExq/09Q7b1BfHCHSmXfKhoOBD/TlV4=
+        -----END CERTIFICATE-----
+        """
 
     private static let publicKey: SecKey? = {
         let lines = apiCertificatePEM.components(separatedBy: .newlines).filter {
             !$0.hasPrefix("-----") && !$0.isEmpty
         }
         guard let der = Data(base64Encoded: lines.joined()),
-              let cert = SecCertificateCreateWithData(nil, der as CFData),
-              let pubKey = SecCertificateCopyKey(cert) else {
+            let cert = SecCertificateCreateWithData(nil, der as CFData),
+            let pubKey = SecCertificateCopyKey(cert)
+        else {
             return nil
         }
         return pubKey
@@ -130,13 +131,15 @@ public enum VGDat {
         }
 
         guard let outerData = outer.data("data"),
-              let dataSize = outer.int("data_size") ?? outer.int64("data_size").map(UInt32.init),
-              let sign = outer.data("sign"),
-              let tsData = outer.data("timestamp"), tsData.count == 8 else {
+            let dataSize = outer.int("data_size") ?? outer.int64("data_size").map(UInt32.init),
+            let sign = outer.data("sign"),
+            let tsData = outer.data("timestamp"), tsData.count == 8
+        else {
             throw VGDatError.invalidPack
         }
 
-        let soapURL = outer.str("soap_url")
+        let soapURL =
+            outer.str("soap_url")
             ?? outer.data("soap_url").map { String(decoding: $0, as: UTF8.self) }
             ?? ""
         let compressed = (outer.int("compressed") ?? 0) != 0
@@ -156,8 +159,9 @@ public enum VGDat {
             withUnsafeBytes(of: dataSize.bigEndian) { signedMsg.append(contentsOf: $0) }
 
             var error: Unmanaged<CFError>?
-            sigValid = SecKeyVerifySignature(pubKey, .rsaSignatureMessagePKCS1v15SHA1,
-                                            signedMsg as CFData, sign as CFData, &error)
+            sigValid = SecKeyVerifySignature(
+                pubKey, .rsaSignatureMessagePKCS1v15SHA1,
+                signedMsg as CFData, sign as CFData, &error)
         }
 
         guard sigValid else { throw VGDatError.signatureVerificationFailed }

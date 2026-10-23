@@ -7,13 +7,13 @@ public struct VPNServer: Identifiable, Codable, Hashable {
     public var ip: String
     public var score: Int
     public var ping: Int
-    public var speed: Int          // bits per second
+    public var speed: Int  // bits per second
     public var countryLong: String
     public var countryShort: String
     public var sessions: Int
     public var uptimeMs: Int
     public var totalUsers: Int
-    public var totalTraffic: Int   // bytes
+    public var totalTraffic: Int  // bytes
     public var logType: String
     public var operatorName: String
     public var message: String
@@ -46,17 +46,19 @@ public struct VPNServer: Identifiable, Codable, Hashable {
     /// filled in by the list view just before sorting.
     public var testRank = 0
 
-    public init(hostName: String, ip: String, score: Int = 0, ping: Int = 0, speed: Int = 0,
-                countryLong: String = "", countryShort: String = "", sessions: Int = 0,
-                uptimeMs: Int = 0, totalUsers: Int = 0, totalTraffic: Int = 0,
-                logType: String = "", operatorName: String = "", message: String = "",
-                listedPort: Int = 0, listedProto: String = "",
-                fqdn: String = "", sslPorts: [UInt16] = [], udpPort: UInt16? = nil,
-                openVpnUdpPorts: [UInt16] = [], l2tp: Bool = false, os: String? = nil,
-                soft: String? = nil, build: Int? = nil, owner: String? = nil, abuse: String? = nil,
-                numLogin: Int64? = nil, noLog: Bool = false, logPermanent: Bool = false,
-                name: String? = nil, pingToGoogle: Int = 0, sendSize: UInt64 = 0, recvSize: UInt64 = 0,
-                isKernelModeNAT: Bool = false) {
+    public init(
+        hostName: String, ip: String, score: Int = 0, ping: Int = 0, speed: Int = 0,
+        countryLong: String = "", countryShort: String = "", sessions: Int = 0,
+        uptimeMs: Int = 0, totalUsers: Int = 0, totalTraffic: Int = 0,
+        logType: String = "", operatorName: String = "", message: String = "",
+        listedPort: Int = 0, listedProto: String = "",
+        fqdn: String = "", sslPorts: [UInt16] = [], udpPort: UInt16? = nil,
+        openVpnUdpPorts: [UInt16] = [], l2tp: Bool = false, os: String? = nil,
+        soft: String? = nil, build: Int? = nil, owner: String? = nil, abuse: String? = nil,
+        numLogin: Int64? = nil, noLog: Bool = false, logPermanent: Bool = false,
+        name: String? = nil, pingToGoogle: Int = 0, sendSize: UInt64 = 0, recvSize: UInt64 = 0,
+        isKernelModeNAT: Bool = false
+    ) {
         self.hostName = hostName.isEmpty ? fqdn : hostName
         self.ip = ip; self.score = score; self.ping = ping; self.speed = speed
         self.countryLong = countryLong; self.countryShort = countryShort; self.sessions = sessions
@@ -74,10 +76,10 @@ public struct VPNServer: Identifiable, Codable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case hostName, ip, score, ping, speed, countryLong, countryShort, sessions, uptimeMs, totalUsers,
-             totalTraffic, logType, operatorName, message, listedPort, listedProto
-        case tcpPort            // written by the first app version, before ports/protocols were recorded
+            totalTraffic, logType, operatorName, message, listedPort, listedProto
+        case tcpPort  // written by the first app version, before ports/protocols were recorded
         case fqdn, sslPorts, udpPort, openVpnUdpPorts, l2tp, os, soft, build, owner, abuse, numLogin,
-             noLog, logPermanent, name, pingToGoogle, sendSize, recvSize, isKernelModeNAT
+            noLog, logPermanent, name, pingToGoogle, sendSize, recvSize, isKernelModeNAT
     }
 
     /// Caches written by older versions must still load (otherwise the table is empty until the download ends).
@@ -100,7 +102,8 @@ public struct VPNServer: Identifiable, Codable, Hashable {
         logType = try c.decodeIfPresent(String.self, forKey: .logType) ?? ""
         operatorName = try c.decodeIfPresent(String.self, forKey: .operatorName) ?? ""
         message = try c.decodeIfPresent(String.self, forKey: .message) ?? ""
-        listedPort = try c.decodeIfPresent(Int.self, forKey: .listedPort)
+        listedPort =
+            try c.decodeIfPresent(Int.self, forKey: .listedPort)
             ?? c.decodeIfPresent(Int.self, forKey: .tcpPort) ?? 0
         listedProto = try c.decodeIfPresent(String.self, forKey: .listedProto) ?? ""
 
@@ -210,12 +213,13 @@ public enum ServerList {
             if let cfg = Data(base64Encoded: config).map({ String(decoding: $0, as: UTF8.self) }) {
                 (port, proto) = openVPNEndpoint(cfg)
             }
-            out.append(VPNServer(
-                hostName: f[0], ip: f[1], score: Int(f[2]) ?? 0, ping: Int(f[3]) ?? 0,
-                speed: Int(f[4]) ?? 0, countryLong: f[5], countryShort: f[6],
-                sessions: Int(f[7]) ?? 0, uptimeMs: Int(f[8]) ?? 0, totalUsers: Int(f[9]) ?? 0,
-                totalTraffic: Int(f[10]) ?? 0, logType: f[11], operatorName: f[12],
-                message: message, listedPort: port, listedProto: proto))
+            out.append(
+                VPNServer(
+                    hostName: f[0], ip: f[1], score: Int(f[2]) ?? 0, ping: Int(f[3]) ?? 0,
+                    speed: Int(f[4]) ?? 0, countryLong: f[5], countryShort: f[6],
+                    sessions: Int(f[7]) ?? 0, uptimeMs: Int(f[8]) ?? 0, totalUsers: Int(f[9]) ?? 0,
+                    totalTraffic: Int(f[10]) ?? 0, logType: f[11], operatorName: f[12],
+                    message: message, listedPort: port, listedProto: proto))
         }
         return out
     }

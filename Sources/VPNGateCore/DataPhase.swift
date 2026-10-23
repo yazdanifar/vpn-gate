@@ -38,7 +38,7 @@ public enum DataPhase {
         var destLen = uLongf(capacity ?? Int(compressBound(uLong(frame.count))))
         var dest = [UInt8](repeating: 0, count: Int(destLen))
         let rc = compress(&dest, &destLen, frame, uLong(frame.count))
-        guard rc == Z_OK else { throw DataPhaseError.compressionFailed }     // never send the raw frame as if it were a zlib block
+        guard rc == Z_OK else { throw DataPhaseError.compressionFailed }  // never send the raw frame as if it were a zlib block
         return Array(dest.prefix(Int(destLen)))
     }
 
@@ -99,10 +99,15 @@ public struct DataPhaseDecoder {
             switch state {
             case .header:
                 guard let n = u32() else { return out }
-                if n == DataPhase.keepAliveMagic { state = .keepAliveLength }
-                else if n == 0 { continue }
-                else if n > UInt32(DataPhase.maxBlocksPerBatch) { throw DataPhaseError.badBlockCount(Int(n)) }
-                else { state = .blockSize(remaining: Int(n)) }
+                if n == DataPhase.keepAliveMagic {
+                    state = .keepAliveLength
+                } else if n == 0 {
+                    continue
+                } else if n > UInt32(DataPhase.maxBlocksPerBatch) {
+                    throw DataPhaseError.badBlockCount(Int(n))
+                } else {
+                    state = .blockSize(remaining: Int(n))
+                }
             case .keepAliveLength:
                 guard let n = u32() else { return out }
                 if n > UInt32(DataPhase.maxKeepAlive) { throw DataPhaseError.badKeepAlive(Int(n)) }

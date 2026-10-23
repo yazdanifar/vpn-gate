@@ -1,5 +1,5 @@
-import Foundation
 import Darwin
+import Foundation
 import VPNGateCore
 
 /// Opens the outbound half of a proxied connection. A protocol so the SOCKS server can be tested on loopback.
@@ -19,8 +19,9 @@ struct TunnelConnector: SocksConnector {
 
     func connect(host: String, port: UInt16) -> Result<Int32, SocksServer.Failure> {
         let address: String
-        if InputValidation.isIPv4Literal(host) { address = host }
-        else {
+        if InputValidation.isIPv4Literal(host) {
+            address = host
+        } else {
             guard let resolved = resolve(host) else { return .failure(.hostUnreachable) }
             address = resolved
         }
@@ -43,7 +44,10 @@ struct TunnelConnector: SocksConnector {
         for server in dnsServers {
             let query = DNSMessage.aQuery(name: name, id: UInt16.random(in: 1...UInt16.max))
             if let response = upstream.query(query, server: server, timeoutMs: 4000),
-               let first = DNSMessage.resolvedIPv4Addresses(response).first { return first }
+                let first = DNSMessage.resolvedIPv4Addresses(response).first
+            {
+                return first
+            }
         }
         return nil
     }
@@ -95,7 +99,9 @@ final class SocksServer {
         _ = withUnsafeMutablePointer(to: &bound) { p in p.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(fd, $0, &len) } }
         boundPort = UInt16(bigEndian: bound.sin_port)
         _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
-        lock.withLock { listenFD = fd; running = true }
+        lock.withLock {
+            listenFD = fd; running = true
+        }
         Thread.detachNewThread { [self] in acceptLoop(fd) }
     }
 
@@ -104,7 +110,7 @@ final class SocksServer {
         let wasRunning: Bool = lock.withLock {
             let w = running; running = false; listenFD = -1
             // Under the lock, so a finishing relay cannot close and recycle a descriptor between snapshot and shutdown.
-            for c in live { Darwin.shutdown(c, SHUT_RDWR) }      // the relay threads notice and close their own sockets
+            for c in live { Darwin.shutdown(c, SHUT_RDWR) }  // the relay threads notice and close their own sockets
             return w
         }
         if wasRunning { _ = loopExited.wait(timeout: .now() + 2) }
@@ -114,7 +120,7 @@ final class SocksServer {
         defer { Darwin.close(fd); loopExited.signal() }
         while isListening {
             var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
-            if poll(&pfd, 1, 100) <= 0 { continue }          // wakes regularly to notice stop()
+            if poll(&pfd, 1, 100) <= 0 { continue }  // wakes regularly to notice stop()
             let c = accept(fd, nil, nil)
             if c < 0 { continue }
             _ = fcntl(c, F_SETFL, fcntl(c, F_GETFL) & ~O_NONBLOCK)
@@ -145,7 +151,7 @@ final class SocksServer {
         case .success(let out):
             defer { Darwin.close(out) }
             guard reply(c, 0) else { return }
-            var none = timeval(tv_sec: 0, tv_usec: 0)            // an idle established connection is fine
+            var none = timeval(tv_sec: 0, tv_usec: 0)  // an idle established connection is fine
             setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &none, socklen_t(MemoryLayout<timeval>.size))
             lock.withLock { _ = live.insert(out) }
             relay(c, out)
@@ -156,7 +162,8 @@ final class SocksServer {
     /// Greeting + request. Returns the destination, or nil after answering with the right failure.
     private func negotiate(_ c: Int32) -> (String, UInt16)? {
         guard let head = Self.readExactly(c, 2), head[0] == 5, head[1] > 0,
-              let methods = Self.readExactly(c, Int(head[1])) else { return nil }
+            let methods = Self.readExactly(c, Int(head[1]))
+        else { return nil }
         guard methods.contains(0) else { _ = Self.writeAll(c, [5, 0xFF]); return nil }
         guard Self.writeAll(c, [5, 0]) else { return nil }
         guard let req = Self.readExactly(c, 4), req[0] == 5 else { return nil }
@@ -172,7 +179,7 @@ final class SocksServer {
             // Only a plain DNS name may continue: it ends up in a resolver query.
             guard InputValidation.isValidHost(host) else { _ = reply(c, Failure.hostUnreachable.rawValue); return nil }
         default:
-            _ = reply(c, Failure.addressTypeUnsupported.rawValue); return nil     // IPv6 is not carried
+            _ = reply(c, Failure.addressTypeUnsupported.rawValue); return nil  // IPv6 is not carried
         }
         guard let p = Self.readExactly(c, 2) else { return nil }
         return (host, UInt16(p[0]) << 8 | UInt16(p[1]))
@@ -184,7 +191,9 @@ final class SocksServer {
     /// never stalls the other); a half-close on one side is passed on to the other.
     private func relay(_ a: Int32, _ b: Int32) {
         let done = DispatchSemaphore(value: 0)
-        Thread.detachNewThread { Self.pump(from: b, to: a); done.signal() }
+        Thread.detachNewThread {
+            Self.pump(from: b, to: a); done.signal()
+        }
         Self.pump(from: a, to: b)
         done.wait()
     }

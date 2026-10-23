@@ -6,8 +6,8 @@ import VPNGateCore
 /// when the machine hosts a VPN Gate relay and has per-session logs. The payload below is this app's own invention.
 @MainActor
 public final class VGStatistics: ObservableObject {
-    public static let sendInterval: TimeInterval = 600.0   // 10 minutes
-    public static let retryInterval: TimeInterval = 60.0   // 1 minute
+    public static let sendInterval: TimeInterval = 600.0  // 10 minutes
+    public static let retryInterval: TimeInterval = 60.0  // 1 minute
     /// Opt-in key. Deliberately not the old `telemetryEnabled` key, which earlier builds set to true for everyone.
     static let optInKey = "telemetryOptIn"
     static let hostKeyKey = "telemetryHostKey"
@@ -34,7 +34,7 @@ public final class VGStatistics: ObservableObject {
     public init(defaults: UserDefaults = .standard, session: URLSession = .shared, startIfEnabled: Bool = true) {
         self.urlSession = session
         self.defaults = defaults
-        self.isEnabled = defaults.bool(forKey: Self.optInKey)          // absent = off
+        self.isEnabled = defaults.bool(forKey: Self.optInKey)  // absent = off
         if isEnabled && startIfEnabled { start() }
     }
 
@@ -54,14 +54,16 @@ public final class VGStatistics: ObservableObject {
     /// Exactly what an upload contains, for the Settings screen.
     nonisolated public static var payloadDescription: [String] {
         let p = makeTelemetryPack(hostKey: "<random per-install ID>")
-        return ["HostKey: \(p.str("HostKey") ?? "")", "Build: \(p.int("Build") ?? 0)", "ClientVer: \(p.int("ClientVer") ?? 0)",
-                "ClientBuild: \(p.int("ClientBuild") ?? 0)", "ClientOsName: \(p.str("ClientOsName") ?? "")", "IsClient: \(p.int("IsClient") ?? 0)"]
+        return [
+            "HostKey: \(p.str("HostKey") ?? "")", "Build: \(p.int("Build") ?? 0)", "ClientVer: \(p.int("ClientVer") ?? 0)",
+            "ClientBuild: \(p.int("ClientBuild") ?? 0)", "ClientOsName: \(p.str("ClientOsName") ?? "")", "IsClient: \(p.int("IsClient") ?? 0)",
+        ]
     }
 
     public func start() {
         stop()
         guard isEnabled else { return }
-        scheduleNext(interval: 5.0) // first upload shortly after the user turned it on
+        scheduleNext(interval: 5.0)  // first upload shortly after the user turned it on
     }
 
     public func stop() {

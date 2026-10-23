@@ -1,5 +1,5 @@
-import Foundation
 import Darwin
+import Foundation
 import VPNGateCore
 
 /// Sends one DNS query to one upstream server and waits for the reply. A protocol so `DNSProxy`'s routing

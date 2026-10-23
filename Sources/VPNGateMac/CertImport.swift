@@ -23,7 +23,9 @@ enum CertImport {
             switch self {
             case .notCertificate: return "That file is not an X.509 certificate (PEM or DER expected)."
             case .notPrivateKey: return "That file is not an RSA private key (PEM or DER expected)."
-            case .encryptedKey: return "The private key is passphrase-protected. Remove the passphrase first (openssl rsa -in key.pem -out plain.pem) or import a .p12 file instead."
+            case .encryptedKey:
+                return
+                    "The private key is passphrase-protected. Remove the passphrase first (openssl rsa -in key.pem -out plain.pem) or import a .p12 file instead."
             case .unsupportedKeyType(let t): return "Only RSA keys are supported for certificate login (this key is \(t))."
             case .keyMismatch: return "The private key does not belong to the certificate."
             case .wrongPassphrase: return "Wrong passphrase for the .p12 file."
@@ -36,9 +38,13 @@ enum CertImport {
 
     static func parseCertificate(_ data: Data) throws -> Data {
         let der: Data
-        if let block = pemBlocks(data).first(where: { $0.label == "CERTIFICATE" || $0.label == "X509 CERTIFICATE" }) { der = block.der }
-        else if data.first == 0x30 { der = data }
-        else { throw Failure.notCertificate }
+        if let block = pemBlocks(data).first(where: { $0.label == "CERTIFICATE" || $0.label == "X509 CERTIFICATE" }) {
+            der = block.der
+        } else if data.first == 0x30 {
+            der = data
+        } else {
+            throw Failure.notCertificate
+        }
         guard SecCertificateCreateWithData(nil, der as CFData) != nil else { throw Failure.notCertificate }
         return der
     }
@@ -83,11 +89,12 @@ enum CertImport {
     static func requireMatch(certDer: Data, keyDer: Data) throws {
         let attrs: [CFString: Any] = [kSecAttrKeyType: kSecAttrKeyTypeRSA, kSecAttrKeyClass: kSecAttrKeyClassPrivate]
         guard let cert = SecCertificateCreateWithData(nil, certDer as CFData),
-              let certKey = SecCertificateCopyKey(cert),
-              let privKey = SecKeyCreateWithData(keyDer as CFData, attrs as CFDictionary, nil),
-              let pubKey = SecKeyCopyPublicKey(privKey),
-              let a = SecKeyCopyExternalRepresentation(certKey, nil) as Data?,
-              let b = SecKeyCopyExternalRepresentation(pubKey, nil) as Data? else { throw Failure.keyMismatch }
+            let certKey = SecCertificateCopyKey(cert),
+            let privKey = SecKeyCreateWithData(keyDer as CFData, attrs as CFDictionary, nil),
+            let pubKey = SecKeyCopyPublicKey(privKey),
+            let a = SecKeyCopyExternalRepresentation(certKey, nil) as Data?,
+            let b = SecKeyCopyExternalRepresentation(pubKey, nil) as Data?
+        else { throw Failure.keyMismatch }
         if a != b { throw Failure.keyMismatch }
     }
 
@@ -95,13 +102,19 @@ enum CertImport {
 
     /// `forceLegacyKeychain` takes the macOS 14 path (a throwaway keychain file in `keychainDirectory`, deleted again
     /// before returning) even where the memory-only import exists; the user's keychains are never opened either way.
-    static func importPKCS12(_ data: Data, passphrase: String, forceLegacyKeychain: Bool = false,
-                             keychainDirectory: String = NSTemporaryDirectory()) throws -> Identity {
+    static func importPKCS12(
+        _ data: Data, passphrase: String, forceLegacyKeychain: Bool = false,
+        keychainDirectory: String = NSTemporaryDirectory()
+    ) throws -> Identity {
         if #available(macOS 15.0, *), !forceLegacyKeychain {
             // Memory-only import: never lands in a keychain, and the key stays exportable.
             var items: CFArray?
-            let status = SecPKCS12Import(data as CFData, [kSecImportExportPassphrase as String: passphrase,
-                                                          kSecImportToMemoryOnly as String: true] as CFDictionary, &items)
+            let status = SecPKCS12Import(
+                data as CFData,
+                [
+                    kSecImportExportPassphrase as String: passphrase,
+                    kSecImportToMemoryOnly as String: true,
+                ] as CFDictionary, &items)
             return try extract(try identity(status, items))
         }
         return try withLegacyKeychain(directory: keychainDirectory) { keychain in
@@ -115,10 +128,11 @@ enum CertImport {
             throw Failure.pkcs12((SecCopyErrorMessageString(status, nil) as String?) ?? "error \(status)")
         }
         guard let first = (items as? [[String: Any]])?.first(where: { $0[kSecImportItemIdentity as String] != nil }),
-              let identityRef = first[kSecImportItemIdentity as String] else {
+            let identityRef = first[kSecImportItemIdentity as String]
+        else {
             throw Failure.pkcs12("the file contains no certificate with a private key")
         }
-        return identityRef as! SecIdentity            // CFTypeRef -> SecIdentity cannot fail
+        return identityRef as! SecIdentity  // CFTypeRef -> SecIdentity cannot fail
     }
 
     /// Runs `body` with a throwaway keychain file in `directory`; the file is gone again on every exit path.
@@ -127,7 +141,8 @@ enum CertImport {
         var kc: SecKeychain?
         let pw = UUID().uuidString
         guard let api = LegacyKeychainAPI.shared,
-              api.create(path, UInt32(pw.utf8.count), pw, 0, nil, &kc) == errSecSuccess, let keychain = kc else {
+            api.create(path, UInt32(pw.utf8.count), pw, 0, nil, &kc) == errSecSuccess, let keychain = kc
+        else {
             throw Failure.pkcs12("cannot create a temporary keychain")
         }
         defer { _ = LegacyKeychainAPI.shared?.delete(keychain); try? FileManager.default.removeItem(atPath: path) }
@@ -141,7 +156,7 @@ enum CertImport {
     private static func legacyIdentity(_ data: Data, passphrase: String, keychain: SecKeychain) throws -> SecIdentity {
         var format = SecExternalFormat.formatPKCS12
         var itemType = SecExternalItemType.itemTypeAggregate
-        let extractable = [0x20 as NSNumber] as CFArray                 // CSSM_KEYATTR_EXTRACTABLE
+        let extractable = [0x20 as NSNumber] as CFArray  // CSSM_KEYATTR_EXTRACTABLE
         var params = SecItemImportExportKeyParameters()
         params.version = UInt32(SEC_KEY_IMPORT_EXPORT_PARAMS_VERSION)
         params.passphrase = Unmanaged.passUnretained(passphrase as CFString)
@@ -149,12 +164,17 @@ enum CertImport {
         var items: CFArray?
         let status = SecItemImport(data as CFData, nil, &format, &itemType, [], &params, keychain, &items)
         if status == errSecSuccess,
-           let id = (items as? [CFTypeRef])?.first(where: { CFGetTypeID($0) == SecIdentityGetTypeID() }) {
+            let id = (items as? [CFTypeRef])?.first(where: { CFGetTypeID($0) == SecIdentityGetTypeID() })
+        {
             return id as! SecIdentity
         }
         var viaImport: CFArray?
-        let status2 = SecPKCS12Import(data as CFData, [kSecImportExportPassphrase as String: passphrase,
-                                                       kSecImportExportKeychain as String: keychain] as CFDictionary, &viaImport)
+        let status2 = SecPKCS12Import(
+            data as CFData,
+            [
+                kSecImportExportPassphrase as String: passphrase,
+                kSecImportExportKeychain as String: keychain,
+            ] as CFDictionary, &viaImport)
         let found = try identity(status2, viaImport)
         // Readable, but the key sits non-extractable in the keychain: tell the user how to get it out.
         var key: SecKey?
@@ -162,22 +182,28 @@ enum CertImport {
             return found
         }
         if let k = key, let type = (SecKeyCopyAttributes(k) as? [String: Any])?[kSecAttrKeyType as String] as? String,
-           type != (kSecAttrKeyTypeRSA as String) {
-            return found                                                // let `extract` report the key type
+            type != (kSecAttrKeyTypeRSA as String)
+        {
+            return found  // let `extract` report the key type
         }
-        throw Failure.pkcs12("this macOS version cannot read the private key of that .p12 (newer encoding). Import the PEM files instead: openssl pkcs12 -in file.p12 -nodes -out all.pem")
+        throw Failure.pkcs12(
+            "this macOS version cannot read the private key of that .p12 (newer encoding). Import the PEM files instead: openssl pkcs12 -in file.p12 -nodes -out all.pem"
+        )
     }
 
     private static func extract(_ identity: SecIdentity) throws -> Identity {
         var certRef: SecCertificate?
         var keyRef: SecKey?
         guard SecIdentityCopyCertificate(identity, &certRef) == errSecSuccess, let cert = certRef,
-              SecIdentityCopyPrivateKey(identity, &keyRef) == errSecSuccess, let key = keyRef else {
+            SecIdentityCopyPrivateKey(identity, &keyRef) == errSecSuccess, let key = keyRef
+        else {
             throw Failure.pkcs12("cannot read the certificate or key")
         }
         let keyAttrs = SecKeyCopyAttributes(key) as? [String: Any]
         let type = keyAttrs?[kSecAttrKeyType as String] as? String
-        guard type == (kSecAttrKeyTypeRSA as String) else { throw Failure.unsupportedKeyType(type == (kSecAttrKeyTypeECSECPrimeRandom as String) ? "EC" : "not RSA") }
+        guard type == (kSecAttrKeyTypeRSA as String) else {
+            throw Failure.unsupportedKeyType(type == (kSecAttrKeyTypeECSECPrimeRandom as String) ? "EC" : "not RSA")
+        }
         var err: Unmanaged<CFError>?
         guard let keyData = SecKeyCopyExternalRepresentation(key, &err) as Data? else {
             err?.release()
@@ -246,15 +272,19 @@ enum CertImport {
 /// They are looked up at run time so the build stays free of deprecation warnings; if a future macOS drops them the
 /// lookup returns nil and the import fails with a clear message instead of crashing.
 private struct LegacyKeychainAPI {
-    typealias Create = @convention(c) (UnsafePointer<CChar>, UInt32, UnsafeRawPointer?, UInt8, SecAccess?,
-                                       UnsafeMutablePointer<SecKeychain?>) -> OSStatus
+    typealias Create =
+        @convention(c) (
+            UnsafePointer<CChar>, UInt32, UnsafeRawPointer?, UInt8, SecAccess?,
+            UnsafeMutablePointer<SecKeychain?>
+        ) -> OSStatus
     typealias Delete = @convention(c) (SecKeychain?) -> OSStatus
     let create: Create
     let delete: Delete
 
     static let shared: LegacyKeychainAPI? = {
         guard let handle = dlopen(nil, RTLD_NOW),
-              let c = dlsym(handle, "SecKeychainCreate"), let d = dlsym(handle, "SecKeychainDelete") else { return nil }
+            let c = dlsym(handle, "SecKeychainCreate"), let d = dlsym(handle, "SecKeychainDelete")
+        else { return nil }
         return LegacyKeychainAPI(create: unsafeBitCast(c, to: Create.self), delete: unsafeBitCast(d, to: Delete.self))
     }()
 }

@@ -3,12 +3,13 @@ import VPNGateCore
 
 func registerDataPhaseTests() {
     test("dataphase/golden-encode") {
-        expectEqual(DataPhase.encode(frames: [[1, 2], [3]]), [0,0,0,2, 0,0,0,2, 1,2, 0,0,0,1, 3])
-        expectEqual(DataPhase.encodeKeepAlive(junk: [7, 8]), [0xff,0xff,0xff,0xff, 0,0,0,2, 7, 8])
+        expectEqual(DataPhase.encode(frames: [[1, 2], [3]]), [0, 0, 0, 2, 0, 0, 0, 2, 1, 2, 0, 0, 0, 1, 3])
+        expectEqual(DataPhase.encodeKeepAlive(junk: [7, 8]), [0xff, 0xff, 0xff, 0xff, 0, 0, 0, 2, 7, 8])
     }
     test("dataphase/decode-frames-and-keepalive") {
         var d = DataPhaseDecoder()
-        let bytes = DataPhase.encode(frames: [[1, 2], [3]]) + DataPhase.encodeKeepAlive(junk: [9, 9, 9])
+        let bytes =
+            DataPhase.encode(frames: [[1, 2], [3]]) + DataPhase.encodeKeepAlive(junk: [9, 9, 9])
             + DataPhase.encode(frames: [[4]])
         let items = try d.feed(bytes)
         expectEqual(items, [.frame([1, 2]), .frame([3]), .keepAlive, .frame([4])])
@@ -38,17 +39,17 @@ func registerDataPhaseTests() {
     }
     test("dataphase/rejects-oversized-block") {
         var d = DataPhaseDecoder()
-        expectThrows(try d.feed([0,0,0,1, 0,0,0x0C,0x81]))            // 3201 > 3200
+        expectThrows(try d.feed([0, 0, 0, 1, 0, 0, 0x0C, 0x81]))  // 3201 > 3200
         var ok = DataPhaseDecoder()
-        _ = try ok.feed([0,0,0,1, 0,0,0x0C,0x80])                      // exactly 3200 is fine (waiting for body)
+        _ = try ok.feed([0, 0, 0, 1, 0, 0, 0x0C, 0x80])  // exactly 3200 is fine (waiting for body)
     }
     test("dataphase/rejects-absurd-counts-and-keepalives") {
         var d = DataPhaseDecoder(); expectThrows(try d.feed([0, 0, 0x10, 0x00]))
-        var k = DataPhaseDecoder(); expectThrows(try k.feed([0xff,0xff,0xff,0xff, 0,0,0x10,0]))
+        var k = DataPhaseDecoder(); expectThrows(try k.feed([0xff, 0xff, 0xff, 0xff, 0, 0, 0x10, 0]))
     }
     test("dataphase/zero-block-batch-is-ignored") {
         var d = DataPhaseDecoder()
-        let items = try d.feed([0,0,0,0] + DataPhase.encode(frames: [[5]]))
+        let items = try d.feed([0, 0, 0, 0] + DataPhase.encode(frames: [[5]]))
         expectEqual(items, [.frame([5])])
     }
     test("dataphase/errors-are-human-readable") {
@@ -70,7 +71,7 @@ func registerDataPhaseTests() {
         expectEqual(b.take(1), [9]); expectEqual(b.count, 0)
         expect(b.take(upTo: [1]) == nil)
     }
-    test("bytebuffer/consuming-many-small-reads-is-linear") {          // B17
+    test("bytebuffer/consuming-many-small-reads-is-linear") {  // B17
         var b = ByteBuffer(); b.append([UInt8](repeating: 7, count: 8_000_000))
         let start = Date()
         var n = 0

@@ -23,23 +23,37 @@ struct AccountsView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Button { addNew() } label: { Label("New Setting", systemImage: "plus") }
+                Button {
+                    addNew()
+                } label: {
+                    Label("New Setting", systemImage: "plus")
+                }
                 Divider().frame(height: 16)
-                Button { if let acc = selectedAccount { appModel.connect(account: acc) } } label: {
+                Button {
+                    if let acc = selectedAccount { appModel.connect(account: acc) }
+                } label: {
                     Label("Connect", systemImage: "bolt.fill")
                 }
                 .disabled(selectedAccount == nil || appModel.event.state != .disconnected)
-                Button { appModel.disconnect() } label: { Label("Disconnect", systemImage: "power") }
-                    .disabled(appModel.event.state == .disconnected)
+                Button {
+                    appModel.disconnect()
+                } label: {
+                    Label("Disconnect", systemImage: "power")
+                }
+                .disabled(appModel.event.state == .disconnected)
                 Divider().frame(height: 16)
-                Button { if let acc = selectedAccount { edit(acc) } } label: {
+                Button {
+                    if let acc = selectedAccount { edit(acc) }
+                } label: {
                     Label("Properties", systemImage: "slider.horizontal.3")
                 }
                 .disabled(selectedAccount == nil)
                 Button(role: .destructive) {
                     if let acc = selectedAccount { accountManager.delete(acc); ui.selectedAccountID = nil }
-                } label: { Label("Delete", systemImage: "trash") }
-                    .disabled(selectedAccount == nil)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .disabled(selectedAccount == nil)
                 Spacer()
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
@@ -47,7 +61,9 @@ struct AccountsView: View {
             Divider()
 
             // The Windows Client Manager lists "VPN Gate Public VPN Relay Servers" as its first row.
-            Button { openWindow(id: "main"); NSApp.activate(ignoringOtherApps: true) } label: {
+            Button {
+                openWindow(id: "main"); NSApp.activate(ignoringOtherApps: true)
+            } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "globe").font(.title3).foregroundStyle(Color.accentColor)
                     VStack(alignment: .leading, spacing: 1) {

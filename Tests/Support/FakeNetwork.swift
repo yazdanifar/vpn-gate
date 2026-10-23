@@ -3,15 +3,15 @@ import VPNGateCore
 
 /// The "VPN side" of the L2 hub: answers DHCP and ARP like a SoftEther virtual router would.
 final class FakeNetworkServer {
-    var offeredIP: UInt32 = 0x0AE991B6          // 10.233.145.182
+    var offeredIP: UInt32 = 0x0AE991B6  // 10.233.145.182
     var mask: UInt32 = 0xFFFF0000
-    var router: UInt32 = 0x0AE9FEFE             // 10.233.254.254
+    var router: UInt32 = 0x0AE9FEFE  // 10.233.254.254
     var dns: [UInt32] = [0x0AE9FEFE, 0x08080808]
     var leaseSeconds: UInt32 = 3600
     var serverID: UInt32 = 0x0AE9FEFE
     var gatewayMAC: MAC = [0x00, 0xAC, 0x11, 0x22, 0x33, 0x44]
     var answerARP = true
-    var silent = false                          // ignore DHCP entirely
+    var silent = false  // ignore DHCP entirely
     /// Number of upcoming REQUESTs to answer with NAK.
     var nakCount = 0
     /// IP handed out for REQUESTs with ciaddr set (renewals); nil = same as offered.
@@ -86,8 +86,10 @@ final class FakeNetworkServer {
 }
 
 /// Builds an Ethernet/IPv4 UDP frame addressed to `dstMAC` (for feeding the bridge).
-func ipv4Frame(dstMAC: MAC, srcMAC: MAC = [0, 1, 2, 3, 4, 5], src: UInt32, dst: UInt32, proto: UInt8 = 6,
-               payload: [UInt8] = [1, 2, 3, 4]) -> [UInt8] {
+func ipv4Frame(
+    dstMAC: MAC, srcMAC: MAC = [0, 1, 2, 3, 4, 5], src: UInt32, dst: UInt32, proto: UInt8 = 6,
+    payload: [UInt8] = [1, 2, 3, 4]
+) -> [UInt8] {
     Ethernet.frame(dst: dstMAC, src: srcMAC, type: 0x0800, payload: IPv4.packet(proto: proto, src: src, dst: dst, payload: payload))
 }
 

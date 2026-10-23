@@ -41,7 +41,9 @@ public final class AccountManager: ObservableObject {
         let list = records.compactMap(\.account)
         if list.count < records.count {
             let kept = setAside(move: false)
-            loadNotice = "\(records.count - list.count) saved connection setting(s) could not be read and were skipped" + (kept.map { " (original kept as \($0))." } ?? ".")
+            loadNotice =
+                "\(records.count - list.count) saved connection setting(s) could not be read and were skipped"
+                + (kept.map { " (original kept as \($0))." } ?? ".")
         }
         accounts = list
         migrateProxyPasswords()
@@ -147,7 +149,7 @@ public final class AccountManager: ObservableObject {
         if let key = privateKeyDer, !key.isEmpty { Keychain.setData(key, account: keychainKey(for: account, suffix: "key")) }
         if let ppw = account.proxy.password, !ppw.isEmpty { Keychain.set(ppw, account: keychainKey(for: account, suffix: "proxypw")) }
         account.proxy.password = nil
-        if account.authType != .certificate {                            // no stale key material for password accounts
+        if account.authType != .certificate {  // no stale key material for password accounts
             Keychain.delete(keychainKey(for: account, suffix: "cert"))
             Keychain.delete(keychainKey(for: account, suffix: "key"))
         }

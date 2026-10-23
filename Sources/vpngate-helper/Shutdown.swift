@@ -9,7 +9,7 @@ final class ShutdownCoordinator {
 
     init(signals: [Int32], cleanup: @escaping () -> Void, finish: @escaping () -> Void = { exit(0) }) {
         for sig in signals {
-            signal(sig, SIG_IGN)                                    // the dispatch source takes over delivery
+            signal(sig, SIG_IGN)  // the dispatch source takes over delivery
             let s = DispatchSource.makeSignalSource(signal: sig, queue: DispatchQueue(label: "vpngate.shutdown.\(sig)"))
             s.setEventHandler { [weak self] in
                 guard let self = self else { return }

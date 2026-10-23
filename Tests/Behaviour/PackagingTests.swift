@@ -1,12 +1,14 @@
-import Foundation
 import Darwin
+import Foundation
 import VPNGateCore
 
 private let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
 /// Runs a package script with stub launchctl/chown/chmod/sleep on PATH; returns the exit status and the calls made.
-private func runPackageScript(_ name: String, failBootstrapTimes: Int = 0, alwaysFailBootstrap: Bool = false,
-                              jobAlreadyLoaded: Bool = false) throws -> (status: Int32, log: [String]) {
+private func runPackageScript(
+    _ name: String, failBootstrapTimes: Int = 0, alwaysFailBootstrap: Bool = false,
+    jobAlreadyLoaded: Bool = false
+) throws -> (status: Int32, log: [String]) {
     let dir = tempPath("pkgstubs-\(UUID().uuidString.prefix(6))")
     try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     let log = dir + "/log", counter = dir + "/count", loaded = dir + "/loaded"
@@ -16,10 +18,9 @@ private func runPackageScript(_ name: String, failBootstrapTimes: Int = 0, alway
         if tool == "launchctl" {
             body += "if [ \"$1\" = bootout ]; then [ -e '\(loaded)' ] && { rm '\(loaded)'; exit 0; }; exit 3; fi\n"
             body += "if [ \"$1\" = bootstrap ]; then\n"
-            body += "  [ -e '\(loaded)' ] && exit 5\n"       // a job that is still loaded cannot be bootstrapped again
+            body += "  [ -e '\(loaded)' ] && exit 5\n"  // a job that is still loaded cannot be bootstrapped again
             body += "  n=$(cat '\(counter)' 2>/dev/null || echo 0); n=$((n+1)); echo $n > '\(counter)'\n"
-            if alwaysFailBootstrap { body += "  exit 5\n" }
-            else { body += "  [ $n -le \(failBootstrapTimes) ] && exit 5\n" }
+            if alwaysFailBootstrap { body += "  exit 5\n" } else { body += "  [ $n -le \(failBootstrapTimes) ] && exit 5\n" }
             body += "fi\nexit 0\n"
         }
         let p = dir + "/" + tool
@@ -44,7 +45,9 @@ func registerPackagingTests() {
         let r = try runPackageScript("postinstall")
         expectEqual(r.status, 0, "\(r.log)")
         expect(r.log.contains("launchctl bootstrap system /Library/LaunchDaemons/com.yazdanifar.vpngate.helper.plist"), "\(r.log)")
-        expect(r.log.contains("chown root:wheel /Library/PrivilegedHelperTools/vpngate-helper /Library/LaunchDaemons/com.yazdanifar.vpngate.helper.plist"), "\(r.log)")
+        expect(
+            r.log.contains("chown root:wheel /Library/PrivilegedHelperTools/vpngate-helper /Library/LaunchDaemons/com.yazdanifar.vpngate.helper.plist"),
+            "\(r.log)")
         expect(r.log.contains("chmod 755 /Library/PrivilegedHelperTools/vpngate-helper"), "\(r.log)")
     }
     test("pkg/postinstall-retries-bootstrap-after-the-bootout-race") {

@@ -1,5 +1,5 @@
-import Foundation
 import CryptoKit
+import Foundation
 import Security
 
 /// A random value generated once per install and kept in a root-only file, so the `unique_id` the login pack

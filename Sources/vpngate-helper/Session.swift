@@ -10,8 +10,10 @@ struct SessionDependencies {
     /// SOCKS mode: the proxy server for (listen port, tunnel interface name, the VPN's DNS servers).
     var makeSocks: (_ port: UInt16, _ iface: String, _ dns: [String]) -> SocksServer = { port, iface, dns in
         let index = if_nametoindex(iface)
-        return SocksServer(port: port, connector: TunnelConnector(
-            interfaceIndex: index, dnsServers: dns, upstream: SystemDNSUpstream(boundInterface: index)))
+        return SocksServer(
+            port: port,
+            connector: TunnelConnector(
+                interfaceIndex: index, dnsServers: dns, upstream: SystemDNSUpstream(boundInterface: index)))
     }
 
     init(
@@ -128,7 +130,7 @@ final class VPNSession: SessionControlling {
 
     init(deps: SessionDependencies = SessionDependencies(), timing: SessionTiming = SessionTiming()) {
         self.deps = deps; self.timing = timing
-        current.helperVersion = helperVersion          // present in every snapshot, even before the first event
+        current.helperVersion = helperVersion  // present in every snapshot, even before the first event
     }
 
     var snapshot: HelperEvent { lock.lock(); defer { lock.unlock() }; return current }
@@ -146,8 +148,10 @@ final class VPNSession: SessionControlling {
     private func isCurrent(_ gen: Int) -> Bool { lock.lock(); defer { lock.unlock() }; return generation == gen }
 
     /// Publishes a state change; ignored if `gen` has been superseded.
-    private func set(_ gen: Int, _ state: ConnectionState, server: String? = nil, ip: String? = nil,
-                     log: String? = nil, error: String? = nil) {
+    private func set(
+        _ gen: Int, _ state: ConnectionState, server: String? = nil, ip: String? = nil,
+        log: String? = nil, error: String? = nil
+    ) {
         lock.lock()
         guard generation == gen else { lock.unlock(); return }
         publishLocked(state, server: server, ip: ip, log: log, error: error)
@@ -190,12 +194,15 @@ final class VPNSession: SessionControlling {
     }
 
     func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?) {
-        connect(host: host, port: port, ports: ports, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6, routing: routing,
-                tunnelMode: .fullTunnel, socksPort: defaultSocksPort)
+        connect(
+            host: host, port: port, ports: ports, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6, routing: routing,
+            tunnelMode: .fullTunnel, socksPort: defaultSocksPort)
     }
 
-    func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?,
-                 tunnelMode: TunnelMode, socksPort: Int) {
+    func connect(
+        host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?,
+        tunnelMode: TunnelMode, socksPort: Int
+    ) {
         var portList = ports ?? []
         if let p = port, !portList.contains(p) { portList.insert(p, at: 0) }
         let cfg = ConnectConfig(
@@ -205,8 +212,8 @@ final class VPNSession: SessionControlling {
             userName: "vpn",
             authType: "anonymous",
             proxy: proxy,
-            maxConnection: 1,                       // the VPN Gate client's own account (client_exe.c:27590)
-            disableQoS: true,                       // ... and DisableQoS=1 (client_exe.c:27598)
+            maxConnection: 1,  // the VPN Gate client's own account (client_exe.c:27590)
+            disableQoS: true,  // ... and DisableQoS=1 (client_exe.c:27598)
             autoReconnect: autoReconnect,
             blockIPv6: blockIPv6,
             routing: routing,
@@ -267,7 +274,8 @@ final class VPNSession: SessionControlling {
                 set(gen, .disconnected, error: "Gave up reconnecting"); return
             }
             attempt += 1
-            set(gen, .reconnecting, server: config.host, log: "Reconnecting in \(Int(reconnectDelay.rounded(.up)))s (attempt \(attempt))",
+            set(
+                gen, .reconnecting, server: config.host, log: "Reconnecting in \(Int(reconnectDelay.rounded(.up)))s (attempt \(attempt))",
                 error: failure?.localizedDescription)
             try? await Task.sleep(nanoseconds: UInt64(reconnectDelay * 1_000_000_000))
         }
@@ -352,7 +360,9 @@ final class VPNSession: SessionControlling {
             tun.startReading()
         } else {
             // The address the TLS connection really went to, not a second lookup of the name (which could differ, or fail).
-            let primaryBypass = config.proxy.kind != .none ? config.proxy.host
+            let primaryBypass =
+                config.proxy.kind != .none
+                ? config.proxy.host
                 : InputValidation.isIPv4Literal(config.host) ? config.host : (client.remoteIPv4 ?? config.host)
             // Domain rules need a resolver of our own: IP/CIDR rules alone are handled entirely by routes.
             let needsDNSProxy = config.routing?.effectiveRules.contains { $0.enabled && $0.type.isDomain } ?? false
@@ -364,9 +374,10 @@ final class VPNSession: SessionControlling {
                 dnsProxy = proxy
             }
             guard withResources(r, { $0.dnsProxy = dnsProxy }) else { dnsProxy?.stop(); throw CancellationError() }
-            try net.apply(iface: tun.name, lease: lease, bypassHost: primaryBypass, blockIPv6: config.blockIPv6,
-                          mtuOverride: config.mtu, routing: config.routing,
-                          dnsProxyAddress: needsDNSProxy ? DNSProxy.Settings().listenAddress : nil)
+            try net.apply(
+                iface: tun.name, lease: lease, bypassHost: primaryBypass, blockIPv6: config.blockIPv6,
+                mtuOverride: config.mtu, routing: config.routing,
+                dnsProxyAddress: needsDNSProxy ? DNSProxy.Settings().listenAddress : nil)
             if let dnsProxy {
                 dnsProxy.tunnelDNSServers = lease.dns.map(ipString)
                 dnsProxy.directDNSServers = net.directDNSServers()
@@ -390,7 +401,14 @@ final class VPNSession: SessionControlling {
                 await bridge?.renew()
             }
         }
-        if !withResources(r, { $0.timer = timer; $0.renew = renew }) { timer.cancel(); renew.cancel(); throw CancellationError() }
+        if !withResources(
+            r,
+            {
+                $0.timer = timer; $0.renew = renew
+            })
+        {
+            timer.cancel(); renew.cancel(); throw CancellationError()
+        }
     }
 
     private func makeCounterTimer(_ r: Resources, _ c: VPNTransport) -> DispatchSourceTimer {

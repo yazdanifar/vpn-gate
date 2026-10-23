@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 /// The helper/app log, in its own window rather than a cramped pane in Settings.
 struct LogView: View {

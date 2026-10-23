@@ -43,11 +43,11 @@ final class EthernetBridge {
     private var lastDHCP: DHCPMessage?
     private var xid = UInt32.random(in: 1...UInt32.max)
 
-    var sendFrame: (([UInt8]) -> Void)?       // to hub
-    var deliverIPv4: (([UInt8]) -> Void)?     // to utun
-    var deliverIPv6: (([UInt8]) -> Void)?     // to utun
-    var onLeaseChanged: ((Lease) -> Void)?    // renew returned a different address/router
-    var onLeaseLost: (() -> Void)?            // renew got no answer or a NAK
+    var sendFrame: (([UInt8]) -> Void)?  // to hub
+    var deliverIPv4: (([UInt8]) -> Void)?  // to utun
+    var deliverIPv6: (([UInt8]) -> Void)?  // to utun
+    var onLeaseChanged: ((Lease) -> Void)?  // renew returned a different address/router
+    var onLeaseLost: (() -> Void)?  // renew got no answer or a NAK
     var now: () -> Date = Date.init
     private let timing: BridgeTiming
     var handleIPv6: Bool = true
@@ -67,7 +67,7 @@ final class EthernetBridge {
     init(timing: BridgeTiming = BridgeTiming(), mac fixedMAC: MAC? = nil) {
         self.timing = timing
         var m = (0..<6).map { _ in UInt8.random(in: 0...255) }
-        m[0] = 0x5E; m[1] = 0x00 | (m[1] & 0xFE)    // locally administered-style prefix like SoftEther (5E:xx), unicast
+        m[0] = 0x5E; m[1] = 0x00 | (m[1] & 0xFE)  // locally administered-style prefix like SoftEther (5E:xx), unicast
         mac = fixedMAC ?? m
     }
 
@@ -91,13 +91,14 @@ final class EthernetBridge {
             clearLast()
             sendDHCP(req)
             guard let reply = await waitDHCP([.ack, .nak], seconds: timing.dhcpTimeout) else { continue }
-            if reply.type == .nak { continue }                       // start over immediately
-            let l = Lease(ip: reply.yiaddr, mask: reply.subnetMask ?? 0xffffff00,
-                          router: reply.router ?? offer.router ?? 0,
-                          dns: reply.dns.isEmpty ? offer.dns : reply.dns,
-                          seconds: reply.leaseSeconds ?? 3600,
-                          serverID: reply.serverID ?? offer.serverID ?? 0,
-                          mtu: reply.mtu ?? offer.mtu)
+            if reply.type == .nak { continue }  // start over immediately
+            let l = Lease(
+                ip: reply.yiaddr, mask: reply.subnetMask ?? 0xffffff00,
+                router: reply.router ?? offer.router ?? 0,
+                dns: reply.dns.isEmpty ? offer.dns : reply.dns,
+                seconds: reply.leaseSeconds ?? 3600,
+                serverID: reply.serverID ?? offer.serverID ?? 0,
+                mtu: reply.mtu ?? offer.mtu)
             setLease(l)
             return l
         }
@@ -216,8 +217,9 @@ final class EthernetBridge {
         if !onLink { nextHop = l.router }
         let isBroadcast = dst == 0xffffffff || (onLink && (dst | ~l.mask) == dst) || (dst >> 28) == 0xE
         var target: MAC?
-        if isBroadcast { target = broadcastMAC }
-        else if let e = arpCache[nextHop] {
+        if isBroadcast {
+            target = broadcastMAC
+        } else if let e = arpCache[nextHop] {
             if t.timeIntervalSince(e.at) <= timing.arpTTL { target = e.mac } else { arpCache[nextHop] = nil }
         }
         var sendRequest = false
@@ -236,7 +238,7 @@ final class EthernetBridge {
         if let tm = target {
             sendFrame?(Ethernet.frame(dst: tm, src: mac, type: 0x0800, payload: pkt))
         } else if sendRequest {
-            let req = ARPPacket(op: 1, senderMAC: mac, senderIP: myIP, targetMAC: [0,0,0,0,0,0], targetIP: nextHop)
+            let req = ARPPacket(op: 1, senderMAC: mac, senderIP: myIP, targetMAC: [0, 0, 0, 0, 0, 0], targetIP: nextHop)
             sendFrame?(Ethernet.frame(dst: broadcastMAC, src: mac, type: 0x0806, payload: req.encode()))
         }
     }
@@ -244,7 +246,7 @@ final class EthernetBridge {
     private func fromHostIPv6(_ pkt: [UInt8]) {
         guard handleIPv6, pkt.count >= 40 else { return }
         guard let v6 = IPv6.parse(pkt) else { return }
-        if v6.dst[0] == 0xff {      // multicast
+        if v6.dst[0] == 0xff {  // multicast
             sendFrame?(Ethernet.frame(dst: IPv6.multicastMAC(ip: v6.dst), src: mac, type: 0x86DD, payload: pkt))
             return
         }
@@ -252,10 +254,11 @@ final class EthernetBridge {
         lock.lock()
         // Link-local and on-link destinations are resolved directly; everything else goes to the router.
         var nextHop = v6.dst
-        let onLink = IPv6.isLinkLocal(v6.dst)
+        let onLink =
+            IPv6.isLinkLocal(v6.dst)
             || (v6Prefix.map { $0.onLink && t < $0.validUntil && Array(v6.dst[0..<8]) == Array($0.prefix[0..<8]) } ?? false)
         if !onLink {
-            guard let r = v6Router, t < r.until else { lock.unlock(); return }      // no IPv6 router: nothing to send to
+            guard let r = v6Router, t < r.until else { lock.unlock(); return }  // no IPv6 router: nothing to send to
             nextHop = r.address
         }
         var target: MAC?
@@ -280,8 +283,10 @@ final class EthernetBridge {
         } else if sendRequest {
             let src = IPv6.linkLocal(mac: mac), dst = IPv6.solicitedNodeMulticast(ip: nextHop)
             let ns = ICMPv6.neighborSolicitation(targetIP: nextHop, srcMAC: mac, srcIP: src, dstIP: dst)
-            sendFrame?(Ethernet.frame(dst: IPv6.multicastMAC(ip: dst), src: mac, type: 0x86DD,
-                                      payload: IPv6.ndpPacket(src: src, dst: dst, icmp: ns)))
+            sendFrame?(
+                Ethernet.frame(
+                    dst: IPv6.multicastMAC(ip: dst), src: mac, type: 0x86DD,
+                    payload: IPv6.ndpPacket(src: src, dst: dst, icmp: ns)))
         }
     }
 
@@ -313,8 +318,10 @@ final class EthernetBridge {
         let src = IPv6.linkLocal(mac: mac)
         let allRouters: [UInt8] = [0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]
         let rs = ICMPv6.routerSolicitation(srcMAC: mac, srcIP: src)
-        sendFrame?(Ethernet.frame(dst: IPv6.multicastMAC(ip: allRouters), src: mac, type: 0x86DD,
-                                  payload: IPv6.ndpPacket(src: src, dst: allRouters, icmp: rs)))
+        sendFrame?(
+            Ethernet.frame(
+                dst: IPv6.multicastMAC(ip: allRouters), src: mac, type: 0x86DD,
+                payload: IPv6.ndpPacket(src: src, dst: allRouters, icmp: rs)))
         return true
     }
 
@@ -352,10 +359,10 @@ final class EthernetBridge {
         guard hopLimit == 255, icmp[1] == 0, ICMPv6.isChecksumValid(src: v6.src, dst: v6.dst, icmp: icmp) else { return }
         let t = now()
         switch icmp[0] {
-        case 135 where icmp.count >= 24:                                 // Neighbor Solicitation
+        case 135 where icmp.count >= 24:  // Neighbor Solicitation
             let target = Array(icmp[8..<24])
             guard target[0] != 0xff else { return }
-            let probe = v6.src.allSatisfy { $0 == 0 }                    // DAD probe from ::
+            let probe = v6.src.allSatisfy { $0 == 0 }  // DAD probe from ::
             guard v6.dst == IPv6.solicitedNodeMulticast(ip: target) || (!probe && v6.dst == target) else { return }
             let slla = probe ? nil : ndpOption(icmp, from: 24, type: 1)
             lock.lock()
@@ -369,9 +376,11 @@ final class EthernetBridge {
             let allNodes: [UInt8] = [0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
             let dstIP = probe ? allNodes : v6.src
             let na = ICMPv6.neighborAdvertisement(targetIP: target, targetMAC: mac, srcIP: target, dstIP: dstIP, solicited: !probe)
-            sendFrame?(Ethernet.frame(dst: probe ? IPv6.multicastMAC(ip: allNodes) : srcMAC, src: mac, type: 0x86DD,
-                                      payload: IPv6.ndpPacket(src: target, dst: dstIP, icmp: na)))
-        case 136 where icmp.count >= 24:                                 // Neighbor Advertisement
+            sendFrame?(
+                Ethernet.frame(
+                    dst: probe ? IPv6.multicastMAC(ip: allNodes) : srcMAC, src: mac, type: 0x86DD,
+                    payload: IPv6.ndpPacket(src: target, dst: dstIP, icmp: na)))
+        case 136 where icmp.count >= 24:  // Neighbor Advertisement
             let target = Array(icmp[8..<24])
             guard target[0] != 0xff else { return }
             let tlla = ndpOption(icmp, from: 24, type: 2)
@@ -381,11 +390,11 @@ final class EthernetBridge {
             let queued = (waiting6[target] != nil || nd6Cache[target] != nil) ? learn6(target, m, t) : []
             lock.unlock()
             flush6(queued, t)
-        case 134 where icmp.count >= 16:                                 // Router Advertisement
+        case 134 where icmp.count >= 16:  // Router Advertisement
             guard IPv6.isLinkLocal(v6.src) else { return }
             handleRouterAdvertisement(v6.src, icmp, srcMAC: srcMAC, t)
         default:
-            break                                                        // RS (we are not a router) and Redirect
+            break  // RS (we are not a router) and Redirect
         }
     }
 
@@ -398,7 +407,7 @@ final class EthernetBridge {
         while i + 8 <= icmp.count {
             let len = Int(icmp[i + 1]) * 8
             guard len > 0, i + len <= icmp.count else { break }
-            if icmp[i] == 3, len >= 32, candidate == nil, icmp[i + 2] == 64 {          // Prefix Information, /64 only
+            if icmp[i] == 3, len >= 32, candidate == nil, icmp[i + 2] == 64 {  // Prefix Information, /64 only
                 let flags = icmp[i + 3], valid = rd32(icmp, i + 4), preferred = rd32(icmp, i + 8)
                 let prefix = Array(icmp[i + 16..<i + 32])
                 // RFC 4862 §5.5.3: preferred must not exceed valid; link-local prefixes are ignored.
@@ -434,7 +443,7 @@ final class EthernetBridge {
     /// Announce ourselves so the hub learns our MAC/IP.
     func gratuitousARP() {
         guard let l = currentLease() else { return }
-        let a = ARPPacket(op: 1, senderMAC: mac, senderIP: l.ip, targetMAC: [0,0,0,0,0,0], targetIP: l.ip)
+        let a = ARPPacket(op: 1, senderMAC: mac, senderIP: l.ip, targetMAC: [0, 0, 0, 0, 0, 0], targetIP: l.ip)
         sendFrame?(Ethernet.frame(dst: broadcastMAC, src: mac, type: 0x0806, payload: a.encode()))
     }
 }

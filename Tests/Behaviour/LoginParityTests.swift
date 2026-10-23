@@ -4,8 +4,10 @@ import VPNGateCore
 // Login / welcome / additional_connect parity with the stock SoftEther client (v4.44-9807), the new defaults,
 // and the address the bypass route is built from.
 
-private func welcome(connectionName: String? = "CID-1", maxConnection: UInt32? = nil, enableUdpRecovery: Bool? = nil,
-                     qos: Bool? = nil, timeout: UInt32? = nil) -> Pack {
+private func welcome(
+    connectionName: String? = "CID-1", maxConnection: UInt32? = nil, enableUdpRecovery: Bool? = nil,
+    qos: Bool? = nil, timeout: UInt32? = nil
+) -> Pack {
     var p = Pack()
     p.addStr("session_name", "SID-1")
     if let c = connectionName { p.addStr("connection_name", c) }
@@ -17,10 +19,13 @@ private func welcome(connectionName: String? = "CID-1", maxConnection: UInt32? =
     return p
 }
 
-private func connect(_ s: FakeSoftEtherServer, maxConnections: Int = 1, disableQoS: Bool = false,
-                     uniqueId: HostUniqueId? = nil, host: String = "1.2.3.4", proxy: ProxySettings = ProxySettings()) -> SoftEtherClient {
-    SoftEtherClient(host: host, port: 443, proxy: proxy, maxConnections: maxConnections, useUdpAccel: false,
-                    disableQoS: disableQoS, uniqueId: uniqueId, makeStream: s.factory)
+private func connect(
+    _ s: FakeSoftEtherServer, maxConnections: Int = 1, disableQoS: Bool = false,
+    uniqueId: HostUniqueId? = nil, host: String = "1.2.3.4", proxy: ProxySettings = ProxySettings()
+) -> SoftEtherClient {
+    SoftEtherClient(
+        host: host, port: 443, proxy: proxy, maxConnections: maxConnections, useUdpAccel: false,
+        disableQoS: disableQoS, uniqueId: uniqueId, makeStream: s.factory)
 }
 
 func registerLoginParityTests() {
@@ -47,8 +52,10 @@ func registerLoginParityTests() {
         expectEqual(p1.data("unique_id"), p2.data("unique_id"), "same across attempts")
         expectEqual(p1.data("unique_id"), p3.data("unique_id"), "same across clients of one install")
         expectEqual(p1.data("UniqueId"), p3.data("UniqueId"))
-        let other = SoftEtherClient(host: "h", port: 443, proxy: ProxySettings(),
-                                    uniqueId: HostUniqueId(key: Data(repeating: 8, count: 32))).loginPack()
+        let other = SoftEtherClient(
+            host: "h", port: 443, proxy: ProxySettings(),
+            uniqueId: HostUniqueId(key: Data(repeating: 8, count: 32))
+        ).loginPack()
         expect(other.data("unique_id") != p1.data("unique_id"), "another install, another id")
         expect(p1.data("unique_id") != p1.data("UniqueId").map { $0 + Data(count: 4) }, "node id is not the login id")
     }
@@ -106,8 +113,9 @@ func registerLoginParityTests() {
     // MARK: welcome
     test("loginparity/welcome-requires-session-and-connection-name") {
         let s = FakeSoftEtherServer(); s.welcomeOverride = welcome(connectionName: nil)
-        do { _ = try await connect(s).connect { _ in }; fail("welcome without connection_name accepted") }
-        catch { expect(error.localizedDescription.contains("connection_name"), "\(error)") }
+        do { _ = try await connect(s).connect { _ in }; fail("welcome without connection_name accepted") } catch {
+            expect(error.localizedDescription.contains("connection_name"), "\(error)")
+        }
         let ok = FakeSoftEtherServer(); ok.welcomeOverride = welcome(connectionName: "")
         let c = connect(ok); _ = try await c.connect { _ in }; c.close(nil)
     }
@@ -218,7 +226,7 @@ func registerLoginParityTests() {
         expectEqual(h2.nets.value[0].applied.first?.host, "1.2.3.4", "an IPv4 literal is used as given")
         s2.disconnect(); await expectA(await s2.waitUntilIdle(timeout: 3))
 
-        let h3 = SessionHarness()                    // address unknown: the name, as before
+        let h3 = SessionHarness()  // address unknown: the name, as before
         let s3 = VPNSession(deps: h3.deps(), timing: h3.fastTiming)
         s3.connect(config: ConnectConfig(host: "vpn.example.org", ports: [443], autoReconnect: false))
         await expectA(await eventually(5) { !h3.nets.value.isEmpty && !h3.nets.value[0].applied.isEmpty })
@@ -242,26 +250,37 @@ func registerLoginParityTests() {
         defer { try? FileManager.default.removeItem(atPath: dir) }
         func left() -> [String] { (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? ["<unreadable>"] }
         let pem = try CertImport.identity(certificateFile: Data(CertFixtures.certPEM.utf8), keyFile: Data(CertFixtures.rsaPKCS1PEM.utf8))
-        let id = try CertImport.importPKCS12(CertFixtures.legacyP12, passphrase: CertFixtures.p12Passphrase,
-                                             forceLegacyKeychain: true, keychainDirectory: dir)
+        let id = try CertImport.importPKCS12(
+            CertFixtures.legacyP12, passphrase: CertFixtures.p12Passphrase,
+            forceLegacyKeychain: true, keychainDirectory: dir)
         expectEqual(id.certDer, pem.certDer, "certificate via the legacy path")
         expectEqual(id.privateKeyDer, pem.privateKeyDer, "key via the legacy path (must be exportable)")
         expectEqual(left(), [], "temporary keychain left behind after a successful import")
         // The newer encoding cannot be exported from a keychain: either it works or the user gets an explanation.
         do {
-            let m = try CertImport.importPKCS12(CertFixtures.modernP12, passphrase: CertFixtures.p12Passphrase,
-                                                forceLegacyKeychain: true, keychainDirectory: dir)
+            let m = try CertImport.importPKCS12(
+                CertFixtures.modernP12, passphrase: CertFixtures.p12Passphrase,
+                forceLegacyKeychain: true, keychainDirectory: dir)
             expectEqual(m.certDer, pem.certDer)
         } catch { expect(error is CertImport.Failure, "\(error)") }
         expectEqual(left(), [], "temporary keychain left behind after the modern file")
-        do { _ = try CertImport.importPKCS12(CertFixtures.legacyP12, passphrase: "nope", forceLegacyKeychain: true, keychainDirectory: dir); fail("wrong passphrase accepted") }
-        catch { expectEqual(error as? CertImport.Failure, .wrongPassphrase) }
-        do { _ = try CertImport.importPKCS12(CertFixtures.modernP12, passphrase: "nope", forceLegacyKeychain: true, keychainDirectory: dir); fail("wrong passphrase accepted") }
-        catch { expectEqual(error as? CertImport.Failure, .wrongPassphrase) }
-        do { _ = try CertImport.importPKCS12(CertFixtures.ecP12, passphrase: CertFixtures.p12Passphrase, forceLegacyKeychain: true, keychainDirectory: dir); fail("EC accepted") }
-        catch { expectEqual(error as? CertImport.Failure, .unsupportedKeyType("EC"), "\(error)") }
+        do {
+            _ = try CertImport.importPKCS12(CertFixtures.legacyP12, passphrase: "nope", forceLegacyKeychain: true, keychainDirectory: dir);
+            fail("wrong passphrase accepted")
+        } catch { expectEqual(error as? CertImport.Failure, .wrongPassphrase) }
+        do {
+            _ = try CertImport.importPKCS12(CertFixtures.modernP12, passphrase: "nope", forceLegacyKeychain: true, keychainDirectory: dir);
+            fail("wrong passphrase accepted")
+        } catch { expectEqual(error as? CertImport.Failure, .wrongPassphrase) }
+        do {
+            _ = try CertImport.importPKCS12(CertFixtures.ecP12, passphrase: CertFixtures.p12Passphrase, forceLegacyKeychain: true, keychainDirectory: dir);
+            fail("EC accepted")
+        } catch { expectEqual(error as? CertImport.Failure, .unsupportedKeyType("EC"), "\(error)") }
         expectEqual(left(), [], "failure paths clean up too")
-        do { _ = try CertImport.importPKCS12(CertFixtures.modernP12, passphrase: CertFixtures.p12Passphrase, forceLegacyKeychain: true, keychainDirectory: dir + "/missing"); fail("unusable keychain dir accepted") }
-        catch { expect(error is CertImport.Failure, "\(error)") }
+        do {
+            _ = try CertImport.importPKCS12(
+                CertFixtures.modernP12, passphrase: CertFixtures.p12Passphrase, forceLegacyKeychain: true, keychainDirectory: dir + "/missing");
+            fail("unusable keychain dir accepted")
+        } catch { expect(error is CertImport.Failure, "\(error)") }
     }
 }

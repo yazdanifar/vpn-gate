@@ -28,8 +28,10 @@ public struct ServerFetchResult {
     public let isFresh: Bool
     public let outcome: SyncOutcome
 
-    public init(servers: [VPNServer], source: ListSource, timestamp: Date? = nil, isFresh: Bool = true,
-                outcome: SyncOutcome = .synced) {
+    public init(
+        servers: [VPNServer], source: ListSource, timestamp: Date? = nil, isFresh: Bool = true,
+        outcome: SyncOutcome = .synced
+    ) {
         self.servers = servers
         self.source = source
         self.timestamp = timestamp
@@ -47,8 +49,11 @@ public struct RelayTarget: Equatable {
 
 /// Plain HTTP GET used for the project's list API. Production uses URLSession; tests inject a fake so nothing
 /// ever touches the network. Must throw on a non-200 status or a body above `maxBytes`.
-public typealias HTTPGet = @Sendable (_ url: URL, _ connectTimeout: TimeInterval, _ dataTimeout: TimeInterval,
-                                      _ maxBytes: Int) async throws -> Data
+public typealias HTTPGet =
+    @Sendable (
+        _ url: URL, _ connectTimeout: TimeInterval, _ dataTimeout: TimeInterval,
+        _ maxBytes: Int
+    ) async throws -> Data
 
 /// Fetches and syncs VPNGate.dat from the project's HTTP API and peer-to-peer from relays.
 /// Reference: SoftEther Windows Client / VPN Gate Plugin FUN_00411140 (scheduler), FUN_00414230 (HTTP API),
@@ -56,14 +61,14 @@ public typealias HTTPGet = @Sendable (_ url: URL, _ connectTimeout: TimeInterval
 public final class VGDatFetcher {
     // Defaults of the client's tunables in milliseconds (client_exe.c 7366-7480, 8205-8300); a verified list's
     // DynList can override each of them within [default/5, default*50].
-    static let httpPollOkMs: UInt64 = 3_600_000          // VGC_HTTP_POLL_INTERVAL_OK
-    static let httpPollErrorMs: UInt64 = 600_000         // VGC_HTTP_POLL_INTERVAL_ERROR
-    static let udpPollErrorMs: UInt64 = 600_000          // VGC_UDP_POLL_INTERVAL_ERROR (used when the relays all fail)
-    static let tcpTargetHosts: UInt64 = 12               // VGC_NUM_TCP_TARGET_HOSTS
-    static let tcpConnectMs: UInt64 = 1_000              // VGC_TCP_POLL_CONNECT_TIMEOUT
-    static let tcpSslMs: UInt64 = 5_000                  // VGC_TCP_POLL_SSL_TIMEOUT
-    static let dataMs: UInt64 = 60_000                   // VGC_HTTP_DATA_TIMEOUT
-    static let httpConnectMs: UInt64 = 7_000             // VGC_HTTP_CONNECT_TIMEOUT
+    static let httpPollOkMs: UInt64 = 3_600_000  // VGC_HTTP_POLL_INTERVAL_OK
+    static let httpPollErrorMs: UInt64 = 600_000  // VGC_HTTP_POLL_INTERVAL_ERROR
+    static let udpPollErrorMs: UInt64 = 600_000  // VGC_UDP_POLL_INTERVAL_ERROR (used when the relays all fail)
+    static let tcpTargetHosts: UInt64 = 12  // VGC_NUM_TCP_TARGET_HOSTS
+    static let tcpConnectMs: UInt64 = 1_000  // VGC_TCP_POLL_CONNECT_TIMEOUT
+    static let tcpSslMs: UInt64 = 5_000  // VGC_TCP_POLL_SSL_TIMEOUT
+    static let dataMs: UInt64 = 60_000  // VGC_HTTP_DATA_TIMEOUT
+    static let httpConnectMs: UInt64 = 7_000  // VGC_HTTP_CONNECT_TIMEOUT
     /// Largest HTTP API body (0x2000000, client_exe.c:9040).
     static let httpMaxBytes = 32 * 1024 * 1024
     /// Timeout for the ack/junk/final-byte exchange (client_exe.c:8338, 10000 ms).
@@ -94,16 +99,18 @@ public final class VGDatFetcher {
     ///   - alternativeMode: the original's "alt mode" (client_exe.c:283074), which adds an https attempt of the API.
     ///   - apiDigits: the two hex digits of the API host name (`x?.x?`). The original takes characters 2 and 3 of a
     ///     hash of the machine; this app has no such id, so it uses random digits.
-    public init(makeStream: @escaping StreamFactory = { TLSStream(host: $0, port: $1, proxy: $2) },
-                httpGet: @escaping HTTPGet = VGDatFetcher.urlSessionGet,
-                cacheURL: URL = VGDatFetcher.cachedDatURL,
-                bundleURLs: [URL]? = nil,
-                now: @escaping () -> Date = Date.init,
-                timeoutScale: Double = 1,
-                defaults: UserDefaults = .standard,
-                shuffle: @escaping ([VPNServer]) -> [VPNServer] = { $0.shuffled() },
-                alternativeMode: Bool = false,
-                apiDigits: (Character, Character)? = nil) {
+    public init(
+        makeStream: @escaping StreamFactory = { TLSStream(host: $0, port: $1, proxy: $2) },
+        httpGet: @escaping HTTPGet = VGDatFetcher.urlSessionGet,
+        cacheURL: URL = VGDatFetcher.cachedDatURL,
+        bundleURLs: [URL]? = nil,
+        now: @escaping () -> Date = Date.init,
+        timeoutScale: Double = 1,
+        defaults: UserDefaults = .standard,
+        shuffle: @escaping ([VPNServer]) -> [VPNServer] = { $0.shuffled() },
+        alternativeMode: Bool = false,
+        apiDigits: (Character, Character)? = nil
+    ) {
         self.makeStream = makeStream
         self.httpGet = httpGet
         self.cacheURL = cacheURL
@@ -189,8 +196,9 @@ public final class VGDatFetcher {
         var last: Error = StreamError.protocolError("HTTP API unavailable")
         for url in [apiURL(https: false)] + (alternativeMode ? [apiURL(https: true)] : []) {
             do {
-                let body = try await httpGet(url, ms("VGC_HTTP_CONNECT_TIMEOUT", Self.httpConnectMs) * timeoutScale,
-                                             ms("VGC_HTTP_DATA_TIMEOUT", Self.dataMs) * timeoutScale, Self.httpMaxBytes)
+                let body = try await httpGet(
+                    url, ms("VGC_HTTP_CONNECT_TIMEOUT", Self.httpConnectMs) * timeoutScale,
+                    ms("VGC_HTTP_DATA_TIMEOUT", Self.dataMs) * timeoutScale, Self.httpMaxBytes)
                 return try accept(body)
             } catch { last = error }
         }
@@ -199,8 +207,8 @@ public final class VGDatFetcher {
 
     /// Verifies a downloaded list, adopts its tunables, and keeps it when it is fresh.
     private func accept(_ payload: Data) throws -> VGDatFile {
-        let datFile = try VGDat.parse(data: payload, now: now())        // RSA signature
-        adopt(datFile)                                                  // the original applies DynList before the age check
+        let datFile = try VGDat.parse(data: payload, now: now())  // RSA signature
+        adopt(datFile)  // the original applies DynList before the age check
         guard datFile.isFresh else {
             throw StreamError.protocolError("Served a stale VPNGate.dat (\(datFile.timestamp))")
         }
@@ -213,7 +221,7 @@ public final class VGDatFetcher {
         let cfg = URLSessionConfiguration.ephemeral
         cfg.urlCache = nil; cfg.httpCookieStorage = nil; cfg.httpShouldSetCookies = false
         cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
-        cfg.timeoutIntervalForRequest = max(connectTimeout, dataTimeout)      // idle gap; URLSession has no separate connect timeout
+        cfg.timeoutIntervalForRequest = max(connectTimeout, dataTimeout)  // idle gap; URLSession has no separate connect timeout
         cfg.timeoutIntervalForResource = connectTimeout + dataTimeout
         let session = URLSession(configuration: cfg)
         defer { session.finishTasksAndInvalidate() }
@@ -252,7 +260,8 @@ public final class VGDatFetcher {
     var lastGoodRelay: RelayTarget? {
         get {
             guard let s = defaults.string(forKey: Self.lastGoodKey), let colon = s.lastIndex(of: ":"),
-                  let port = UInt16(s[s.index(after: colon)...]) else { return nil }
+                let port = UInt16(s[s.index(after: colon)...])
+            else { return nil }
             return RelayTarget(ip: String(s[..<colon]), port: port)
         }
         set { defaults.set(newValue.map { "\($0.ip):\($0.port)" }, forKey: Self.lastGoodKey) }
@@ -260,8 +269,9 @@ public final class VGDatFetcher {
 
     /// Asks the last-good relay, then up to 13 hosts with port 443 and 13 others, for the verified VPNGate.dat.
     public func fetchFromRelays(candidates: [VPNServer], proxy: ProxySettings) async throws -> VGDatFile {
-        var targets = Self.selectTargets(from: candidates, limit: Int(clamping: tunables.value("VGC_NUM_TCP_TARGET_HOSTS", default: Self.tcpTargetHosts)),
-                                         shuffle: shuffle)
+        var targets = Self.selectTargets(
+            from: candidates, limit: Int(clamping: tunables.value("VGC_NUM_TCP_TARGET_HOSTS", default: Self.tcpTargetHosts)),
+            shuffle: shuffle)
         let lastGood = lastGoodRelay
         if let lastGood { targets.removeAll { $0 == lastGood }; targets.insert(lastGood, at: 0) }
         guard !targets.isEmpty else {
@@ -276,7 +286,7 @@ public final class VGDatFetcher {
                 return file
             } catch {
                 lastError = error
-                if target == lastGood { lastGoodRelay = nil }      // the original forgets a cached relay that failed
+                if target == lastGood { lastGoodRelay = nil }  // the original forgets a cached relay that failed
                 if Task.isCancelled { break }
             }
         }
@@ -300,7 +310,9 @@ public final class VGDatFetcher {
     public func downloadFromHost(host: String, port: UInt16, proxy: ProxySettings) async throws -> VGDatFile {
         let stream = makeStream(host, port, proxy)
         defer { stream.cancel() }
-        try await guarded(stream, ms("VGC_TCP_POLL_CONNECT_TIMEOUT", Self.tcpConnectMs) + ms("VGC_TCP_POLL_SSL_TIMEOUT", Self.tcpSslMs)) { try await stream.start() }
+        try await guarded(stream, ms("VGC_TCP_POLL_CONNECT_TIMEOUT", Self.tcpConnectMs) + ms("VGC_TCP_POLL_SSL_TIMEOUT", Self.tcpSslMs)) {
+            try await stream.start()
+        }
 
         let payload: Data = try await guarded(stream, ms("VGC_HTTP_DATA_TIMEOUT", Self.dataMs)) {
             // Send HTTP request + 16-byte probe
@@ -357,8 +369,9 @@ public final class VGDatFetcher {
             .compactMap { file, source in file.map { ($0, source) } }
         if let best = stored.max(by: { $0.0.timestampMs < $1.0.timestampMs }) {
             adopt(best.0)
-            return ServerFetchResult(servers: best.0.servers, source: best.1, timestamp: best.0.timestamp,
-                                     isFresh: best.0.isFresh, outcome: outcome)
+            return ServerFetchResult(
+                servers: best.0.servers, source: best.1, timestamp: best.0.timestamp,
+                isFresh: best.0.isFresh, outcome: outcome)
         }
 
         if let csvServers = try? await ServerList.fetch(mirror: mirror), !csvServers.isEmpty {

@@ -98,8 +98,8 @@ final class SoftEtherClient: VPNTransport {
     /// read verbatim by the server, no negotiation). Only additional connections can be assigned a one-way
     /// direction; the primary connection is always client-to-server when this is on (Protocol.c:4172-4176).
     private let halfConnectionConfig: Bool
-    private let loginUniqueId: Data                 // 20 bytes, stable per install
-    private let nodeUniqueId: Data                  // 16 bytes
+    private let loginUniqueId: Data  // 20 bytes, stable per install
+    private let nodeUniqueId: Data  // 16 bytes
     /// Set when the server rejected the watermark upload and the plain one was used; additional connections then match.
     private var plainSignature = false
     /// IPv4 address the TCP/TLS connection of the established session really went to (nil behind a proxy or if unknown).
@@ -107,7 +107,7 @@ final class SoftEtherClient: VPNTransport {
     private let makeStream: StreamFactory
 
     private let pool = ConnectionPool()
-    private var udpAccel: UdpAccel?                  // guarded by sendLock together with closed and the task handles
+    private var udpAccel: UdpAccel?  // guarded by sendLock together with closed and the task handles
     private var replenishTask: Task<Void, Never>?
     private var keepAliveTask: Task<Void, Never>?
     /// Poll/backoff base for topping up the additional-connection pool (tests shorten it).
@@ -216,7 +216,9 @@ final class SoftEtherClient: VPNTransport {
             }
 
             self.welcome = finalWelcome
-            log("Session \(finalWelcome.sessionName) established (TCP max=\(finalWelcome.maxConnection), compress=\(finalWelcome.useCompress), UDP=\(finalWelcome.useUdpAcceleration))")
+            log(
+                "Session \(finalWelcome.sessionName) established (TCP max=\(finalWelcome.maxConnection), compress=\(finalWelcome.useCompress), UDP=\(finalWelcome.useUdpAcceleration))"
+            )
 
             // Start KeepAlive & Additional connections
             startDataServices(welcome: finalWelcome)
@@ -286,8 +288,10 @@ final class SoftEtherClient: VPNTransport {
             serverInfo: serverInfo
         )
 
-        try await activeStream.send(httpPost(path: "/vpnsvc/vpn.cgi", type: "application/octet-stream",
-                                             body: withDummy(login).serialize(), host: host))
+        try await activeStream.send(
+            httpPost(
+                path: "/vpnsvc/vpn.cgi", type: "application/octet-stream",
+                body: withDummy(login).serialize(), host: host))
         let w = try await readPack(activeStream)
 
         if let err = w.int("error"), err != 0 {
@@ -317,8 +321,9 @@ final class SoftEtherClient: VPNTransport {
         // Parse Welcome packet; without a session name and key nothing after this could work (upstream ParseWelcome fails the same way).
         // (upstream also asks for the policy:* elements, but PackGetPolicy never fails, so nothing is required of them.)
         guard let sessionName = w.str("session_name"), !sessionName.isEmpty,
-              let connectionName = w.str("connection_name"),
-              let sessionKey = w.data("session_key"), sessionKey.count == 20 else {
+            let connectionName = w.str("connection_name"),
+            let sessionKey = w.data("session_key"), sessionKey.count == 20
+        else {
             throw StreamError.protocolError("Malformed welcome from server (missing session_name, connection_name or session_key)")
         }
         let useCompress = (w.int("use_compress") ?? 0) != 0
@@ -326,8 +331,9 @@ final class SoftEtherClient: VPNTransport {
         let halfConn = (w.int("half_connection") ?? 0) != 0
         let qos = (w.int("qos") ?? 0) != 0
         let enableUdpRecovery = (w.int("enable_udp_recovery") ?? 0) != 0
-        let maxConn = Self.negotiatedMaxConnection(server: Int(w.int("max_connection") ?? 1), enableUdpRecovery: enableUdpRecovery,
-                                                   client: maxConnectionsConfig, qos: qos, half: halfConn)
+        let maxConn = Self.negotiatedMaxConnection(
+            server: Int(w.int("max_connection") ?? 1), enableUdpRecovery: enableUdpRecovery,
+            client: maxConnectionsConfig, qos: qos, half: halfConn)
         let timeoutMs = max(Int(w.int("timeout") ?? 30000), 500)
         let message = w.data("Msg").map { String(decoding: $0, as: UTF8.self) }
 
@@ -355,17 +361,19 @@ final class SoftEtherClient: VPNTransport {
         if useUdp, let udp = tempUdp {
             let secondary = InputValidation.isIPv4Literal(host) && !InputValidation.isNonPublicIPv4(host) ? host : nil
             if udpVer == 2, let ip = udpServerIP, let sPort = udpServerPort, let sCookie = udpServerCookie, sCookie != 0,
-               let cCookie = udpClientCookie, cCookie != 0, let sKey = udpKey ?? (udpPlaintext ? Data() : nil),
-               udp.configure(serverIP: ip, serverPort: sPort, myCookie: UInt32(truncatingIfNeeded: cCookie),
-                             yourCookie: UInt32(truncatingIfNeeded: sCookie), yourKeyV2: [UInt8](sKey),
-                             fastDisconnect: udpFastDisconnect, useCompress: useCompress, plaintext: udpPlaintext,
-                             secondaryIP: secondary) {
+                let cCookie = udpClientCookie, cCookie != 0, let sKey = udpKey ?? (udpPlaintext ? Data() : nil),
+                udp.configure(
+                    serverIP: ip, serverPort: sPort, myCookie: UInt32(truncatingIfNeeded: cCookie),
+                    yourCookie: UInt32(truncatingIfNeeded: sCookie), yourKeyV2: [UInt8](sKey),
+                    fastDisconnect: udpFastDisconnect, useCompress: useCompress, plaintext: udpPlaintext,
+                    secondaryIP: secondary)
+            {
                 udp.onFrame = { [weak self] frame in self?.onFrame?(frame) }
                 udp.onByteCount = { [weak self] bIn, bOut in
                     if bIn > 0 { self?.add(in: bIn) }
                     if bOut > 0 { self?.add(out: bOut) }
                 }
-                tempUdp = nil          // ownership moves to self
+                tempUdp = nil  // ownership moves to self
                 if installUdp(udp) { udp.start() }
             } else {
                 log("UDP acceleration offered but unusable; using TCP only")
@@ -399,8 +407,9 @@ final class SoftEtherClient: VPNTransport {
         setConnectedIPv4(activeStream.remoteIPv4)
         // The primary connection is always client-to-server when half connection is on (Protocol.c:4172-4176);
         // the server-to-client direction is only ever assigned to an additional connection.
-        pool.add(stream: activeStream, useCompress: useCompress, timeoutMs: timeoutMs,
-                 direction: halfConnectionConfig ? .clientToServer : .both)
+        pool.add(
+            stream: activeStream, useCompress: useCompress, timeoutMs: timeoutMs,
+            direction: halfConnectionConfig ? .clientToServer : .both)
         return (wel, nil)
     }
 
@@ -436,9 +445,13 @@ final class SoftEtherClient: VPNTransport {
     static func redirectHost(from w: Pack, fallback: String) throws -> String {
         if isIPv6Flagged(w, "Ip") { throw StreamError.protocolError("Cluster redirect to an IPv6 address is not supported") }
         let candidate: String
-        if let ipStr = w.str("Ip"), !ipStr.isEmpty { candidate = ipStr }
-        else if let ipInt = w.int("Ip") { candidate = packIPString(ipInt) }
-        else { return fallback }
+        if let ipStr = w.str("Ip"), !ipStr.isEmpty {
+            candidate = ipStr
+        } else if let ipInt = w.int("Ip") {
+            candidate = packIPString(ipInt)
+        } else {
+            return fallback
+        }
         guard InputValidation.isValidHost(candidate) else {
             throw StreamError.protocolError("Cluster redirect to an invalid host")
         }
@@ -544,7 +557,7 @@ final class SoftEtherClient: VPNTransport {
         p.addStr("client_str", "SoftEther VPN Client")
         p.addInt("client_ver", clientVer)
         p.addInt("client_build", build)
-        p.addInt("protocol", 0)                       // TCP
+        p.addInt("protocol", 0)  // TCP
         p.addStr("hello", "SoftEther VPN Client")
         p.addInt("version", clientVer)
         p.addInt("build", build)
@@ -555,7 +568,7 @@ final class SoftEtherClient: VPNTransport {
         p.addBool("half_connection", halfConnectionConfig)
         p.addBool("require_bridge_routing_mode", false)
         p.addBool("require_monitor_mode", false)
-        p.addBool("qos", !disableQoS)                // upstream: !DisableQoS
+        p.addBool("qos", !disableQoS)  // upstream: !DisableQoS
         p.addBool("support_bulk_on_rudp", true)
         p.addBool("support_hmac_on_bulk_of_rudp", true)
         p.addBool("support_udp_recovery", true)
@@ -636,7 +649,7 @@ final class SoftEtherClient: VPNTransport {
         // 2. Keep the pool at the negotiated size: open the additional TCP connections and replace any that die.
         var replenish: Task<Void, Never>?
         if welcome.maxConnection > 1, let sessionKey = welcome.sessionKey {
-            let target = welcome.maxConnection          // already capped / raised by negotiatedMaxConnection
+            let target = welcome.maxConnection  // already capped / raised by negotiatedMaxConnection
             replenish = Task.detached { [weak self] in
                 await self?.replenishLoop(target: target, sessionKey: sessionKey, useCompress: useCompress, timeoutMs: timeoutMs)
             }

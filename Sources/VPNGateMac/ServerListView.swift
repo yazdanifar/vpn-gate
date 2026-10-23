@@ -19,7 +19,8 @@ final class ListState: ObservableObject {
 
     init() {
         if let d = UserDefaults.standard.data(forKey: Self.columnsKey),
-           let c = try? JSONDecoder().decode(TableColumnCustomization<VPNServer>.self, from: d) {
+            let c = try? JSONDecoder().decode(TableColumnCustomization<VPNServer>.self, from: d)
+        {
             columns = c
         } else {
             columns = TableColumnCustomization<VPNServer>()
@@ -115,8 +116,10 @@ struct ServerListView: View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("VPN Gate Public VPN Relay Servers").font(.title2).bold()
-                Text("Gain freedom access to Internet by using VPN connection via Public VPN Servers provided by volunteers around the world. Bypass your local malfunctioning firewall's packet blocking, and hide your IP address safely.")
-                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "Gain freedom access to Internet by using VPN connection via Public VPN Servers provided by volunteers around the world. Bypass your local malfunctioning firewall's packet blocking, and hide your IP address safely."
+                )
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 12)
             ConnectionCard().frame(width: 260)
@@ -156,7 +159,9 @@ struct ServerListView: View {
     @ViewBuilder private var connectionButton: some View {
         switch model.event.state {
         case .disconnected:
-            Button { if let s = selected { model.connect(s) } } label: {
+            Button {
+                if let s = selected { model.connect(s) }
+            } label: {
                 Text("Connect to the VPN Server").frame(minWidth: 190)
             }
             .keyboardShortcut(.defaultAction)
@@ -164,11 +169,19 @@ struct ServerListView: View {
             .disabled(selected == nil)
             .help(selected == nil ? "Select a server in the list first" : "Connect to the selected server")
         case .connected:
-            Button(role: .destructive) { model.disconnect() } label: { Text("Disconnect").frame(minWidth: 190) }
-                .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent).controlSize(.large).tint(.red)
+            Button(role: .destructive) {
+                model.disconnect()
+            } label: {
+                Text("Disconnect").frame(minWidth: 190)
+            }
+            .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent).controlSize(.large).tint(.red)
         default:
-            Button { model.disconnect() } label: { Text("Cancel").frame(minWidth: 190) }
-                .keyboardShortcut(.defaultAction).controlSize(.large)
+            Button {
+                model.disconnect()
+            } label: {
+                Text("Cancel").frame(minWidth: 190)
+            }
+            .keyboardShortcut(.defaultAction).controlSize(.large)
         }
     }
 
@@ -233,7 +246,9 @@ struct ServerListView: View {
             .contextMenu(forSelectionType: VPNServer.ID.self) { ids in
                 if let s = model.servers.first(where: { ids.contains($0.id) }) {
                     if model.event.state == .disconnected { Button("Connect to the VPN Server") { model.connect(s) } }
-                    Button("Server Details…") { ui.selectedServerForDetails = s; ui.showingDetails = true }
+                    Button("Server Details…") {
+                        ui.selectedServerForDetails = s; ui.showingDetails = true
+                    }
                     Button(model.favorites.contains(s.id) ? "Remove from Favorites" : "Add to Favorites") { model.toggleFavorite(s) }
                 }
             } primaryAction: { ids in
@@ -262,20 +277,34 @@ struct ServerListView: View {
         .searchable(text: $ui.search, placement: .toolbar, prompt: "Search host, IP, country, operator")
         .toolbar {
             ToolbarItemGroup {
-                FilterMenu(countries: countries, country: ui.country, maxLogWeeks: model.maxLogWeeks,
-                           favoritesOnly: ui.favoritesOnly, active: filterActive,
-                           setCountry: { ui.country = $0 }, setLogWeeks: { model.maxLogWeeks = $0 },
-                           setFavoritesOnly: { ui.favoritesOnly = $0 },
-                           clear: { ui.country = "All"; ui.favoritesOnly = false; model.maxLogWeeks = -1 })
-                    .equatable()
-                Button { if let s = selected { ui.selectedServerForDetails = s; ui.showingDetails = true } } label: {
+                FilterMenu(
+                    countries: countries, country: ui.country, maxLogWeeks: model.maxLogWeeks,
+                    favoritesOnly: ui.favoritesOnly, active: filterActive,
+                    setCountry: { ui.country = $0 }, setLogWeeks: { model.maxLogWeeks = $0 },
+                    setFavoritesOnly: { ui.favoritesOnly = $0 },
+                    clear: {
+                        ui.country = "All"; ui.favoritesOnly = false; model.maxLogWeeks = -1
+                    }
+                )
+                .equatable()
+                Button {
+                    if let s = selected { ui.selectedServerForDetails = s; ui.showingDetails = true }
+                } label: {
                     Label("Details", systemImage: "info.circle")
                 }
                 .disabled(selected == nil).help("Server details (⌘I)").keyboardShortcut("i")
-                Button { model.measure(rows) } label: { Label("Test Connection", systemImage: "speedometer") }
-                    .help("Try a real VPN handshake with the listed servers and show the connect time from this Mac")
-                Button { model.refresh() } label: { Label("Refresh List", systemImage: "arrow.clockwise") }
-                    .disabled(model.loading).help("Refresh List (⌘R)")
+                Button {
+                    model.measure(rows)
+                } label: {
+                    Label("Test Connection", systemImage: "speedometer")
+                }
+                .help("Try a real VPN handshake with the listed servers and show the connect time from this Mac")
+                Button {
+                    model.refresh()
+                } label: {
+                    Label("Refresh List", systemImage: "arrow.clockwise")
+                }
+                .disabled(model.loading).help("Refresh List (⌘R)")
             }
         }
         .sheet(isPresented: $ui.showingDetails) {
@@ -285,7 +314,9 @@ struct ServerListView: View {
             Button("Continue") { model.beginSetup() }
             Button("Not Now", role: .cancel) { model.cancelSetup() }
         } message: {
-            Text("VPN Gate needs a small background component to create the VPN connection. macOS will open its standard installer and ask for your password once. After that, VPN Gate connects by itself.")
+            Text(
+                "VPN Gate needs a small background component to create the VPN connection. macOS will open its standard installer and ask for your password once. After that, VPN Gate connects by itself."
+            )
         }
         .onAppear {
             if model.servers.isEmpty { model.refresh() }
@@ -364,7 +395,9 @@ private struct ProbeCell: View {
         case .queued?:
             Text("Waiting…").foregroundStyle(.secondary)
         case .testing?:
-            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Testing…").foregroundStyle(.secondary) }
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small); Text("Testing…").foregroundStyle(.secondary)
+            }
         case .ok(let port, let connectMs, let helloMs, _)?:
             VStack(alignment: .leading, spacing: 0) {
                 Label("\(connectMs) ms", systemImage: "checkmark.circle.fill").foregroundStyle(.green).monospacedDigit()
@@ -416,8 +449,12 @@ struct ServerDetailsSheet: View {
                     DetailRow(title: "Ping to Japan:", value: "\(server.ping) ms")
                     DetailRow(title: "Ping to Google:", value: server.pingToGoogle == 0 ? "-" : "\(server.pingToGoogle) ms")
                     DetailRow(title: "UDP port:", value: server.udpPort.map(String.init) ?? "-")
-                    DetailRow(title: "SSL-VPN Ports:", value: server.sslPorts.isEmpty ? "Default (443)" : server.prioritizedSslPorts.map(String.init).joined(separator: ", "))
-                    DetailRow(title: "OpenVPN UDP Ports:", value: server.openVpnUdpPorts.isEmpty ? "None" : server.openVpnUdpPorts.map(String.init).joined(separator: ", "))
+                    DetailRow(
+                        title: "SSL-VPN Ports:",
+                        value: server.sslPorts.isEmpty ? "Default (443)" : server.prioritizedSslPorts.map(String.init).joined(separator: ", "))
+                    DetailRow(
+                        title: "OpenVPN UDP Ports:",
+                        value: server.openVpnUdpPorts.isEmpty ? "None" : server.openVpnUdpPorts.map(String.init).joined(separator: ", "))
                     DetailRow(title: "L2TP / IPsec:", value: server.l2tp ? "Supported" : "Not supported")
                     DetailRow(title: "Logging Policy:", value: server.logType)
                     DetailRow(title: "Operator / Owner:", value: server.operatorName.isEmpty ? "Anonymous" : server.operatorName)
@@ -462,11 +499,13 @@ struct AcademicDisclaimerSheet: View {
                 .foregroundColor(.accentColor)
             Text("VPN Gate Academic Experiment Service")
                 .font(.title2).bold()
-            Text("VPN Gate is an academic research project of the Graduate School of University of Tsukuba, Japan.\n\nPublic VPN relay servers are hosted by volunteers around the world. Anyone can connect through these servers to achieve anonymity and bypass censorship.\n\nBy clicking “Agree and Continue”, you confirm that you will use this service in compliance with local laws.")
-                .font(.body)
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .padding(.horizontal)
+            Text(
+                "VPN Gate is an academic research project of the Graduate School of University of Tsukuba, Japan.\n\nPublic VPN relay servers are hosted by volunteers around the world. Anyone can connect through these servers to achieve anonymity and bypass censorship.\n\nBy clicking “Agree and Continue”, you confirm that you will use this service in compliance with local laws."
+            )
+            .font(.body)
+            .multilineTextAlignment(.center)
+            .foregroundColor(.secondary)
+            .padding(.horizontal)
             Text("Optional diagnostics upload is off and can be turned on in Settings → Advanced.")
                 .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
             HStack {

@@ -1,6 +1,6 @@
+import Darwin
 import Foundation
 import VPNGateCore
-import Darwin
 
 final class FakeTun: TunDevice {
     let name: String
@@ -21,8 +21,11 @@ final class RecordingRunner: CommandRunner {
     struct Rule { var contains: String; var status: Int32; var out: String }
     private let lock = NSLock()
     private var _log: [String] = []
-    var rules: [Rule] = [Rule(contains: "route -n get default", status: 0,
-                              out: "   route to: default\n    gateway: 192.168.1.1\n  interface: en0\n")]
+    var rules: [Rule] = [
+        Rule(
+            contains: "route -n get default", status: 0,
+            out: "   route to: default\n    gateway: 192.168.1.1\n  interface: en0\n")
+    ]
     var log: [String] { lock.lock(); defer { lock.unlock() }; return _log }
 
     func run(_ path: String, _ args: [String]) -> (status: Int32, out: String) {
@@ -78,7 +81,9 @@ final class FakeTransport: VPNTransport {
     }
 
     func sendFrame(_ frame: [UInt8]) {
-        state.update { $0.sent.append(frame); $0.bytesOut += UInt64(frame.count) }
+        state.update {
+            $0.sent.append(frame); $0.bytesOut += UInt64(frame.count)
+        }
         for r in network.handle(frame) {
             DispatchQueue.global().async { [weak self] in self?.onFrame?(r) }
         }
@@ -157,9 +162,13 @@ final class FakeNet: NetConfiguring {
     var tornDown: Int { state.value.torn }
     private let routingApplied = Locked([RoutingConfig?]())
     var routingConfigsApplied: [RoutingConfig?] { routingApplied.value }
-    func apply(iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool, mtuOverride: Int?, routing: RoutingConfig?,
-              dnsProxyAddress: String?) throws {
-        state.update { $0.applied.append((iface, bypassHost)); $0.ipv6.append(blockIPv6); $0.mtuOverrides.append(mtuOverride) }
+    func apply(
+        iface: String, lease: Lease, bypassHost: String, blockIPv6: Bool, mtuOverride: Int?, routing: RoutingConfig?,
+        dnsProxyAddress: String?
+    ) throws {
+        state.update {
+            $0.applied.append((iface, bypassHost)); $0.ipv6.append(blockIPv6); $0.mtuOverrides.append(mtuOverride)
+        }
         routingApplied.update { $0.append(routing) }
     }
     func teardown() { state.update { $0.torn += 1 } }
@@ -180,7 +189,11 @@ final class FakeNet: NetConfiguring {
 final class FakeSession: SessionControlling, @unchecked Sendable {
     var emit: ((HelperEvent) -> Void)?
     var snapshot = HelperEvent(state: .disconnected)
-    private let state = Locked((connects: [(host: String, port: Int?)](), disconnects: 0, blockIPv6: [Bool](), configs: [ConnectConfig](), autoReconnects: [Bool](), portLists: [[Int]?]()))
+    private let state = Locked(
+        (
+            connects: [(host: String, port: Int?)](), disconnects: 0, blockIPv6: [Bool](), configs: [ConnectConfig](), autoReconnects: [Bool](),
+            portLists: [[Int]?]()
+        ))
     var connects: [(host: String, port: Int?)] { state.value.connects }
     var blockIPv6Flags: [Bool] { state.value.blockIPv6 }
     var autoReconnects: [Bool] { state.value.autoReconnects }
@@ -199,7 +212,9 @@ final class FakeSession: SessionControlling, @unchecked Sendable {
         connect(host: host, port: port, ports: nil, proxy: proxy, autoReconnect: autoReconnect, blockIPv6: blockIPv6, routing: nil)
     }
     func connect(host: String, port: Int?, ports: [Int]?, proxy: ProxySettings, autoReconnect: Bool, blockIPv6: Bool, routing: RoutingConfig?) {
-        state.update { $0.connects.append((host, port)); $0.blockIPv6.append(blockIPv6); $0.autoReconnects.append(autoReconnect); $0.portLists.append(ports) }
+        state.update {
+            $0.connects.append((host, port)); $0.blockIPv6.append(blockIPv6); $0.autoReconnects.append(autoReconnect); $0.portLists.append(ports)
+        }
     }
     func disconnect() { state.update { $0.disconnects += 1 } }
 }

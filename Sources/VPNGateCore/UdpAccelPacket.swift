@@ -1,5 +1,5 @@
-import Foundation
 import CryptoKit
+import Foundation
 
 public struct UdpAccelHeader {
     public var cookie: UInt32
@@ -21,9 +21,9 @@ public struct UdpAccelDecodedPacket {
 public enum UdpAccelPacket {
     public static let ivSize = 12
     public static let macSize = 16
-    public static let minPlaintextSize = 4 + 8 + 8 + 2 + 1 // 23 bytes (Cookie + MyTick + YourTick + Size + Flag)
-    public static let minPacketSize = ivSize + minPlaintextSize + macSize // 51 bytes
-    public static let maxPadding = 31                                      // upstream pads rand() % MIN(room, 32)
+    public static let minPlaintextSize = 4 + 8 + 8 + 2 + 1  // 23 bytes (Cookie + MyTick + YourTick + Size + Flag)
+    public static let minPacketSize = ivSize + minPlaintextSize + macSize  // 51 bytes
+    public static let maxPadding = 31  // upstream pads rand() % MIN(room, 32)
 
     /// Padding length for a packet carrying `dataSize` bytes (UdpAccel.c:535-540): zero when the packet already reaches
     /// `maxSize`, else `rand() % min(maxSize - current, 32)`. `random` receives the bound and returns a value below it.
@@ -110,7 +110,7 @@ public enum UdpAccelPacket {
     public static func decode(packet: [UInt8], key32: [UInt8], plainMode: Bool = false) throws -> UdpAccelDecodedPacket {
         let plain: [UInt8]
         if plainMode {
-            plain = packet                         // no IV, no MAC (UdpAccel.c:738)
+            plain = packet  // no IV, no MAC (UdpAccel.c:738)
         } else {
             plain = try decrypt(packet: packet, key32: key32)
         }

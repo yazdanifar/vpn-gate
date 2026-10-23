@@ -30,7 +30,8 @@ public enum SHA0 {
             let offset = c * 64
             for i in 0..<16 {
                 let idx = offset + i * 4
-                let val = (UInt32(padded[idx]) << 24)
+                let val =
+                    (UInt32(padded[idx]) << 24)
                     | (UInt32(padded[idx + 1]) << 16)
                     | (UInt32(padded[idx + 2]) << 8)
                     | UInt32(padded[idx + 3])

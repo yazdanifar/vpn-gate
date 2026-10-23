@@ -1,5 +1,5 @@
-import Foundation
 import Darwin
+import Foundation
 
 /// Tiny one-route HTTP/1.1 server on 127.0.0.1 for tests of network clients.
 final class LocalHTTPServer {

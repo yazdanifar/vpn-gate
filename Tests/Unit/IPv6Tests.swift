@@ -102,9 +102,9 @@ func registerIPv6Tests() {
         baseDHCP += [0, 0, 0, 0] + [10, 0, 0, 1] + [0, 0, 0, 0] + [0, 0, 0, 0]
         baseDHCP += [0x5e, 1, 2, 3, 4, 5] + [UInt8](repeating: 0, count: 10)
         baseDHCP += [UInt8](repeating: 0, count: 192)
-        baseDHCP += [99, 130, 83, 99] // Magic cookie
-        baseDHCP += [53, 1, 5]        // ACK
-        baseDHCP += [26, 2, 0x05, 0x78] // Option 26: MTU = 1400 (0x0578)
+        baseDHCP += [99, 130, 83, 99]  // Magic cookie
+        baseDHCP += [53, 1, 5]  // ACK
+        baseDHCP += [26, 2, 0x05, 0x78]  // Option 26: MTU = 1400 (0x0578)
         baseDHCP += [255]
 
         let msg = DHCPMessage(baseDHCP)

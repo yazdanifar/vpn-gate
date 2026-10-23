@@ -81,7 +81,7 @@ func registerFuzzTests() {
             let b = randomBytes(&rng, max: 400)
             _ = IPv4.parse(b); _ = UDP.parse(b); _ = ARPPacket(b); _ = DHCPMessage(b); _ = HTTPHead.parse(b)
             // structurally plausible DHCP with random options
-            var d = DHCPMessage(type: .offer, xid: 1, mac: [1,2,3,4,5,6]).encode(); d[0] = 2
+            var d = DHCPMessage(type: .offer, xid: 1, mac: [1, 2, 3, 4, 5, 6]).encode(); d[0] = 2
             d.removeSubrange(240...); d += b
             _ = DHCPMessage(d)
         }
@@ -95,7 +95,9 @@ func registerFuzzTests() {
         let sent = Locked(0); b.sendFrame = { _ in sent.update { $0 += 1 } }
         for _ in 0..<iterations {
             var f = randomBytes(&rng, max: 120)
-            if Bool.random(using: &rng), f.count >= 14 { f[12] = [0x08, 0x08, 0x86][Int.random(in: 0..<3, using: &rng)]; f[13] = [0x00, 0x06, 0xDD][Int.random(in: 0..<3, using: &rng)] }
+            if Bool.random(using: &rng), f.count >= 14 {
+                f[12] = [0x08, 0x08, 0x86][Int.random(in: 0..<3, using: &rng)]; f[13] = [0x00, 0x06, 0xDD][Int.random(in: 0..<3, using: &rng)]
+            }
             b.fromHub(f)
             b.fromHost(randomBytes(&rng, max: 80))
         }

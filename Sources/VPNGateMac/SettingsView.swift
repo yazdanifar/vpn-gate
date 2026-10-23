@@ -31,10 +31,12 @@ private struct GeneralSettings: View {
                 Toggle("Launch at login", isOn: $model.launchAtLogin)
                 Toggle("Reconnect automatically", isOn: $model.autoReconnect)
                 Toggle("Block IPv6 while connected", isOn: $model.blockIPv6)
-                Text(model.blockIPv6
-                     ? "On: IPv6 is captured and dropped, which prevents IPv6 leaks; dual-stack sites fall back to IPv4 through the VPN."
-                     : "Off: IPv6 only works if the VPN network provides it (a router advertising an IPv6 prefix). Otherwise IPv6 is still captured and dropped, so nothing leaks.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(
+                    model.blockIPv6
+                        ? "On: IPv6 is captured and dropped, which prevents IPv6 leaks; dual-stack sites fall back to IPv4 through the VPN."
+                        : "Off: IPv6 only works if the VPN network provides it (a router advertising an IPv6 prefix). Otherwise IPv6 is still captured and dropped, so nothing leaks."
+                )
+                .font(.caption).foregroundStyle(.secondary)
             }
             Section("Mode") {
                 Picker("Use the VPN as", selection: $model.tunnelMode) {
@@ -47,10 +49,12 @@ private struct GeneralSettings: View {
                         Text("Use a port from 1024 to 65535.").font(.caption).foregroundStyle(.red)
                     }
                 }
-                Text(model.tunnelMode == .fullTunnel
-                     ? "All traffic from this Mac goes through the VPN (subject to your routing rules)."
-                     : "Your routes and DNS stay untouched. Point an app or browser at SOCKS5 127.0.0.1:\(model.socksPort) and only that app's connections use the VPN; use “remote DNS” in the app so names resolve through the VPN too. Any program on this Mac can use the port while connected. Routing rules and IPv6 blocking do not apply. Applies to the next connection.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(
+                    model.tunnelMode == .fullTunnel
+                        ? "All traffic from this Mac goes through the VPN (subject to your routing rules)."
+                        : "Your routes and DNS stay untouched. Point an app or browser at SOCKS5 127.0.0.1:\(model.socksPort) and only that app's connections use the VPN; use “remote DNS” in the app so names resolve through the VPN too. Any program on this Mac can use the port while connected. Routing rules and IPv6 blocking do not apply. Applies to the next connection."
+                )
+                .font(.caption).foregroundStyle(.secondary)
             }
             Section("VPN connections") {
                 Button("Open VPN Connection Settings…") { openWindow(id: "accounts") }
@@ -89,8 +93,10 @@ struct ProxyForm: View {
                     TextField("Username (optional)", text: $model.proxyUsername)
                     SecureField("Password", text: $model.proxyPassword)
                 }
-                Text("If you are using a proxy server, you might not be able to use VPN Relay Servers which don't support the TCP port 443 as “SSL-VPN Connection” from such a proxy-mandated network.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(
+                    "If you are using a proxy server, you might not be able to use VPN Relay Servers which don't support the TCP port 443 as “SSL-VPN Connection” from such a proxy-mandated network."
+                )
+                .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -116,8 +122,10 @@ private struct AdvancedSettings: View {
                         .font(.caption).foregroundStyle(.secondary)
                     Button("Reset ID") { model.statistics.resetHostKey() }
                 }
-                Text("Off by default. The Windows client does not send this for ordinary users; it is specific to this Mac app. No traffic, addresses or personal data are included.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(
+                    "Off by default. The Windows client does not send this for ordinary users; it is specific to this Mac app. No traffic, addresses or personal data are included."
+                )
+                .font(.caption).foregroundStyle(.secondary)
                 if let status = model.statistics.lastStatus {
                     Text(status).font(.caption).foregroundStyle(.secondary)
                 }

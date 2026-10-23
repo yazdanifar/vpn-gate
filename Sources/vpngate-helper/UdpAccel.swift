@@ -26,27 +26,27 @@ final class UdpAccel {
     /// Time source in milliseconds; tests replace it.
     var clock: () -> UInt64 = UdpAccel.monotonicMs
 
-    private let myKeyV2: [UInt8]   // 128 bytes, first 32 used for ChaCha20-Poly1305
+    private let myKeyV2: [UInt8]  // 128 bytes, first 32 used for ChaCha20-Poly1305
 
     private let lock = NSLock()
     private var yourKeyV2: [UInt8] = []
     private var myCookie: UInt32 = 0
     private var yourCookie: UInt32 = 0
     private var dest = sockaddr_in()
-    private var dest2: sockaddr_in?                 // the TCP peer IP (upstream YourIp2); keep-alives also go there while UDP is not usable
-    private var useCompress = false                  // the session negotiated use_compress: data goes out zlib-compressed, flag 1
-    private var plainMode = false                    // udp_acceleration_use_encryption == false: no IV/AEAD/MAC (PlainTextMode)
+    private var dest2: sockaddr_in?  // the TCP peer IP (upstream YourIp2); keep-alives also go there while UDP is not usable
+    private var useCompress = false  // the session negotiated use_compress: data goes out zlib-compressed, flag 1
+    private var plainMode = false  // udp_acceleration_use_encryption == false: no IV/AEAD/MAC (PlainTextMode)
     private var configured = false
     private var fastDisconnect = false
 
     private var fd: Int32 = -1
-    private var wakeRead: Int32 = -1, wakeWrite: Int32 = -1     // self-pipe: stop() wakes the receive thread
+    private var wakeRead: Int32 = -1, wakeWrite: Int32 = -1  // self-pipe: stop() wakes the receive thread
     private var started = false
     private var isClosed = false
     private var nextIv: [UInt8]
-    private var lastRecvTick: UInt64 = 0         // when the last valid packet arrived (local clock)
-    private var lastRecvMyTick: UInt64 = 0       // highest of our own ticks the peer echoed back
-    private var lastRecvYourTick: UInt64 = 0     // highest peer tick seen; echoed in everything we send
+    private var lastRecvTick: UInt64 = 0  // when the last valid packet arrived (local clock)
+    private var lastRecvMyTick: UInt64 = 0  // highest of our own ticks the peer echoed back
+    private var lastRecvYourTick: UInt64 = 0  // highest peer tick seen; echoed in everything we send
     private var firstStableReceiveTick: UInt64 = 0
     private var keepAliveTask: Task<Void, Never>?
 
@@ -102,14 +102,17 @@ final class UdpAccel {
     /// port 0, or (unless `plaintext`) a key shorter than 32 bytes. `secondaryIP` is the TCP peer address; an unusable
     /// value is ignored (the caller decides whether it is public).
     @discardableResult
-    func configure(serverIP: String, serverPort: UInt16, myCookie: UInt32, yourCookie: UInt32,
-                   yourKeyV2: [UInt8], fastDisconnect: Bool, useCompress: Bool = false, plaintext: Bool = false,
-                   secondaryIP: String? = nil) -> Bool {
+    func configure(
+        serverIP: String, serverPort: UInt16, myCookie: UInt32, yourCookie: UInt32,
+        yourKeyV2: [UInt8], fastDisconnect: Bool, useCompress: Bool = false, plaintext: Bool = false,
+        secondaryIP: String? = nil
+    ) -> Bool {
         var sin = sockaddr_in()
         sin.sin_family = sa_family_t(AF_INET)
         sin.sin_port = serverPort.bigEndian
         guard serverPort != 0, plaintext || yourKeyV2.count >= 32, inet_pton(AF_INET, serverIP, &sin.sin_addr) == 1,
-              sin.sin_addr.s_addr != 0 else { return false }
+            sin.sin_addr.s_addr != 0
+        else { return false }
         var sin2: sockaddr_in?
         if let ip2 = secondaryIP {
             var a = sockaddr_in()
@@ -196,10 +199,12 @@ final class UdpAccel {
         lock.lock()
         guard !isClosed, configured, fd >= 0 else { lock.unlock(); return false }
         let pad = UdpAccelPacket.paddingSize(dataSize: payload.count, maxSize: maxSize)
-        guard let (packet, newIV) = try? UdpAccelPacket.encode(
-            key32: myKeyV2, iv: nextIv, cookie: yourCookie, myTick: clock(), yourTick: lastRecvYourTick,
-            compressed: compressed, payload: payload, paddingSize: pad, plainMode: plainMode
-        ) else { lock.unlock(); return false }
+        guard
+            let (packet, newIV) = try? UdpAccelPacket.encode(
+                key32: myKeyV2, iv: nextIv, cookie: yourCookie, myTick: clock(), yourTick: lastRecvYourTick,
+                compressed: compressed, payload: payload, paddingSize: pad, plainMode: plainMode
+            )
+        else { lock.unlock(); return false }
         nextIv = newIV
         let sent = sendDatagram(packet, to: dest)
         // Keep-alive while UDP is not usable: the peer may sit behind a NAT, so also try the TCP peer IP (UdpAccel.c:625-651).
@@ -258,19 +263,20 @@ final class UdpAccel {
         lock.unlock()
 
         guard raw.count >= (plain ? UdpAccelPacket.minPlaintextSize : UdpAccelPacket.minPacketSize),
-              let decoded = try? UdpAccelPacket.decode(packet: raw, key32: key, plainMode: plain),
-              decoded.header.cookie == expectedCookie else { return }
+            let decoded = try? UdpAccelPacket.decode(packet: raw, key32: key, plainMode: plain),
+            decoded.header.cookie == expectedCookie
+        else { return }
         let h = decoded.header
 
         lock.lock()
         let now = clock()
         // Upstream drops a packet whose tick is a full window older than the newest peer tick seen (replay of stale traffic).
         if h.myTick < lastRecvYourTick, lastRecvYourTick - h.myTick >= Self.windowMs { lock.unlock(); return }
-        if lastRecvTick != 0, now >= lastRecvTick, now - lastRecvTick > timeoutMsLocked { firstStableReceiveTick = 0 }   // gap: stability restarts
-        let newest = h.myTick > lastRecvYourTick      // strictly: replaying the latest packet from elsewhere must not move the peer
+        if lastRecvTick != 0, now >= lastRecvTick, now - lastRecvTick > timeoutMsLocked { firstStableReceiveTick = 0 }  // gap: stability restarts
+        let newest = h.myTick > lastRecvYourTick  // strictly: replaying the latest packet from elsewhere must not move the peer
         lastRecvMyTick = max(lastRecvMyTick, h.yourTick)
         lastRecvYourTick = max(lastRecvYourTick, h.myTick)
-        if newest { dest = from }              // the peer (or its NAT mapping) moved: follow authenticated packets only
+        if newest { dest = from }  // the peer (or its NAT mapping) moved: follow authenticated packets only
         if lastRecvMyTick != 0, now >= lastRecvMyTick, now - lastRecvMyTick < Self.windowMs {
             lastRecvTick = now
             if firstStableReceiveTick == 0 { firstStableReceiveTick = now }

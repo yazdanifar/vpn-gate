@@ -171,7 +171,9 @@ final class FakeStream: ByteStream {
         if let n = server.chunkSize, n > 0 {
             var i = 0
             while i < bytes.count { incoming.push(Data(bytes[i..<min(i + n, bytes.count)])); i += n }
-        } else { incoming.push(Data(bytes)) }
+        } else {
+            incoming.push(Data(bytes))
+        }
     }
     func closeFromServer() { incoming.finish() }
     func failFromServer(_ e: Error) { incoming.finish(e) }
@@ -216,7 +218,7 @@ final class FakeStream: ByteStream {
 
     private func findHeaderEnd() -> Int? {
         guard rx.count >= 4 else { return nil }
-        for i in 0...(rx.count - 4) where rx[i] == 13 && rx[i+1] == 10 && rx[i+2] == 13 && rx[i+3] == 10 { return i }
+        for i in 0...(rx.count - 4) where rx[i] == 13 && rx[i + 1] == 10 && rx[i + 2] == 13 && rx[i + 3] == 10 { return i }
         return nil
     }
 
@@ -247,7 +249,7 @@ final class FakeStream: ByteStream {
                 if let d = server.takeNextDirection() { reply.addInt("direction", d); assignedDirection = d }
                 deliver(FakeSoftEtherServer.http(200, [UInt8](reply.serialize())))
                 mode = .data
-                _bytesReceivedFromClient = 0   // only count application-data-phase bytes, not the handshake
+                _bytesReceivedFromClient = 0  // only count application-data-phase bytes, not the handshake
                 return
             }
 

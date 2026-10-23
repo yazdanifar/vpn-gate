@@ -25,24 +25,32 @@ func fail(_ msg: String, file: StaticString = #file, line: UInt = #line) {
     failures.append("    \((String(describing: file) as NSString).lastPathComponent):\(line): \(msg)")
 }
 
-func expect(_ cond: @autoclosure () -> Bool, _ msg: String = "expectation failed",
-            file: StaticString = #file, line: UInt = #line) {
+func expect(
+    _ cond: @autoclosure () -> Bool, _ msg: String = "expectation failed",
+    file: StaticString = #file, line: UInt = #line
+) {
     if !cond() { fail(msg, file: file, line: line) }
 }
 
-func expectA(_ cond: @autoclosure () async -> Bool, _ msg: String = "expectation failed",
-            file: StaticString = #file, line: UInt = #line) async {
+func expectA(
+    _ cond: @autoclosure () async -> Bool, _ msg: String = "expectation failed",
+    file: StaticString = #file, line: UInt = #line
+) async {
     if !(await cond()) { fail(msg, file: file, line: line) }
 }
 
-func expectEqual<T: Equatable>(_ a: @autoclosure () -> T, _ b: @autoclosure () -> T, _ msg: String = "",
-                               file: StaticString = #file, line: UInt = #line) {
+func expectEqual<T: Equatable>(
+    _ a: @autoclosure () -> T, _ b: @autoclosure () -> T, _ msg: String = "",
+    file: StaticString = #file, line: UInt = #line
+) {
     let (x, y) = (a(), b())
     if x != y { fail("\(msg) expected \(y), got \(x)", file: file, line: line) }
 }
 
-func expectThrows<T>(_ body: @autoclosure () throws -> T, _ msg: String = "expected an error",
-                     file: StaticString = #file, line: UInt = #line) {
+func expectThrows<T>(
+    _ body: @autoclosure () throws -> T, _ msg: String = "expected an error",
+    file: StaticString = #file, line: UInt = #line
+) {
     do { _ = try body(); fail(msg, file: file, line: line) } catch {}
 }
 
@@ -71,7 +79,7 @@ func eventuallyA(_ timeout: Double = 3, _ cond: () async -> Bool) async -> Bool 
 struct SeededRNG: RandomNumberGenerator {
     private var s: UInt64
     init(_ seed: UInt64) { s = seed == 0 ? 0x9E3779B97F4A7C15 : seed }
-    mutating func next() -> UInt64 {      // xorshift64*
+    mutating func next() -> UInt64 {  // xorshift64*
         s ^= s >> 12; s ^= s << 25; s ^= s >> 27
         return s &* 2685821657736338717
     }
@@ -93,7 +101,9 @@ func runAllTests(args: [String]) async -> Int32 {
         let start = Date()
         let finished = await withTaskGroup(of: Bool.self) { g -> Bool in
             g.addTask { do { try await t.body(); return true } catch { fail("threw \(error)"); return true } }
-            g.addTask { try? await Task.sleep(nanoseconds: UInt64(t.timeout * 1e9)); return false }
+            g.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(t.timeout * 1e9)); return false
+            }
             let r = await g.next() ?? false
             g.cancelAll()
             return r
@@ -101,8 +111,11 @@ func runAllTests(args: [String]) async -> Int32 {
         if !finished { fail("timed out after \(t.timeout)s") }
         let f = failLock.withLock { failures }
         let ms = Int(Date().timeIntervalSince(start) * 1000)
-        if f.isEmpty { passed += 1; print("PASS \(t.name) (\(ms)ms)") }
-        else { failed += 1; failedNames.append(t.name); print("FAIL \(t.name) (\(ms)ms)"); f.forEach { print($0) } }
+        if f.isEmpty {
+            passed += 1; print("PASS \(t.name) (\(ms)ms)")
+        } else {
+            failed += 1; failedNames.append(t.name); print("FAIL \(t.name) (\(ms)ms)"); f.forEach { print($0) }
+        }
     }
     print("\n\(passed) passed, \(failed) failed, \(selected.count) run")
     if failed > 0 { print("failed: \(failedNames.joined(separator: ", "))") }

@@ -23,7 +23,7 @@ private let myIP: UInt32 = 0x0AE991B6
 // MARK: IPv6 fixtures
 
 private let v6MAC: MAC = [0x5E, 0x00, 0x11, 0x22, 0x33, 0x44]
-private let v6Local = hex6("fe80::5c00:11ff:fe22:3344")           // EUI-64 link-local of v6MAC
+private let v6Local = hex6("fe80::5c00:11ff:fe22:3344")  // EUI-64 link-local of v6MAC
 private let peerMAC: MAC = [0x02, 0, 0, 0, 0, 0x01]
 private let peerLL = hex6("fe80::1")
 private let allNodes = hex6("ff02::1")
@@ -36,8 +36,10 @@ private func v6Bridge(timing: BridgeTiming = BridgeTiming()) -> (EthernetBridge,
 }
 
 /// Ethernet frame carrying an ICMPv6 message; the checksum is filled in unless `corrupt` flips it afterwards.
-private func icmp6Frame(dstMAC: MAC, srcMAC: MAC = peerMAC, src: [UInt8], dst: [UInt8], icmp: [UInt8],
-                        hop: UInt8 = 255, corrupt: Bool = false) -> [UInt8] {
+private func icmp6Frame(
+    dstMAC: MAC, srcMAC: MAC = peerMAC, src: [UInt8], dst: [UInt8], icmp: [UInt8],
+    hop: UInt8 = 255, corrupt: Bool = false
+) -> [UInt8] {
     var m = icmp; m[2] = 0; m[3] = 0
     let c = ICMPv6.checksum(src: src, dst: dst, icmpPayload: m)
     m[2] = UInt8(c >> 8); m[3] = UInt8(c & 0xff) ^ (corrupt ? 1 : 0)
@@ -45,16 +47,20 @@ private func icmp6Frame(dstMAC: MAC, srcMAC: MAC = peerMAC, src: [UInt8], dst: [
     return Ethernet.frame(dst: dstMAC, src: srcMAC, type: 0x86DD, payload: ip)
 }
 
-private func nsFrame(target: [UInt8], src: [UInt8] = peerLL, dst: [UInt8]? = nil, dstMAC: MAC? = nil, hop: UInt8 = 255,
-                     corrupt: Bool = false) -> [UInt8] {
+private func nsFrame(
+    target: [UInt8], src: [UInt8] = peerLL, dst: [UInt8]? = nil, dstMAC: MAC? = nil, hop: UInt8 = 255,
+    corrupt: Bool = false
+) -> [UInt8] {
     let d = dst ?? IPv6.solicitedNodeMulticast(ip: target)
     let icmp = ICMPv6.neighborSolicitation(targetIP: target, srcMAC: peerMAC, srcIP: src, dstIP: d)
     return icmp6Frame(dstMAC: dstMAC ?? IPv6.multicastMAC(ip: d), src: src, dst: d, icmp: icmp, hop: hop, corrupt: corrupt)
 }
 
 /// Router Advertisement from `peerLL` with an SLLA option and one prefix option.
-private func raFrame(prefix: String = "2001:db8:1:2::", flags: UInt8 = 0xC0, valid: UInt32 = 86400, preferred: UInt32 = 14400,
-                     routerLifetime: Int = 1800, src: [UInt8] = peerLL, hop: UInt8 = 255, prefixLen: UInt8 = 64) -> [UInt8] {
+private func raFrame(
+    prefix: String = "2001:db8:1:2::", flags: UInt8 = 0xC0, valid: UInt32 = 86400, preferred: UInt32 = 14400,
+    routerLifetime: Int = 1800, src: [UInt8] = peerLL, hop: UInt8 = 255, prefixLen: UInt8 = 64
+) -> [UInt8] {
     var icmp: [UInt8] = [134, 0, 0, 0, 64, 0] + be16(routerLifetime) + [0, 0, 0, 0, 0, 0, 0, 0]
     icmp += [1, 1] + peerMAC
     icmp += [3, 4, prefixLen, flags] + be32(valid) + be32(preferred) + [0, 0, 0, 0] + hex6(prefix)
@@ -67,41 +73,47 @@ private func v6DataPacket(to dst: String, from src: [UInt8] = hex6("2001:db8:1:2
 }
 
 func registerBridgeIPv6Tests() {
-    test("bridge6/neighbor-solicitation-is-answered-to-the-askers-mac-with-hop-limit-255") {       // review 5, 6
+    test("bridge6/neighbor-solicitation-is-answered-to-the-askers-mac-with-hop-limit-255") {  // review 5, 6
         let (b, out) = v6Bridge()
         // The NS frame goes to our solicited-node multicast MAC; the NA must NOT be sent there.
         b.fromHub(nsFrame(target: v6Local))
         expectEqual(out.value.count, 1)
         // Exact frame from an independent encoder: dst = asker's MAC, hop limit ff, S+O flags, TLLA = our MAC.
-        expectEqual(out.value.first, bytes("0200000000015e001122334486dd6000000000203afffe800000000000005c0011fffe223344"
-            + "fe800000000000000000000000000001880038ec60000000fe800000000000005c0011fffe22334402015e0011223344"))
+        expectEqual(
+            out.value.first,
+            bytes(
+                "0200000000015e001122334486dd6000000000203afffe800000000000005c0011fffe223344"
+                    + "fe800000000000000000000000000001880038ec60000000fe800000000000005c0011fffe22334402015e0011223344"))
     }
-    test("bridge6/dad-probe-is-answered-to-all-nodes-with-solicited-clear") {                       // review 6
+    test("bridge6/dad-probe-is-answered-to-all-nodes-with-solicited-clear") {  // review 6
         let (b, out) = v6Bridge()
         b.fromHub(nsFrame(target: v6Local, src: hex6("::")))
-        expectEqual(out.value.first, bytes("3333000000015e001122334486dd6000000000203afffe800000000000005c0011fffe223344"
-            + "ff0200000000000000000000000000018800786a20000000fe800000000000005c0011fffe22334402015e0011223344"))
+        expectEqual(
+            out.value.first,
+            bytes(
+                "3333000000015e001122334486dd6000000000203afffe800000000000005c0011fffe223344"
+                    + "ff0200000000000000000000000000018800786a20000000fe800000000000005c0011fffe22334402015e0011223344"))
     }
-    test("bridge6/invalid-or-foreign-solicitations-are-ignored") {                                  // review 5
+    test("bridge6/invalid-or-foreign-solicitations-are-ignored") {  // review 5
         let (b, out) = v6Bridge()
-        b.fromHub(nsFrame(target: hex6("fe80::9")))                                    // not our address
-        b.fromHub(nsFrame(target: v6Local, hop: 64))                                   // crossed a router
-        b.fromHub(nsFrame(target: v6Local, corrupt: true))                             // bad checksum
-        b.fromHub(nsFrame(target: v6Local, dst: hex6("ff02::1:ff00:7")))               // not the solicited-node group of the target
+        b.fromHub(nsFrame(target: hex6("fe80::9")))  // not our address
+        b.fromHub(nsFrame(target: v6Local, hop: 64))  // crossed a router
+        b.fromHub(nsFrame(target: v6Local, corrupt: true))  // bad checksum
+        b.fromHub(nsFrame(target: v6Local, dst: hex6("ff02::1:ff00:7")))  // not the solicited-node group of the target
         expectEqual(out.value.count, 0)
         b.handleIPv6 = false
         b.fromHub(nsFrame(target: v6Local))
         expectEqual(out.value.count, 0, "IPv6 disabled")
     }
-    test("bridge6/router-advertisement-yields-a-slaac-address-and-is-not-passed-to-the-kernel") {   // review 7
+    test("bridge6/router-advertisement-yields-a-slaac-address-and-is-not-passed-to-the-kernel") {  // review 7
         let (b, out) = v6Bridge()
         let addr = Locked([([UInt8], Int)]()); let delivered = Locked(0)
         b.deliverIPv6 = { _ in delivered.update { $0 += 1 } }
         b.startIPv6 { a, l in addr.update { $0.append((a, l)) } }
         b.fromHub(raFrame())
-        b.fromHub(raFrame())                                                           // refresh: reported only once
+        b.fromHub(raFrame())  // refresh: reported only once
         expectEqual(addr.value.count, 1)
-        expectEqual(addr.value.first?.0, bytes("20010db8000100025c0011fffe223344"))     // prefix + EUI-64 of 5E:00:11:22:33:44
+        expectEqual(addr.value.first?.0, bytes("20010db8000100025c0011fffe223344"))  // prefix + EUI-64 of 5E:00:11:22:33:44
         expectEqual(addr.value.first?.1, 64)
         expectEqual(b.routerIPv6, peerLL); expectEqual(b.ipv6Address, bytes("20010db8000100025c0011fffe223344"))
         expectEqual(delivered.value, 0, "NDP is consumed by the bridge")
@@ -112,12 +124,12 @@ func registerBridgeIPv6Tests() {
     }
     test("bridge6/address-reported-to-a-late-observer") {
         let (b, _) = v6Bridge()
-        b.fromHub(raFrame())                                                           // RA arrives before the netconfig exists
+        b.fromHub(raFrame())  // RA arrives before the netconfig exists
         let addr = Locked(0)
         b.startIPv6 { _, _ in addr.update { $0 += 1 } }
         expectEqual(addr.value, 1)
     }
-    test("bridge6/prefix-rules-A-flag-lifetimes-length-and-source") {                               // review 5, 7
+    test("bridge6/prefix-rules-A-flag-lifetimes-length-and-source") {  // review 5, 7
         func address(_ f: [UInt8]) -> [UInt8]? {
             let (b, _) = v6Bridge(); b.fromHub(f); return b.ipv6Address
         }
@@ -131,7 +143,7 @@ func registerBridgeIPv6Tests() {
         expect(address(raFrame(hop: 64)) == nil, "RA that crossed a router")
         expect(address(raFrame(valid: 0xffffffff, preferred: 0xffffffff)) != nil, "infinite lifetimes")
     }
-    test("bridge6/valid-lifetime-expiry-stops-the-address-and-router") {                            // review 7
+    test("bridge6/valid-lifetime-expiry-stops-the-address-and-router") {  // review 7
         let (b, out) = v6Bridge()
         let t = Locked(Date(timeIntervalSince1970: 1000)); b.now = { t.value }
         b.fromHub(raFrame(valid: 100, preferred: 50, routerLifetime: 30))
@@ -144,7 +156,7 @@ func registerBridgeIPv6Tests() {
         b.fromHost(v6DataPacket(to: "2001:db8:ffff::1"))
         expectEqual(out.value.count, 0, "router lifetime ran out: nothing to forward to")
     }
-    test("bridge6/router-solicitations-repeat-with-backoff-until-an-advertisement-arrives") {         // review 7
+    test("bridge6/router-solicitations-repeat-with-backoff-until-an-advertisement-arrives") {  // review 7
         let (b, out) = v6Bridge(timing: BridgeTiming(rsInterval: 0.05, rsMaxInterval: 1, rsRetries: 4))
         let stamps = Locked([Date]())
         b.sendFrame = { f in if icmpType(f) == 133 { out.update { $0.append(f) }; stamps.update { $0.append(Date()) } } }
@@ -165,17 +177,20 @@ func registerBridgeIPv6Tests() {
         try await Task.sleep(nanoseconds: 700_000_000)
         expectEqual(out2.value.count, 1, "no more solicitations once a router answered")
     }
-    test("bridge6/outbound-packets-are-resolved-with-neighbor-discovery-not-broadcast") {            // review 7
+    test("bridge6/outbound-packets-are-resolved-with-neighbor-discovery-not-broadcast") {  // review 7
         let (b, out) = v6Bridge()
         let t = Locked(Date(timeIntervalSince1970: 1000)); b.now = { t.value }
         b.fromHub(raFrame())
-        t.update { $0 = $0.addingTimeInterval(61) }                                     // the RA's neighbour entry aged out
-        let pkt = v6DataPacket(to: "2606:4700::1111")                                  // off-link: next hop is the router
+        t.update { $0 = $0.addingTimeInterval(61) }  // the RA's neighbour entry aged out
+        let pkt = v6DataPacket(to: "2606:4700::1111")  // off-link: next hop is the router
         b.fromHost(pkt)
         // exact NS to the router's solicited-node group (independent encoder)
-        expectEqual(out.value.last, bytes("3333ff0000015e001122334486dd6000000000203afffe800000000000005c0011fffe223344"
-            + "ff0200000000000000000001ff00000187003ace00000000fe80000000000000000000000000000101015e0011223344"))
-        b.fromHub(raFrame())                                                           // the RA's SLLA resolves the router again
+        expectEqual(
+            out.value.last,
+            bytes(
+                "3333ff0000015e001122334486dd6000000000203afffe800000000000005c0011fffe223344"
+                    + "ff0200000000000000000001ff00000187003ace00000000fe80000000000000000000000000000101015e0011223344"))
+        b.fromHub(raFrame())  // the RA's SLLA resolves the router again
         out.update { $0.removeAll() }
         b.fromHost(pkt)
         expectEqual(out.value, [Ethernet.frame(dst: peerMAC, src: v6MAC, type: 0x86DD, payload: pkt)])
@@ -184,7 +199,7 @@ func registerBridgeIPv6Tests() {
         let (b, out) = v6Bridge()
         let t = Locked(Date(timeIntervalSince1970: 1000)); b.now = { t.value }
         b.fromHub(raFrame())
-        t.update { $0 = $0.addingTimeInterval(61) }                                     // neighbour entry aged out
+        t.update { $0 = $0.addingTimeInterval(61) }  // neighbour entry aged out
         out.update { $0.removeAll() }
         let pkts = (1...3).map { v6DataPacket(to: "2606:4700::\($0)") }
         pkts.forEach { b.fromHost($0) }
@@ -206,7 +221,7 @@ func registerBridgeIPv6Tests() {
     test("bridge6/on-link-destinations-are-resolved-directly-and-unrouted-ones-dropped") {
         let (b, out) = v6Bridge()
         b.fromHost(v6DataPacket(to: "2606:4700::1")); expectEqual(out.value.count, 0, "no router yet")
-        b.fromHub(raFrame())                                                           // L flag set: 2001:db8:1:2::/64 is on-link
+        b.fromHub(raFrame())  // L flag set: 2001:db8:1:2::/64 is on-link
         out.update { $0.removeAll() }
         b.fromHost(v6DataPacket(to: "2001:db8:1:2::99"))
         let ns = out.value.last!
@@ -256,13 +271,13 @@ func registerBridgeTests() {
             // answer with a different transaction id
             let real = FakeNetworkServer(); real.offeredIP = myIP
             for r in real.handle(f) {
-                var r = r; r[14 + 20 + 8 + 4] ^= 0xFF           // corrupt xid inside the BOOTP header
+                var r = r; r[14 + 20 + 8 + 4] ^= 0xFF  // corrupt xid inside the BOOTP header
                 b.fromHub(r)
             }
         }
         do { _ = try await b.acquireLease(); fail("accepted foreign xid") } catch {}
     }
-    test("bridge/dhcp-nak-restarts-immediately") {                       // B11
+    test("bridge/dhcp-nak-restarts-immediately") {  // B11
         let net = FakeNetworkServer(); net.nakCount = 1
         let b = makeBridge(net, timeout: 2, retries: 3)
         let start = Date()
@@ -271,7 +286,7 @@ func registerBridgeTests() {
         expect(Date().timeIntervalSince(start) < 1.0, "NAK should trigger an immediate new DISCOVER (took \(Date().timeIntervalSince(start))s)")
         expectEqual(net.count(.discover), 2)
     }
-    test("bridge/renew-uses-ciaddr-not-selecting-options") {              // B11
+    test("bridge/renew-uses-ciaddr-not-selecting-options") {  // B11
         let net = FakeNetworkServer(); let b = makeBridge(net)
         _ = try await b.acquireLease()
         await b.renew()
@@ -280,7 +295,7 @@ func registerBridgeTests() {
         let o = dhcpOptions(renew)
         expect(o[50] == nil && o[54] == nil, "renewing requests must not carry requested-ip/server-id options")
     }
-    test("bridge/renew-with-new-address-reports-change") {               // B11
+    test("bridge/renew-with-new-address-reports-change") {  // B11
         let net = FakeNetworkServer(); let b = makeBridge(net)
         _ = try await b.acquireLease()
         let changed = Locked<Lease?>(nil)
@@ -289,7 +304,7 @@ func registerBridgeTests() {
         await b.renew()
         expectEqual(changed.value?.ip, 0x0AE99999, "onLeaseChanged")
     }
-    test("bridge/renew-silence-or-nak-reports-lease-lost") {              // B11
+    test("bridge/renew-silence-or-nak-reports-lease-lost") {  // B11
         let net = FakeNetworkServer(); let b = makeBridge(net, timeout: 0.2)
         _ = try await b.acquireLease()
         let lost = Locked(0)
@@ -301,7 +316,7 @@ func registerBridgeTests() {
         await b.renew()
         expectEqual(lost.value, 2, "no answer to renew")
     }
-    test("bridge/arp-for-unresolved-next-hop-is-rate-limited") {         // B10
+    test("bridge/arp-for-unresolved-next-hop-is-rate-limited") {  // B10
         let net = FakeNetworkServer(); net.answerARP = false
         let b = makeBridge(net); _ = try await b.acquireLease()
         let t = Locked(Date(timeIntervalSince1970: 1000)); b.now = { t.value }
@@ -321,7 +336,7 @@ func registerBridgeTests() {
         b.fromHub(Ethernet.frame(dst: b.mac, src: net.gatewayMAC, type: 0x0806, payload: reply.encode()))
         expectEqual(net.ipv4Packets, pkts)
     }
-    test("bridge/stale-queued-packets-are-dropped") {                    // B10
+    test("bridge/stale-queued-packets-are-dropped") {  // B10
         let net = FakeNetworkServer(); net.answerARP = false
         let b = makeBridge(net); _ = try await b.acquireLease()
         let t = Locked(Date(timeIntervalSince1970: 1000)); b.now = { t.value }
@@ -331,7 +346,7 @@ func registerBridgeTests() {
         b.fromHub(Ethernet.frame(dst: b.mac, src: net.gatewayMAC, type: 0x0806, payload: reply.encode()))
         expectEqual(net.ipv4Packets.count, 0, "packets queued 4s ago must not be sent late")
     }
-    test("bridge/arp-cache-entries-expire") {                            // B10
+    test("bridge/arp-cache-entries-expire") {  // B10
         let net = FakeNetworkServer()
         let b = makeBridge(net); _ = try await b.acquireLease()
         let t = Locked(Date(timeIntervalSince1970: 1000)); b.now = { t.value }
@@ -348,7 +363,7 @@ func registerBridgeTests() {
         let net = FakeNetworkServer(); let b = makeBridge(net); _ = try await b.acquireLease()
         let out = Locked([[UInt8]]()); b.sendFrame = { f in out.update { $0.append(f) } }
         func ask(_ target: UInt32) {
-            let a = ARPPacket(op: 1, senderMAC: net.gatewayMAC, senderIP: gw, targetMAC: [0,0,0,0,0,0], targetIP: target)
+            let a = ARPPacket(op: 1, senderMAC: net.gatewayMAC, senderIP: gw, targetMAC: [0, 0, 0, 0, 0, 0], targetIP: target)
             b.fromHub(Ethernet.frame(dst: broadcastMAC, src: net.gatewayMAC, type: 0x0806, payload: a.encode()))
         }
         ask(0x0A0A0A0A); expectEqual(out.value.count, 0)
@@ -363,9 +378,9 @@ func registerBridgeTests() {
         b.fromHub(ipv4Frame(dstMAC: b.mac, src: 1, dst: myIP)); expectEqual(got.value, 1, "unicast to us")
         b.fromHub(ipv4Frame(dstMAC: broadcastMAC, src: 1, dst: 0xFFFFFFFF)); expectEqual(got.value, 2, "broadcast")
         b.fromHub(ipv4Frame(dstMAC: [0x02, 9, 9, 9, 9, 9], src: 1, dst: myIP)); expectEqual(got.value, 2, "foreign unicast")
-        b.fromHub(Ethernet.frame(dst: b.mac, src: [1,2,3,4,5,6], type: 0x86DD, payload: [UInt8](repeating: 0, count: 40)))
+        b.fromHub(Ethernet.frame(dst: b.mac, src: [1, 2, 3, 4, 5, 6], type: 0x86DD, payload: [UInt8](repeating: 0, count: 40)))
         expectEqual(got.value, 2, "IPv6 must be dropped")
-        b.fromHub([1, 2, 3])                                           // runt frame
+        b.fromHub([1, 2, 3])  // runt frame
     }
     test("bridge/nothing-is-delivered-before-a-lease") {
         let b = EthernetBridge()
@@ -376,7 +391,7 @@ func registerBridgeTests() {
     }
     test("bridge/host-packets-on-link-broadcast-and-offlink") {
         let net = FakeNetworkServer(); let b = makeBridge(net); _ = try await b.acquireLease()
-        b.fromHost(hostPacket(to: 0x0AE90101))                          // on-link peer → ARP for the peer itself
+        b.fromHost(hostPacket(to: 0x0AE90101))  // on-link peer → ARP for the peer itself
         expect(net.arpRequestTargets.contains(0x0AE90101), "on-link destination is resolved directly")
         let before = net.arpRequestTargets.count
         b.fromHost(hostPacket(to: 0xFFFFFFFF))

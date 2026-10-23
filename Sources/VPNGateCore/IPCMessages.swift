@@ -35,7 +35,7 @@ public struct ConnectConfig: Codable, Equatable {
     public var ports: [Int]
     public var hubName: String
     public var userName: String
-    public var authType: String              // anonymous, password, plain, cert, ticket
+    public var authType: String  // anonymous, password, plain, cert, ticket
     public var password: String?
     public var certDer: Data?
     /// PKCS#1 RSAPrivateKey DER (PKCS#8 also accepted) for certificate auth; the helper signs the server challenge with it.
@@ -165,7 +165,7 @@ public struct ConnectConfig: Codable, Equatable {
 }
 
 public struct HelperRequest: Codable {
-    public var cmd: String            // connect | disconnect | status
+    public var cmd: String  // connect | disconnect | status
     public var host: String?
     public var port: Int?
     public var ports: [Int]?

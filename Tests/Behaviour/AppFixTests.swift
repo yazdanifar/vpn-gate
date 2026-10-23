@@ -1,5 +1,5 @@
-import Foundation
 import CryptoKit
+import Foundation
 import Security
 import VPNGateCore
 
@@ -32,12 +32,15 @@ private func server(ip: String = "5.6.7.8") -> VPNServer {
     ServerList.parse("#h\nvpn1,\(ip),1,1,1,Japan,JP,1,1,1,1,2weeks,Op,msg,\(Data("proto tcp\nremote \(ip) 443\n".utf8).base64EncodedString())\n")[0]
 }
 
-@MainActor private func makeModel(_ path: String, agreed: Bool = true, login: LoginItemControlling = FakeLoginItem(),
-                                  defaults: UserDefaults? = nil) -> AppModel {
-    AppModel(socketPath: path, defaults: defaults ?? freshDefaults(agreed: agreed), autoStart: false, openInstaller: { true },
-             loginItem: login,
-             accountManager: AccountManager(fileURL: URL(fileURLWithPath: tempPath("acc-\(UUID().uuidString.prefix(6)).json"))),
-             connectionLog: ConnectionLogStore(fileURL: URL(fileURLWithPath: tempPath("hist-\(UUID().uuidString.prefix(6)).json"))))
+@MainActor private func makeModel(
+    _ path: String, agreed: Bool = true, login: LoginItemControlling = FakeLoginItem(),
+    defaults: UserDefaults? = nil
+) -> AppModel {
+    AppModel(
+        socketPath: path, defaults: defaults ?? freshDefaults(agreed: agreed), autoStart: false, openInstaller: { true },
+        loginItem: login,
+        accountManager: AccountManager(fileURL: URL(fileURLWithPath: tempPath("acc-\(UUID().uuidString.prefix(6)).json"))),
+        connectionLog: ConnectionLogStore(fileURL: URL(fileURLWithPath: tempPath("hist-\(UUID().uuidString.prefix(6)).json"))))
 }
 
 private func startHelper(_ path: String) -> (IPCServer, FakeSession) {
@@ -52,7 +55,7 @@ private func startHelper(_ path: String) -> (IPCServer, FakeSession) {
 @MainActor private func waitReady(_ m: AppModel) async {
     for _ in 0..<300 {
         m.pollHelper()
-        if m.helperRunning && !m.helperOutdated && m.event.helperVersion != nil { return }   // snapshot received
+        if m.helperRunning && !m.helperOutdated && m.event.helperVersion != nil { return }  // snapshot received
         try? await Task.sleep(nanoseconds: 10_000_000)
     }
     fail("helper never became ready")
@@ -73,7 +76,7 @@ func registerAppFixTests() {
     }
     test("telemetry/the-old-default-on-key-does-not-count-as-consent") {
         await MainActor.run {
-            let d = freshDefaults(); d.set(true, forKey: "telemetryEnabled")       // what earlier builds wrote for everyone
+            let d = freshDefaults(); d.set(true, forKey: "telemetryEnabled")  // what earlier builds wrote for everyone
             expect(!VGStatistics(defaults: d).isEnabled)
         }
     }
@@ -156,7 +159,7 @@ func registerAppFixTests() {
         expectEqual(fake.connects.first?.host, "9.9.9.9")
         let (showing, agreed) = await MainActor.run { (m.showingDisclaimer, m.hasAgreedToDisclaimer) }
         expect(!showing && agreed); expect(d.bool(forKey: "hasAgreedToDisclaimer"))
-        await MainActor.run { m.connect(server()) }                       // no second prompt
+        await MainActor.run { m.connect(server()) }  // no second prompt
         await expectA(await eventuallyA(3) { fake.connects.count == 2 })
     }
     test("disclaimer/declining-drops-the-parked-connect") {
@@ -164,19 +167,22 @@ func registerAppFixTests() {
         let (srv, fake) = startHelper(path); defer { srv.stop() }
         let m = await MainActor.run { makeModel(path, agreed: false) }
         await waitReady(m)
-        await MainActor.run { m.connect(server()); m.declineDisclaimer(); m.agreeToDisclaimer() }
+        await MainActor.run {
+            m.connect(server()); m.declineDisclaimer(); m.agreeToDisclaimer()
+        }
         try await Task.sleep(nanoseconds: 200_000_000)
         expectEqual(fake.connects.count, 0, "a declined connect must not start after a later agreement")
     }
 
     // MARK: account editor
     test("editor/save-keeps-every-field-the-form-does-not-show") {
-        var base = ClientAccount(name: "Lab", host: "vpn.example.com", portList: [443], hub: "H", username: "u",
-                                 authType: .plainPassword, checkServerCert: true,
-                                 serverCertFingerprint: "1122334455667788990011223344556677889900", maxConnection: 4,
-                                 halfConnection: true, reconnectInterval: 9, reconnectCount: 3,
-                                 virtualMacAddress: "00:AC:00:00:00:01", mtu: 1300,
-                                 createdAt: Date(timeIntervalSince1970: 1000))
+        var base = ClientAccount(
+            name: "Lab", host: "vpn.example.com", portList: [443], hub: "H", username: "u",
+            authType: .plainPassword, checkServerCert: true,
+            serverCertFingerprint: "1122334455667788990011223344556677889900", maxConnection: 4,
+            halfConnection: true, reconnectInterval: 9, reconnectCount: 3,
+            virtualMacAddress: "00:AC:00:00:00:01", mtu: 1300,
+            createdAt: Date(timeIntervalSince1970: 1000))
         base.proxy.kind = .socks5; base.proxy.host = "10.0.0.1"; base.proxy.port = 1080
         let ui = AccountEditorState(account: base)
         ui.name = "Lab renamed"; ui.compression = true
@@ -208,14 +214,15 @@ func registerAppFixTests() {
         let out = ui.makeAccount(base: base)
         expectEqual(out.mtu, 1300); expectEqual(out.virtualMacAddress, "00:AC:DE:12:34:56")
 
-        ui.mtuString = "100"   // below 576
+        ui.mtuString = "100"  // below 576
         expect(ui.mtuError != nil); expect(!ui.canSave)
         ui.mtuString = ""; ui.macString = "not-a-mac"
         expect(ui.macError != nil); expect(!ui.canSave)
     }
     test("editor/reconnect-interval-and-count-are-editable-and-clamped") {
-        let base = ClientAccount(name: "Lab", host: "vpn.example.com", autoReconnect: true,
-                                 reconnectInterval: 3, reconnectCount: 8)
+        let base = ClientAccount(
+            name: "Lab", host: "vpn.example.com", autoReconnect: true,
+            reconnectInterval: 3, reconnectCount: 8)
         let ui = AccountEditorState(account: base)
         expectEqual(ui.reconnectIntervalSeconds, 3); expectEqual(ui.reconnectCount, 8)
         ui.reconnectIntervalSeconds = 20; ui.reconnectCount = 2
@@ -276,7 +283,8 @@ func registerAppFixTests() {
         try await MainActor.run {
             let url = URL(fileURLWithPath: tempPath("migrate-\(UUID().uuidString.prefix(6)).json"))
             let id = UUID()
-            let json = #"[{"id":"\#(id.uuidString)","name":"Old","host":"2.2.2.2","proxy":{"kind":"http","host":"1.1.1.1","port":3128,"username":"u","password":"OldPlain"}}]"#
+            let json =
+                #"[{"id":"\#(id.uuidString)","name":"Old","host":"2.2.2.2","proxy":{"kind":"http","host":"1.1.1.1","port":3128,"username":"u","password":"OldPlain"}}]"#
             try json.write(to: url, atomically: true, encoding: .utf8)
             let mgr = AccountManager(fileURL: url)
             expectEqual(mgr.proxyPassword(for: mgr.accounts[0]), "OldPlain")
@@ -292,11 +300,11 @@ func registerAppFixTests() {
             let good = UUID(), future = UUID()
             // record 1: minimal old schema; record 2: newer file with unknown keys; record 3: unknown auth type; record 4: junk
             let json = """
-            [{"id":"\(good.uuidString)","name":"Minimal","host":"1.1.1.1"},
-             {"id":"\(future.uuidString)","name":"Future","host":"2.2.2.2","authType":"Plain Password","maxConnection":3,"quantumMode":true},
-             {"id":"\(UUID().uuidString)","name":"Weird","host":"3.3.3.3","authType":"Retina Scan"},
-             42]
-            """
+                [{"id":"\(good.uuidString)","name":"Minimal","host":"1.1.1.1"},
+                 {"id":"\(future.uuidString)","name":"Future","host":"2.2.2.2","authType":"Plain Password","maxConnection":3,"quantumMode":true},
+                 {"id":"\(UUID().uuidString)","name":"Weird","host":"3.3.3.3","authType":"Retina Scan"},
+                 42]
+                """
             try json.write(to: url, atomically: true, encoding: .utf8)
             let mgr = AccountManager(fileURL: url)
             expectEqual(mgr.accounts.map(\.name), ["Minimal", "Future"])
@@ -336,7 +344,7 @@ func registerAppFixTests() {
         expectEqual(id.privateKeyDer, pkcs1); expectEqual(id.certDer, pemDER(CertFixtures.certPEM))
         let id8 = try CertImport.identity(certificateFile: Data(CertFixtures.certPEM.utf8), keyFile: Data(CertFixtures.rsaPKCS8PEM.utf8))
         expectEqual(id8.privateKeyDer, pkcs1, "PKCS#8 must be unwrapped to PKCS#1")
-        let raw = try CertImport.identity(certificateFile: id.certDer, keyFile: pkcs1)          // raw DER files
+        let raw = try CertImport.identity(certificateFile: id.certDer, keyFile: pkcs1)  // raw DER files
         expectEqual(raw, id)
         // the helper signs with exactly this blob
         let sig = try CertAuth.sign(Data(repeating: 7, count: 20), privateKeyDer: id.privateKeyDer)
@@ -345,8 +353,7 @@ func registerAppFixTests() {
     test("cert/bad-material-gives-clear-errors") {
         let cert = Data(CertFixtures.certPEM.utf8)
         func failure(_ key: String) -> CertImport.Failure? {
-            do { _ = try CertImport.identity(certificateFile: cert, keyFile: Data(key.utf8)); return nil }
-            catch { return error as? CertImport.Failure }
+            do { _ = try CertImport.identity(certificateFile: cert, keyFile: Data(key.utf8)); return nil } catch { return error as? CertImport.Failure }
         }
         expectEqual(failure(CertFixtures.encryptedPEM), .encryptedKey)
         expectEqual(failure(CertFixtures.ecPEM), .unsupportedKeyType("EC"))
@@ -365,10 +372,12 @@ func registerAppFixTests() {
         }
     }
     test("cert/pkcs12-wrong-passphrase-and-ec-keys-are-reported", timeout: 40) {
-        do { _ = try CertImport.importPKCS12(CertFixtures.modernP12, passphrase: "nope"); fail("wrong passphrase accepted") }
-        catch { expectEqual(error as? CertImport.Failure, .wrongPassphrase) }
-        do { _ = try CertImport.importPKCS12(CertFixtures.ecP12, passphrase: CertFixtures.p12Passphrase); fail("EC key accepted") }
-        catch { expectEqual(error as? CertImport.Failure, .unsupportedKeyType("EC"), "\(error)") }
+        do { _ = try CertImport.importPKCS12(CertFixtures.modernP12, passphrase: "nope"); fail("wrong passphrase accepted") } catch {
+            expectEqual(error as? CertImport.Failure, .wrongPassphrase)
+        }
+        do { _ = try CertImport.importPKCS12(CertFixtures.ecP12, passphrase: CertFixtures.p12Passphrase); fail("EC key accepted") } catch {
+            expectEqual(error as? CertImport.Failure, .unsupportedKeyType("EC"), "\(error)")
+        }
         expectThrows(try CertImport.importPKCS12(Data("junk".utf8), passphrase: ""))
     }
     test("cert/connect-sends-certificate-and-key-to-the-helper-and-requires-both") {
@@ -378,7 +387,7 @@ func registerAppFixTests() {
         await waitReady(m)
         let id = try CertImport.identity(certificateFile: Data(CertFixtures.certPEM.utf8), keyFile: Data(CertFixtures.rsaPKCS8PEM.utf8))
         let acc = ClientAccount(name: "Cert", host: "7.7.7.7", username: "alice", authType: .certificate)
-        await MainActor.run { m.accountManager.add(acc, certDer: id.certDer) }               // key missing
+        await MainActor.run { m.accountManager.add(acc, certDer: id.certDer) }  // key missing
         await MainActor.run { m.connect(account: acc) }
         try await Task.sleep(nanoseconds: 200_000_000)
         expectEqual(fake.configs.count, 0, "certificate login without a key must not be attempted")
@@ -401,7 +410,9 @@ func registerAppFixTests() {
             a.proxy.kind = .http; a.proxy.host = "10.0.0.2"; a.proxy.port = 3128; a.proxy.username = "u"; a.proxy.password = "px-secret"
             return a
         }()
-        let stored = await MainActor.run { () -> ClientAccount in m.accountManager.add(acc, password: "pw"); return m.accountManager.accounts[0] }
+        let stored = await MainActor.run { () -> ClientAccount in
+            m.accountManager.add(acc, password: "pw"); return m.accountManager.accounts[0]
+        }
         expect(stored.proxy.password == nil)
         await MainActor.run { m.connect(account: stored) }
         await expectA(await eventuallyA(3) { fake.configs.count == 1 })
@@ -418,8 +429,11 @@ func registerAppFixTests() {
         await waitReady(m)
         var up = HelperEvent(state: .connected); up.server = "5.6.7.8"; up.bytesIn = 100; up.bytesOut = 50
         // the server registers the client slightly after connect(): repeat the (idempotent) event until it lands
-        await expectA(await eventuallyA(3) { fake.emit?(up); try? await Task.sleep(nanoseconds: 30_000_000)
-                                             return await MainActor.run { m.connectionLog.entries.count == 1 } }, "no entry on connect")
+        await expectA(
+            await eventuallyA(3) {
+                fake.emit?(up); try? await Task.sleep(nanoseconds: 30_000_000)
+                return await MainActor.run { m.connectionLog.entries.count == 1 }
+            }, "no entry on connect")
         up.bytesIn = 5000; up.bytesOut = 3000
         fake.emit?(up)
         try await Task.sleep(nanoseconds: 100_000_000)
@@ -441,8 +455,11 @@ func registerAppFixTests() {
         let m = await MainActor.run { makeModel(path) }
         await waitReady(m)
         var up = HelperEvent(state: .connected); up.server = "5.6.7.8"
-        await expectA(await eventuallyA(3) { fake.emit?(up); try? await Task.sleep(nanoseconds: 30_000_000)
-                                             return await MainActor.run { m.connectionLog.entries.count == 1 } })
+        await expectA(
+            await eventuallyA(3) {
+                fake.emit?(up); try? await Task.sleep(nanoseconds: 30_000_000)
+                return await MainActor.run { m.connectionLog.entries.count == 1 }
+            })
         srv.stop()
         await expectA(await eventuallyA(3) { await MainActor.run { m.connectionLog.entries.first?.disconnectedAt != nil } }, "entry left open")
     }

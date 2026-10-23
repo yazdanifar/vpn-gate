@@ -61,12 +61,14 @@ func registerHandshakeTests() {
         let s = FakeSoftEtherServer()
         s.redirect = true
         // First server redirects, then turns redirect off for second connection
-        let client = SoftEtherClient(host: "1.2.3.4", port: 443, proxy: ProxySettings(), makeStream: { h, p, pr in
-            if s.redirect && s.streamsCreated >= 1 {
-                s.redirect = false // second connection succeeds!
-            }
-            return s.factory(h, p, pr)
-        })
+        let client = SoftEtherClient(
+            host: "1.2.3.4", port: 443, proxy: ProxySettings(),
+            makeStream: { h, p, pr in
+                if s.redirect && s.streamsCreated >= 1 {
+                    s.redirect = false  // second connection succeeds!
+                }
+                return s.factory(h, p, pr)
+            })
         let wel = try await client.connect { _ in }
         expectEqual(wel.sessionName, "SID-VPN-TEST-1")
         // Verify second login used authtype 99 and the ticket
@@ -77,8 +79,9 @@ func registerHandshakeTests() {
     }
     test("handshake/plain-password-auth") {
         let s = FakeSoftEtherServer()
-        let c = SoftEtherClient(host: "1.2.3.4", port: 443, userName: "alice", auth: .plainPassword("secret123"),
-                                proxy: ProxySettings(), makeStream: s.factory)
+        let c = SoftEtherClient(
+            host: "1.2.3.4", port: 443, userName: "alice", auth: .plainPassword("secret123"),
+            proxy: ProxySettings(), makeStream: s.factory)
         _ = try await c.connect { _ in }
         expectEqual(s.logins[0].int("authtype"), 2)
         expectEqual(s.logins[0].str("plain_password"), "secret123")
@@ -87,8 +90,9 @@ func registerHandshakeTests() {
     }
     test("handshake/hashed-password-auth-uses-sha0") {
         let s = FakeSoftEtherServer()
-        let c = SoftEtherClient(host: "1.2.3.4", port: 443, userName: "bob", auth: .hashedPassword("pass456"),
-                                proxy: ProxySettings(), makeStream: s.factory)
+        let c = SoftEtherClient(
+            host: "1.2.3.4", port: 443, userName: "bob", auth: .hashedPassword("pass456"),
+            proxy: ProxySettings(), makeStream: s.factory)
         _ = try await c.connect { _ in }
         expectEqual(s.logins[0].int("authtype"), 1)
         guard let securePw = s.logins[0].data("secure_password") else {
@@ -106,9 +110,10 @@ func registerHandshakeTests() {
         let s = FakeSoftEtherServer()
         let fakeCert = Data([1, 2, 3, 4, 5])
         let fakeSig = Data([6, 7, 8, 9, 10])
-        let c = SoftEtherClient(host: "1.2.3.4", port: 443, userName: "charlie",
-                                auth: .certificate(certDer: fakeCert, sign: { _ in fakeSig }),
-                                proxy: ProxySettings(), makeStream: s.factory)
+        let c = SoftEtherClient(
+            host: "1.2.3.4", port: 443, userName: "charlie",
+            auth: .certificate(certDer: fakeCert, sign: { _ in fakeSig }),
+            proxy: ProxySettings(), makeStream: s.factory)
         _ = try await c.connect { _ in }
         expectEqual(s.logins[0].int("authtype"), 3)
         expectEqual(s.logins[0].data("cert"), fakeCert)
@@ -118,8 +123,9 @@ func registerHandshakeTests() {
     test("handshake/compression-negotiated-and-data-phase-transfers") {
         let s = FakeSoftEtherServer()
         s.useCompress = true
-        let c = SoftEtherClient(host: "1.2.3.4", port: 443, proxy: ProxySettings(),
-                                useCompress: true, makeStream: s.factory)
+        let c = SoftEtherClient(
+            host: "1.2.3.4", port: 443, proxy: ProxySettings(),
+            useCompress: true, makeStream: s.factory)
         let got = Locked([[UInt8]]())
         c.onFrame = { frame in got.update { $0.append(frame) } }
         let wel = try await c.connect { _ in }
@@ -135,8 +141,9 @@ func registerHandshakeTests() {
     test("handshake/multi-tcp-additional-connections-established") {
         let s = FakeSoftEtherServer()
         s.maxConnections = 4
-        let c = SoftEtherClient(host: "1.2.3.4", port: 443, proxy: ProxySettings(),
-                                maxConnections: 4, makeStream: s.factory)
+        let c = SoftEtherClient(
+            host: "1.2.3.4", port: 443, proxy: ProxySettings(),
+            maxConnections: 4, makeStream: s.factory)
         let wel = try await c.connect { _ in }
         expectEqual(wel.maxConnection, 4)
 
@@ -207,9 +214,11 @@ func registerHandshakeTests() {
     }
     test("dataphase/oversized-block-closes-with-error") {
         let s = FakeSoftEtherServer(); let c = client(s); let err = Locked<Error?>(nil); let n = Locked(0)
-        c.onClose = { e in err.update { $0 = e }; n.update { $0 += 1 } }
+        c.onClose = { e in
+            err.update { $0 = e }; n.update { $0 += 1 }
+        }
         _ = try await c.connect { _ in }
-        s.lastStream!.deliver([0,0,0,1, 0,0,0x20,0])
+        s.lastStream!.deliver([0, 0, 0, 1, 0, 0, 0x20, 0])
         await eventually { n.value == 1 }
         expectEqual(n.value, 1)
         expect(err.value is DataPhaseError, "got \(String(describing: err.value))")
@@ -246,7 +255,7 @@ func registerHandshakeTests() {
         c.close(nil)
     }
     test("dataphase/client-sends-keepalives", timeout: 10) {
-        let s = FakeSoftEtherServer(); s.welcomeTimeoutMs = 5000      // keep-alive every 1-2.5 s
+        let s = FakeSoftEtherServer(); s.welcomeTimeoutMs = 5000  // keep-alive every 1-2.5 s
         let c = client(s)
         _ = try await c.connect { _ in }
         let ok = await eventually(4) { s.keepAlivesReceived >= 1 }
@@ -265,8 +274,11 @@ func registerHandshakeTests() {
         let seen = Locked<ProxySettings?>(nil)
         let s = FakeSoftEtherServer()
         var p = ProxySettings(); p.kind = .socks5; p.host = "px"; p.port = 1080
-        let c = SoftEtherClient(host: "h", port: 443, proxy: p, makeStream: { h, po, pr in
-            seen.update { $0 = pr }; return s.factory(h, po, pr) })
+        let c = SoftEtherClient(
+            host: "h", port: 443, proxy: p,
+            makeStream: { h, po, pr in
+                seen.update { $0 = pr }; return s.factory(h, po, pr)
+            })
         _ = try await c.connect { _ in }
         expectEqual(seen.value, p)
         expectEqual(s.logins[0].str("ProxyHostname"), "px")
@@ -274,7 +286,7 @@ func registerHandshakeTests() {
     }
     test("dataphase/read-idle-watchdog-closes-link", timeout: 10) {
         // Use a very short timeout so the watchdog fires quickly in tests.
-        let s = FakeSoftEtherServer(); s.welcomeTimeoutMs = 500   // 500 ms idle timeout
+        let s = FakeSoftEtherServer(); s.welcomeTimeoutMs = 500  // 500 ms idle timeout
         let c = client(s)
         let closed = Locked<Error?>(nil)
         c.onClose = { e in closed.update { $0 = e } }
@@ -282,7 +294,8 @@ func registerHandshakeTests() {
         // Don't deliver any bytes — the watchdog should fire within ~500 ms.
         let fired = await eventually(5) { closed.value != nil }
         expect(fired, "watchdog did not fire within 5 s")
-        expect(closed.value?.localizedDescription.contains("idle") == true,
-               "expected idle-timeout error, got \(String(describing: closed.value))")
+        expect(
+            closed.value?.localizedDescription.contains("idle") == true,
+            "expected idle-timeout error, got \(String(describing: closed.value))")
     }
 }

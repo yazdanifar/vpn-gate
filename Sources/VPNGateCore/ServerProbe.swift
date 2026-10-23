@@ -35,8 +35,10 @@ public enum ServerProbe {
         return Array(out.prefix(maxPorts))
     }
 
-    public static func run(host: String, ports: [UInt16], proxy: ProxySettings = ProxySettings(),
-                           timeout: TimeInterval = 5, factory: StreamFactory) async -> ProbeOutcome {
+    public static func run(
+        host: String, ports: [UInt16], proxy: ProxySettings = ProxySettings(),
+        timeout: TimeInterval = 5, factory: StreamFactory
+    ) async -> ProbeOutcome {
         var lastError = "No port to test"
         for port in ports {
             switch await attempt(host: host, port: port, proxy: proxy, timeout: timeout, factory: factory) {
@@ -49,8 +51,10 @@ public enum ServerProbe {
 
     private struct Failure: Error { var message: String }
 
-    private static func attempt(host: String, port: UInt16, proxy: ProxySettings, timeout: TimeInterval,
-                                factory: StreamFactory) async -> Result<ProbeOutcome, Failure> {
+    private static func attempt(
+        host: String, port: UInt16, proxy: ProxySettings, timeout: TimeInterval,
+        factory: StreamFactory
+    ) async -> Result<ProbeOutcome, Failure> {
         let stream = factory(host, port, proxy)
         defer { stream.cancel() }
         return await withTaskGroup(of: Result<ProbeOutcome, Failure>.self) { group in

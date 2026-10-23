@@ -11,8 +11,9 @@ func registerValidationTests() {
         expectEqual(InputValidation.parseMacAddress("00:AC:DE:12:34:56"), [0x00, 0xAC, 0xDE, 0x12, 0x34, 0x56])
         expectEqual(InputValidation.parseMacAddress("00-AC-DE-12-34-56"), [0x00, 0xAC, 0xDE, 0x12, 0x34, 0x56])
         expectEqual(InputValidation.parseMacAddress("ff:ff:ff:ff:ff:ff"), [UInt8](repeating: 0xFF, count: 6))
-        expectEqual(InputValidation.parseMacAddress("0:a:b:c:d:e"), [0x00, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E],
-                    "single hex digits are accepted leniently")
+        expectEqual(
+            InputValidation.parseMacAddress("0:a:b:c:d:e"), [0x00, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E],
+            "single hex digits are accepted leniently")
         for bad in ["", "00:AC:DE:12:34", "00:AC:DE:12:34:56:78", "GG:AC:DE:12:34:56", "00AC.DE12.3456"] {
             expect(InputValidation.parseMacAddress(bad) == nil, bad)
         }
@@ -21,8 +22,10 @@ func registerValidationTests() {
         for h in ["1.2.3.4", "219.100.37.7", "vpn927125019.opengw.net", "a", "my-host.example.com"] {
             expect(InputValidation.isValidHost(h), h)
         }
-        for h in ["", "-interface", "-host", "1.2.3", "1.2.3.256", "a b", "a;b", "a$(b)", "..", ".a", "a.", "a..b",
-                  "ho\nst", "höst", String(repeating: "a", count: 254), "1.2.3.4/32"] {
+        for h in [
+            "", "-interface", "-host", "1.2.3", "1.2.3.256", "a b", "a;b", "a$(b)", "..", ".a", "a.", "a..b",
+            "ho\nst", "höst", String(repeating: "a", count: 254), "1.2.3.4/32",
+        ] {
             expect(!InputValidation.isValidHost(h), "should reject \(h.debugDescription)")
         }
     }

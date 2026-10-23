@@ -5,7 +5,7 @@ public typealias MAC = [UInt8]
 public func checksum(_ b: [UInt8]) -> UInt16 {
     var sum: UInt32 = 0
     var i = 0
-    while i + 1 < b.count { sum += UInt32(b[i]) << 8 | UInt32(b[i+1]); i += 2 }
+    while i + 1 < b.count { sum += UInt32(b[i]) << 8 | UInt32(b[i + 1]); i += 2 }
     if i < b.count { sum += UInt32(b[i]) << 8 }
     while sum >> 16 != 0 { sum = (sum & 0xffff) + (sum >> 16) }
     return ~UInt16(sum)
@@ -13,9 +13,9 @@ public func checksum(_ b: [UInt8]) -> UInt16 {
 
 public func be16(_ v: Int) -> [UInt8] { [UInt8(v >> 8 & 0xff), UInt8(v & 0xff)] }
 public func be32(_ v: UInt32) -> [UInt8] { (0..<4).map { UInt8(v >> UInt32(24 - 8 * $0) & 0xff) } }
-public func rd16(_ b: [UInt8], _ o: Int) -> Int { Int(b[o]) << 8 | Int(b[o+1]) }
-public func rd32(_ b: [UInt8], _ o: Int) -> UInt32 { b[o..<o+4].reduce(0) { $0 << 8 | UInt32($1) } }
-public func rd64(_ b: [UInt8], _ o: Int) -> UInt64 { b[o..<o+8].reduce(0) { $0 << 8 | UInt64($1) } }
+public func rd16(_ b: [UInt8], _ o: Int) -> Int { Int(b[o]) << 8 | Int(b[o + 1]) }
+public func rd32(_ b: [UInt8], _ o: Int) -> UInt32 { b[o..<o + 4].reduce(0) { $0 << 8 | UInt32($1) } }
+public func rd64(_ b: [UInt8], _ o: Int) -> UInt64 { b[o..<o + 8].reduce(0) { $0 << 8 | UInt64($1) } }
 
 public let broadcastMAC: MAC = [UInt8](repeating: 0xff, count: 6)
 
@@ -58,7 +58,8 @@ public struct ARPPacket {
 
 public enum IPv4 {
     public static func packet(proto: UInt8, src: UInt32, dst: UInt32, payload: [UInt8]) -> [UInt8] {
-        var h: [UInt8] = [0x45, 0] + be16(20 + payload.count) + [0, 0, 0, 0, 64, proto, 0, 0]
+        var h: [UInt8] =
+            [0x45, 0] + be16(20 + payload.count) + [0, 0, 0, 0, 64, proto, 0, 0]
             + be32(src) + be32(dst)
         let c = checksum(h)
         h[10] = UInt8(c >> 8); h[11] = UInt8(c & 0xff)
@@ -95,15 +96,15 @@ public struct DHCPMessage {
 
     /// BOOTP/DHCP payload (to be carried in UDP 68 -> 67).
     public func encode() -> [UInt8] {
-        var b: [UInt8] = [1, 1, 6, 0] + be32(xid) + [0, 0, 0x80, 0]   // broadcast flag
-        b += be32(ciaddr) + [UInt8](repeating: 0, count: 12)           // ciaddr, then yiaddr siaddr giaddr
+        var b: [UInt8] = [1, 1, 6, 0] + be32(xid) + [0, 0, 0x80, 0]  // broadcast flag
+        b += be32(ciaddr) + [UInt8](repeating: 0, count: 12)  // ciaddr, then yiaddr siaddr giaddr
         b += mac + [UInt8](repeating: 0, count: 10)
-        b += [UInt8](repeating: 0, count: 192)                         // sname + file
+        b += [UInt8](repeating: 0, count: 192)  // sname + file
         b += [99, 130, 83, 99]
         b += [53, 1, type.rawValue]
         if let r = requestedIP { b += [50, 4] + be32(r) }
         if let s = serverID { b += [54, 4] + be32(s) }
-        b += [55, 5, 1, 3, 6, 51, 26]                                  // parameter request list includes option 26 (MTU)
+        b += [55, 5, 1, 3, 6, 51, 26]  // parameter request list includes option 26 (MTU)
         b += [255]
         return b
     }
@@ -118,7 +119,7 @@ public struct DHCPMessage {
             if c == 255 { break }
             if c == 0 { i += 1; continue }
             guard i + 1 < p.count else { break }
-            let l = Int(p[i+1]); let s = i + 2
+            let l = Int(p[i + 1]); let s = i + 2
             guard s + l <= p.count else { break }
             switch c {
             case 53 where l == 1: t = DHCPType(rawValue: p[s])
@@ -187,7 +188,7 @@ public enum IPv6 {
     public static func linkLocal(mac: MAC) -> [UInt8] {
         guard mac.count == 6 else { return [UInt8](repeating: 0, count: 16) }
         var addr: [UInt8] = [0xfe, 0x80, 0, 0, 0, 0, 0, 0]
-        addr.append(mac[0] ^ 0x02) // invert universal/local bit
+        addr.append(mac[0] ^ 0x02)  // invert universal/local bit
         addr.append(mac[1])
         addr.append(mac[2])
         addr.append(0xff)
@@ -233,7 +234,7 @@ public enum IPv6 {
 
 public enum ICMPv6 {
     public static func checksum(src: [UInt8], dst: [UInt8], icmpPayload: [UInt8]) -> UInt16 {
-        var pseudo = src + dst + [0, 0] + be16(icmpPayload.count) + [0, 0, 0, 58] // next header 58
+        var pseudo = src + dst + [0, 0] + be16(icmpPayload.count) + [0, 0, 0, 58]  // next header 58
         pseudo += icmpPayload
         return VPNGateCore.checksum(pseudo)
     }
@@ -245,10 +246,10 @@ public enum ICMPv6 {
 
     /// Router Solicitation (Type 133)
     public static func routerSolicitation(srcMAC: MAC, srcIP: [UInt8]) -> [UInt8] {
-        var icmp: [UInt8] = [133, 0, 0, 0, 0, 0, 0, 0] // Type, Code, Checksum (0), Reserved
+        var icmp: [UInt8] = [133, 0, 0, 0, 0, 0, 0, 0]  // Type, Code, Checksum (0), Reserved
         // Option 1: Source Link-Layer Address (8 bytes: type 1, len 1, MAC 6 bytes)
         icmp += [1, 1] + srcMAC
-        let dstIP: [UInt8] = [0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2] // all-routers
+        let dstIP: [UInt8] = [0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]  // all-routers
         let c = checksum(src: srcIP, dst: dstIP, icmpPayload: icmp)
         icmp[2] = UInt8(c >> 8); icmp[3] = UInt8(c & 0xff)
         return icmp
@@ -265,9 +266,11 @@ public enum ICMPv6 {
 
     /// Neighbor Advertisement (Type 136) in response to Neighbor Solicitation (Type 135).
     /// `solicited` is clear for the answer to a DAD probe, which goes to ff02::1 (RFC 4861 §7.2.4).
-    public static func neighborAdvertisement(targetIP: [UInt8], targetMAC: MAC, srcIP: [UInt8], dstIP: [UInt8],
-                                             solicited: Bool = true) -> [UInt8] {
-        var icmp: [UInt8] = [136, 0, 0, 0] // Type, Code, Checksum
+    public static func neighborAdvertisement(
+        targetIP: [UInt8], targetMAC: MAC, srcIP: [UInt8], dstIP: [UInt8],
+        solicited: Bool = true
+    ) -> [UInt8] {
+        var icmp: [UInt8] = [136, 0, 0, 0]  // Type, Code, Checksum
         // Flags: Solicited (0x40) | Override (0x20), 3 reserved bytes
         icmp += [solicited ? 0x60 : 0x20, 0, 0, 0]
         icmp += targetIP
@@ -278,4 +281,3 @@ public enum ICMPv6 {
         return icmp
     }
 }
-

@@ -1,5 +1,5 @@
-import Foundation
 import Darwin
+import Foundation
 import VPNGateCore
 
 /// Raw client socket for protocol-level tests.
@@ -13,7 +13,7 @@ final class RawClient {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
         }
         if rc != 0 { Darwin.close(fd); return nil }
-        var one: Int32 = 1; setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, 4)   // the test client must survive a closed peer
+        var one: Int32 = 1; setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, 4)  // the test client must survive a closed peer
     }
     func write(_ s: String) { let d = Array(s.utf8); _ = d.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, d.count) } }
     /// Returns bytes read, "" on EOF, nil on timeout.
@@ -28,7 +28,8 @@ final class RawClient {
 }
 
 private func startServer(uid: uid_t? = getuid(), console: @escaping () -> uid_t? = { nil }, name: String = "s")
-    -> (IPCServer, FakeSession, String) {
+    -> (IPCServer, FakeSession, String)
+{
     let path = tempPath("\(name)-\(UUID().uuidString.prefix(6)).sock")
     let fake = FakeSession()
     let srv = IPCServer(path: path, allowedUID: uid, consoleUID: console, session: fake)
@@ -124,7 +125,7 @@ func registerIPCTests() {
         let who = Locked<uid_t?>(getuid() + 1)
         let (srv, _, path) = startServer(uid: nil, console: { who.value }); defer { srv.stop() }
         expectEqual(RawClient(path: path)!.read(timeout: 1.5), "", "before the user logs in")
-        who.update { $0 = getuid() }                                   // fast user switching / login
+        who.update { $0 = getuid() }  // fast user switching / login
         expect((RawClient(path: path)!.read(timeout: 2) ?? "").contains("state"))
     }
     test("ipc/socket-is-private-to-the-user") {
@@ -132,7 +133,7 @@ func registerIPCTests() {
         var st = stat(); stat(path, &st)
         expectEqual(st.st_mode & 0o777, 0o600)
     }
-    test("ipc/invalid-connect-requests-are-rejected-before-reaching-the-session") {   // B14
+    test("ipc/invalid-connect-requests-are-rejected-before-reaching-the-session") {  // B14
         let (srv, fake, path) = startServer(); defer { srv.stop() }
         let c = RawClient(path: path)!; _ = c.read()
         for host in ["-interface", "1.2.3.4; reboot", "", "a b"] {
@@ -149,7 +150,7 @@ func registerIPCTests() {
         await expectA(await eventually { fake.connects.count == 1 })
         c.close()
     }
-    test("ipc/rejected-request-reports-an-error-event") {                             // B14
+    test("ipc/rejected-request-reports-an-error-event") {  // B14
         let (srv, _, path) = startServer(); defer { srv.stop() }
         let c = RawClient(path: path)!; _ = c.read()
         c.write(#"{"cmd":"connect","host":"-interface"}"# + "\n")
@@ -157,9 +158,9 @@ func registerIPCTests() {
         expect(r.contains("error"), "client not told why: \(r)")
         c.close()
     }
-    test("ipc/slow-client-cannot-stall-the-session", timeout: 15) {                    // B13
+    test("ipc/slow-client-cannot-stall-the-session", timeout: 15) {  // B13
         let (srv, fake, path) = startServer(); defer { srv.stop() }
-        let slow = RawClient(path: path)!                                   // connects, never reads
+        let slow = RawClient(path: path)!  // connects, never reads
         var rb: Int32 = 1024; setsockopt(slow.fd, SOL_SOCKET, SO_RCVBUF, &rb, 4)
         let fast = Locked(0)
         let good = HelperClient(path: path); good.onEvent = { _ in fast.update { $0 += 1 } }
@@ -193,16 +194,16 @@ func registerIPCTests() {
         let fake2 = FakeSession(); let srv2 = IPCServer(path: path, allowedUID: getuid(), session: fake2); try srv2.start()
         defer { srv2.stop() }
         var r = HelperRequest(cmd: "connect"); r.host = "1.2.3.4"
-        c.send(r)                                                               // send() reconnects on demand
+        c.send(r)  // send() reconnects on demand
         await expectA(await eventually { fake2.connects.count == 1 }, "request after restart was lost")
     }
-    test("helperclient/send-to-a-dead-server-does-not-kill-the-process") {              // SIGPIPE
+    test("helperclient/send-to-a-dead-server-does-not-kill-the-process") {  // SIGPIPE
         let path = tempPath("dead-\(UUID().uuidString.prefix(6)).sock")
         let srv = IPCServer(path: path, allowedUID: getuid(), session: FakeSession()); try srv.start()
         let c = HelperClient(path: path)
         expect(c.connect())
         srv.stop()
-        for _ in 0..<5 { c.send(HelperRequest(cmd: "status")) }          // would raise SIGPIPE on a closed socket
+        for _ in 0..<5 { c.send(HelperRequest(cmd: "status")) }  // would raise SIGPIPE on a closed socket
     }
 }
 
@@ -214,11 +215,11 @@ func registerDaemonTests() {
         guard FileManager.default.isExecutableFile(atPath: bin) else { fail("helper binary missing: \(bin)"); return }
         let path = tempPath("daemon-\(UUID().uuidString.prefix(6)).sock")
         let p = Process(); p.executableURL = URL(fileURLWithPath: bin)
-        p.arguments = ["--daemon", "--socket", path]      // console-user mode, as installed by the package
+        p.arguments = ["--daemon", "--socket", path]  // console-user mode, as installed by the package
         let out = Pipe(); p.standardOutput = out; p.standardError = out
         try p.run(); defer { p.terminate(); p.waitUntilExit() }
         await expectA(await eventually(5) { FileManager.default.fileExists(atPath: path) }, "daemon never created its socket")
-        try await Task.sleep(nanoseconds: 500_000_000)             // long enough for a released server to have stopped
+        try await Task.sleep(nanoseconds: 500_000_000)  // long enough for a released server to have stopped
         let c = RawClient(path: path)
         expect(c != nil, "cannot connect")
         let first = c?.read(timeout: 3)

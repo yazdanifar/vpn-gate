@@ -51,7 +51,8 @@ public final class ConnectionLogStore: ObservableObject {
 
     public func load() {
         guard let data = try? Data(contentsOf: fileURL),
-              let list = try? JSONDecoder().decode([ConnectionLogEntry].self, from: data) else {
+            let list = try? JSONDecoder().decode([ConnectionLogEntry].self, from: data)
+        else {
             entries = []
             return
         }

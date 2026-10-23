@@ -32,8 +32,9 @@ enum HelperInstaller {
         try p.run(); p.waitUntilExit()
         if p.terminationStatus != 0 {
             let msg = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-            throw NSError(domain: "HelperInstaller", code: Int(p.terminationStatus),
-                          userInfo: [NSLocalizedDescriptionKey: msg.isEmpty ? "Installation cancelled" : msg])
+            throw NSError(
+                domain: "HelperInstaller", code: Int(p.terminationStatus),
+                userInfo: [NSLocalizedDescriptionKey: msg.isEmpty ? "Installation cancelled" : msg])
         }
     }
 
@@ -41,7 +42,8 @@ enum HelperInstaller {
     static func shellQuote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 
     static func uninstall() throws {
-        try runAdmin("launchctl bootout system/\(label) 2>/dev/null; rm -f \(shellQuote(plistPath)) \(shellQuote(installedPath)) \(shellQuote(helperSocketPath)); true")
+        try runAdmin(
+            "launchctl bootout system/\(label) 2>/dev/null; rm -f \(shellQuote(plistPath)) \(shellQuote(installedPath)) \(shellQuote(helperSocketPath)); true")
     }
 }
 

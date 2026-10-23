@@ -1,7 +1,7 @@
+import CryptoKit
 import Foundation
 import Network
 import Security
-import CryptoKit
 import VPNGateCore
 
 // Server certificate pinning through a real TLS handshake against a loopback (127.0.0.1) server that presents the
@@ -17,10 +17,13 @@ private final class LoopbackTLSServer {
     private static func fixtureIdentity() -> (identity: sec_identity_t, leafDER: Data)? {
         guard #available(macOS 15.0, *) else { return nil }
         var items: CFArray?
-        let opts: [String: Any] = [kSecImportExportPassphrase as String: CertFixtures.p12Passphrase,
-                                   kSecImportToMemoryOnly as String: true]
+        let opts: [String: Any] = [
+            kSecImportExportPassphrase as String: CertFixtures.p12Passphrase,
+            kSecImportToMemoryOnly as String: true,
+        ]
         guard SecPKCS12Import(CertFixtures.modernP12 as CFData, opts as CFDictionary, &items) == errSecSuccess,
-              let first = (items as? [[String: Any]])?.first, let idRef = first[kSecImportItemIdentity as String] else { return nil }
+            let first = (items as? [[String: Any]])?.first, let idRef = first[kSecImportItemIdentity as String]
+        else { return nil }
         let secIdentity = idRef as! SecIdentity
         var cert: SecCertificate?
         SecIdentityCopyCertificate(secIdentity, &cert)
@@ -35,7 +38,7 @@ private final class LoopbackTLSServer {
         let tls = NWProtocolTLS.Options()
         sec_protocol_options_set_local_identity(tls.securityProtocolOptions, identity)
         let params = NWParameters(tls: tls)
-        params.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)      // loopback only
+        params.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)  // loopback only
         guard let l = try? NWListener(using: params) else { return nil }
         listener = l
         let ready = DispatchSemaphore(value: 0)
@@ -71,8 +74,11 @@ func registerTLSPinTests() {
         guard let srv = LoopbackTLSServer() else { fail("could not start the loopback TLS server"); return }
         defer { srv.stop() }
         let sha1 = hex(Insecure.SHA1.hash(data: srv.leafDER)), sha256 = hex(SHA256.hash(data: srv.leafDER))
-        for (label, fp) in [("sha1", sha1), ("SHA-1 with colons", sha1.uppercased().enumerated().map { $0.offset % 2 == 0 && $0.offset > 0 ? ":\($0.element)" : "\($0.element)" }.joined()),
-                            ("sha256", sha256)] {
+        for (label, fp) in [
+            ("sha1", sha1),
+            ("SHA-1 with colons", sha1.uppercased().enumerated().map { $0.offset % 2 == 0 && $0.offset > 0 ? ":\($0.element)" : "\($0.element)" }.joined()),
+            ("sha256", sha256),
+        ] {
             let r = await attempt(srv, policy: ServerCertPolicy(checkServerCert: false, fingerprint: fp))
             expect(r.ok, "\(label): \(r.error ?? "")")
             if label == "sha1" { expectEqual(r.stream.remoteIPv4, "127.0.0.1", "the connected peer is exposed") }

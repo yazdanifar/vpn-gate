@@ -16,7 +16,7 @@ final class AppModel: ObservableObject {
     @Published var helperRunning = false
     @Published var helperInstalled = HelperInstaller.isInstalled
     @Published var logLines: [String] = []
-    @Published var probes: [String: ProbeOutcome] = [:]   // connectivity test results from this Mac
+    @Published var probes: [String: ProbeOutcome] = [:]  // connectivity test results from this Mac
     private var probeTask: Task<Void, Never>?
     @Published var connectedAt: Date?
     @Published var notice: String?
@@ -96,11 +96,13 @@ final class AppModel: ObservableObject {
     private(set) var reconnectAttempts = 0
 
     /// `autoStart: false` (tests) skips the background timer, the cache and the server-list download.
-    init(socketPath: String = helperSocketPath, defaults: UserDefaults = .standard, autoStart: Bool = true,
-         openInstaller: @escaping () -> Bool = { HelperInstaller.openInstaller() },
-         loginItem: LoginItemControlling = SMAppLoginItem(),
-         accountManager: AccountManager? = nil, connectionLog: ConnectionLogStore? = nil,
-         datFetcher: VGDatFetcher? = nil, reconnectDelay: TimeInterval = 15) {
+    init(
+        socketPath: String = helperSocketPath, defaults: UserDefaults = .standard, autoStart: Bool = true,
+        openInstaller: @escaping () -> Bool = { HelperInstaller.openInstaller() },
+        loginItem: LoginItemControlling = SMAppLoginItem(),
+        accountManager: AccountManager? = nil, connectionLog: ConnectionLogStore? = nil,
+        datFetcher: VGDatFetcher? = nil, reconnectDelay: TimeInterval = 15
+    ) {
         self.helper = HelperClient(path: socketPath)
         // `alternativeMode` (hidden: defaults write ... alternativeMode -bool YES) is the original's "alt mode".
         self.datFetcher = datFetcher ?? VGDatFetcher(defaults: defaults, alternativeMode: defaults.bool(forKey: "alternativeMode"))
@@ -209,9 +211,10 @@ final class AppModel: ObservableObject {
 
     func uninstallHelper() {
         Task.detached {
-            do { try HelperInstaller.uninstall() }
-            catch { await MainActor.run { self.notice = "Uninstall failed: \(error.localizedDescription)" } }
-            await MainActor.run { self.helperRunning = false; self.pollHelper() }
+            do { try HelperInstaller.uninstall() } catch { await MainActor.run { self.notice = "Uninstall failed: \(error.localizedDescription)" } }
+            await MainActor.run {
+                self.helperRunning = false; self.pollHelper()
+            }
         }
     }
 
@@ -227,7 +230,8 @@ final class AppModel: ObservableObject {
         // The helper reports the byte counters every second. Publishing each of those would re-render the whole
         // list window (and dismiss its open toolbar menu), so a counters-only event only updates `traffic`.
         if e.log == nil, e.error == nil, e.state == event.state, e.server == event.server, e.virtualIP == event.virtualIP,
-           e.helperVersion == event.helperVersion {
+            e.helperVersion == event.helperVersion
+        {
             return
         }
         event = e
@@ -243,7 +247,8 @@ final class AppModel: ObservableObject {
     private func considerReconnect(after e: HelperEvent) {
         if e.state == .connected { reconnectAttempts = 0; return }
         guard e.state == .disconnected, e.error != nil, autoReconnect, let server = wantedServer, activeAccount == nil,
-              reconnectTask == nil else { return }
+            reconnectTask == nil
+        else { return }
         reconnectAttempts += 1
         appendLog("Reconnecting to \(server.hostName) in \(Int(reconnectDelay.rounded(.up))) s (attempt \(reconnectAttempts))")
         var waiting = HelperEvent(state: .reconnecting); waiting.server = server.ip; waiting.error = e.error
@@ -385,9 +390,10 @@ final class AppModel: ObservableObject {
         }
         var acc = account
         if acc.proxy.kind != .none, acc.proxy.password == nil { acc.proxy.password = accountManager.proxyPassword(for: account) }
-        let cfg = acc.toConnectConfig(password: pw, certDer: cert, privateKeyDer: key, blockIPv6: blockIPv6,
-                                      globalRouting: routingConfig.isEmpty ? nil : routingConfig,
-                                      tunnelMode: tunnelMode, socksPort: socksPort)
+        let cfg = acc.toConnectConfig(
+            password: pw, certDer: cert, privateKeyDer: key, blockIPv6: blockIPv6,
+            globalRouting: routingConfig.isEmpty ? nil : routingConfig,
+            tunnelMode: tunnelMode, socksPort: socksPort)
         var r = HelperRequest(cmd: "connect")
         r.config = cfg
         activeAccount = account
@@ -411,13 +417,13 @@ final class AppModel: ObservableObject {
         let waiting = reconnectTask != nil
         cancelReconnect(); wantedServer = nil
         helper.send(HelperRequest(cmd: "disconnect"))
-        if waiting { event = HelperEvent(state: .disconnected) }       // between attempts the helper is idle already
+        if waiting { event = HelperEvent(state: .disconnected) }  // between attempts the helper is idle already
     }
 
     /// Drops the current tunnel and connects again to the last server (new session, new address).
     func reconnect() {
         guard let s = lastServer else { return }
-        connect(s)                                  // the helper tears the old session down before starting the new one
+        connect(s)  // the helper tears the old session down before starting the new one
     }
 
     var connectedServer: VPNServer? {
@@ -473,9 +479,11 @@ final class AppModel: ObservableObject {
         let status = loginItem.status
         if enabled && status != .enabled {
             try? loginItem.unregister()
-            revertLaunchAtLogin(to: false, status == .requiresApproval
-                ? "Launch at login needs approval in System Settings → General → Login Items."
-                : "Launch at login is not available for this copy of the app (install it in /Applications).")
+            revertLaunchAtLogin(
+                to: false,
+                status == .requiresApproval
+                    ? "Launch at login needs approval in System Settings → General → Login Items."
+                    : "Launch at login is not available for this copy of the app (install it in /Applications).")
         }
     }
 

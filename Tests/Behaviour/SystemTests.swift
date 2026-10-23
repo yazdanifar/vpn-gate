@@ -1,6 +1,6 @@
+import Darwin
 import Foundation
 import Network
-import Darwin
 import VPNGateCore
 
 /// Listens on 127.0.0.1:<ephemeral>; accepts connections and never answers.
@@ -28,7 +28,7 @@ func registerSystemTests() {
         let r = FDPacketReader(fd: fds[0]); let got = Locked([[UInt8]]())
         r.onPacket = { p in got.update { $0.append(p) } }; r.startReading()
         func put(_ af: UInt8, _ body: [UInt8]) { let d = [0, 0, 0, af] + body; _ = d.withUnsafeBytes { write(fds[1], $0.baseAddress, d.count) } }
-        put(30, [1, 2, 3, 4])                       // AF_INET6 → ignored
+        put(30, [1, 2, 3, 4])  // AF_INET6 → ignored
         put(2, [9, 8, 7, 6])
         await expectA(await eventually { got.value.count == 1 })
         expectEqual(got.value, [[9, 8, 7, 6]])
@@ -37,7 +37,7 @@ func registerSystemTests() {
         expectEqual(Array(buf[0..<n]), [0, 0, 0, 2, 5, 5, 5, 5])
         r.close(); Darwin.close(fds[1])
     }
-    test("fdreader/ipv6-is-forwarded-only-when-enabled-and-written-as-af-inet6") {        // review 15
+    test("fdreader/ipv6-is-forwarded-only-when-enabled-and-written-as-af-inet6") {  // review 15
         var fds: [Int32] = [0, 0]; socketpair(AF_UNIX, SOCK_DGRAM, 0, &fds)
         let r = FDPacketReader(fd: fds[0], forwardIPv6: true); let got = Locked([[UInt8]]())
         r.onPacket = { p in got.update { $0.append(p) } }; r.startReading()
@@ -51,12 +51,12 @@ func registerSystemTests() {
         expectEqual(Array(buf[0..<n]), [0, 0, 0, 30, 0x60, 9, 9, 9], "utun header for IPv6 is AF_INET6 = 30 on macOS")
         r.close(); Darwin.close(fds[1])
     }
-    test("fdreader/closed-reader-never-reads-from-a-recycled-descriptor") {          // B8
+    test("fdreader/closed-reader-never-reads-from-a-recycled-descriptor") {  // B8
         var fds: [Int32] = [0, 0]; socketpair(AF_UNIX, SOCK_DGRAM, 0, &fds)
         let old = fds[0]
         let r = FDPacketReader(fd: old); let got = Locked(0)
         r.onPacket = { _ in got.update { $0 += 1 } }; r.startReading()
-        try await Task.sleep(nanoseconds: 100_000_000)           // reader thread is parked in poll()
+        try await Task.sleep(nanoseconds: 100_000_000)  // reader thread is parked in poll()
         r.close()
         // The kernel hands the same descriptor number to the next tunnel.
         var next: [Int32] = [0, 0]; socketpair(AF_UNIX, SOCK_DGRAM, 0, &next)
@@ -69,43 +69,46 @@ func registerSystemTests() {
     }
 
     // MARK: TLS stream
-    test("tlsstream/refused-connection-is-cancelled") {                                  // B9
-        let l = SilentListener(); let port = l.port; l.close()           // nothing listens on this port any more
+    test("tlsstream/refused-connection-is-cancelled") {  // B9
+        let l = SilentListener(); let port = l.port; l.close()  // nothing listens on this port any more
         let s = TLSStream(host: "127.0.0.1", port: port, proxy: ProxySettings())
         do { try await s.start(timeout: 3); fail("connected to a closed port") } catch {}
         await expectA(await eventually(2) { isCancelled(s.connState) }, "connection left alive after failure: \(s.connState)")
     }
-    test("tlsstream/timeout-cancels-the-connection") {                                   // B9
+    test("tlsstream/timeout-cancels-the-connection") {  // B9
         let l = SilentListener(); defer { l.close() }
         let s = TLSStream(host: "127.0.0.1", port: l.port, proxy: ProxySettings())
         let start = Date()
-        do { try await s.start(timeout: 0.6); fail("handshake with a silent peer succeeded") }
-        catch { expect(error is StreamError, "error \(error)") }
+        do { try await s.start(timeout: 0.6); fail("handshake with a silent peer succeeded") } catch { expect(error is StreamError, "error \(error)") }
         expect(Date().timeIntervalSince(start) < 3)
         await expectA(await eventually(2) { isCancelled(s.connState) }, "connection still retrying in the background: \(s.connState)")
     }
 
     // MARK: CLI parsing
-    test("probe-args/parse") {                                                                // B19
+    test("probe-args/parse") {  // B19
         expect(parseProbeArgs(["x"]) == nil)
         expect(parseProbeArgs(["x", "--probe"]) == nil)
         expectEqual(parseProbeArgs(["x", "--probe", "1.2.3.4"])?.0, "1.2.3.4")
         expectEqual(parseProbeArgs(["x", "--probe", "1.2.3.4"])?.1, 443)
         expectEqual(parseProbeArgs(["x", "--probe", "h", "--port", "992"])?.1, 992)
     }
-    test("probe-args/dangling-or-invalid-port") {                                             // B19
+    test("probe-args/dangling-or-invalid-port") {  // B19
         expectEqual(parseProbeArgs(["x", "--probe", "h", "--port"])?.1, 443, "missing value must not crash")
         expect(parseProbeArgs(["x", "--probe", "h", "--port", "abc"]) == nil || parseProbeArgs(["x", "--probe", "h", "--port", "abc"])?.1 == 443)
         expect(parseProbeArgs(["x", "--probe", "h", "--port", "70000"]) == nil, "out-of-range port must be rejected")
     }
 
     // MARK: shutdown
-    test("shutdown/signal-runs-cleanup-once-off-the-signal-path") {                        // B5
+    test("shutdown/signal-runs-cleanup-once-off-the-signal-path") {  // B5
         let calls = Locked((cleanup: 0, finish: 0, onMain: false))
-        let c = ShutdownCoordinator(signals: [SIGUSR2], cleanup: {
-            calls.update { $0.cleanup += 1; $0.onMain = Thread.isMainThread }
-            _ = SystemRunner().run("/bin/echo", ["cleanup may spawn processes and take locks"])
-        }, finish: { calls.update { $0.finish += 1 } })
+        let c = ShutdownCoordinator(
+            signals: [SIGUSR2],
+            cleanup: {
+                calls.update {
+                    $0.cleanup += 1; $0.onMain = Thread.isMainThread
+                }
+                _ = SystemRunner().run("/bin/echo", ["cleanup may spawn processes and take locks"])
+            }, finish: { calls.update { $0.finish += 1 } })
         raise(SIGUSR2); raise(SIGUSR2)
         await expectA(await eventually { calls.value.finish >= 1 })
         try await Task.sleep(nanoseconds: 100_000_000)

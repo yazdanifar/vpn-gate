@@ -49,7 +49,9 @@ func registerLiveTests() {
             let b = EthernetBridge(timing: BridgeTiming(dhcpTimeout: 4, dhcpRetries: 2))
             b.sendFrame = { c.sendFrame($0) }; c.onFrame = { b.fromHub($0) }
             // One relay must not stall the run: close the client if it takes longer than 20 s.
-            let watchdog = Task { try? await Task.sleep(nanoseconds: 20_000_000_000); if !Task.isCancelled { c.close(nil) } }
+            let watchdog = Task {
+                try? await Task.sleep(nanoseconds: 20_000_000_000); if !Task.isCancelled { c.close(nil) }
+            }
             do {
                 _ = try await c.connect { _ in }
                 let l = try await b.acquireLease()

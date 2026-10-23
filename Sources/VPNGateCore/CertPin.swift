@@ -1,5 +1,5 @@
-import Foundation
 import CryptoKit
+import Foundation
 
 /// Server certificate pin: SHA-1 (40 hex) or SHA-256 (64 hex) fingerprint of the DER leaf certificate,
 /// as shown by SoftEther / openssl (colons and spaces allowed, any case).
@@ -26,15 +26,14 @@ public struct CertPin: Equatable {
 
 /// What the TLS verify block should do for a given configuration.
 public enum ServerCertPolicy: Equatable {
-    case acceptAny                 // VPN Gate relays: self-signed, unverified
+    case acceptAny  // VPN Gate relays: self-signed, unverified
     case pinned(CertPin)
-    case invalidPin                // a fingerprint is configured but unparseable: fail closed
-    case systemTrust               // "verify server certificate" without a pin
+    case invalidPin  // a fingerprint is configured but unparseable: fail closed
+    case systemTrust  // "verify server certificate" without a pin
 
     public init(checkServerCert: Bool, fingerprint: String?) {
         let fp = fingerprint?.trimmingCharacters(in: .whitespaces) ?? ""
-        if !fp.isEmpty { self = CertPin(fp).map(ServerCertPolicy.pinned) ?? .invalidPin }
-        else { self = checkServerCert ? .systemTrust : .acceptAny }
+        if !fp.isEmpty { self = CertPin(fp).map(ServerCertPolicy.pinned) ?? .invalidPin } else { self = checkServerCert ? .systemTrust : .acceptAny }
     }
 
     /// nil when the presented leaf is acceptable, otherwise the reason it is not.
