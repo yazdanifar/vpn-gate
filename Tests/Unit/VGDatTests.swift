@@ -77,12 +77,12 @@ func registerVGDatTests() {
         expectEqual(s0.build, 9807)
         expectEqual(s0.connectPort, 995, "connectPort follows the Windows priority 443, 992, 995, 465, ... (995 beats 465)")
 
-        // Compare all servers against decompiled/VPNGate_dat_hosts.csv if present
+        // Compare all servers against docs/research/VPNGate_dat_hosts.csv if present
         let csvPath = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("decompiled/VPNGate_dat_hosts.csv").path
+            .appendingPathComponent("docs/research/VPNGate_dat_hosts.csv").path
         if let csvString = try? String(contentsOfFile: csvPath, encoding: .utf8) {
             let lines = csvString.components(separatedBy: .newlines).filter { !$0.isEmpty }
             expectEqual(lines.count, 201, "CSV header + 200 rows")

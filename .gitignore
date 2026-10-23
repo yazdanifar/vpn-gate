@@ -49,6 +49,9 @@ Icon?
 *.dmg
 *.log
 
+# Local-only
+.claude/
+
 # Decompiled native sources (keep analysis + data, ignore generated C/Java)
-decompiled/*.c
-decompiled/*.java
+docs/research/*.c
+docs/research/*.java

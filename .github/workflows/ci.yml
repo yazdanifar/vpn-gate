@@ -1,0 +1,22 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: scripts/build.sh all
+      - name: Test
+        run: scripts/test.sh --each
+  package:
+    runs-on: macos-14
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/build-pkg.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: vpn-gate-pkg, path: build/VPN Gate.pkg }
