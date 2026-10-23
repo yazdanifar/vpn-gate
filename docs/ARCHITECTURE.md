@@ -6,7 +6,7 @@ Three SwiftPM targets (`Package.swift`); `scripts/` builds the same sources with
 |---|---|---|
 | `VPNGateCore` | `Sources/VPNGateCore` | Platform-light library: SoftEther pack/packet codecs, `VPNGate.dat` parsing and RSA check, server list/filter/probe, routing rules, IPC message types, input validation |
 | `vpngate-helper` | `Sources/vpngate-helper` | Root LaunchDaemon: SoftEther client session, Ethernet bridge, utun, routes/DNS (`NetConfig`), DNS proxy, SOCKS5 server, UDP acceleration, IPC server |
-| `VPNGateMac` | `Sources/VPNGateMac` | SwiftUI menu-bar app: `AppModel`, list sync (`VGDatFetcher`), accounts + Keychain, helper installer/client, views |
+| `VPNGateMac` | `Sources/VPNGateMac` | SwiftUI menu-bar app. `Model/`: UI-free logic (`AppModel`, `VGDatFetcher`, accounts + Keychain, helper client/installer), compiled into the tests by glob. `UI/`: views, not unit-tested |
 
 The app never touches the network configuration itself: it sends requests (connect, disconnect, settings) to the helper
 over a uid-restricted Unix socket (`IPCMessages` in Core, `IPCServer`/`HelperClient` on each side).

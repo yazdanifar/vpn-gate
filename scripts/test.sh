@@ -30,11 +30,7 @@ swiftc "${CORE_FLAGS[@]}" ${SAN[@]+"${SAN[@]}"} Sources/VPNGateCore/*.swift -o "
 SRC=(Tests/Harness/Harness.swift Tests/Support/*.swift Tests/Unit/*.swift Tests/Behaviour/*.swift
      Tests/Fuzz/*.swift Tests/Live/*.swift
      $(ls Sources/vpngate-helper/*.swift | grep -v '/main.swift')
-     Sources/VPNGateMac/HelperClient.swift Sources/VPNGateMac/HelperInstaller.swift
-     Sources/VPNGateMac/AppModel.swift Sources/VPNGateMac/Keychain.swift Sources/VPNGateMac/AppPaths.swift
-     Sources/VPNGateMac/VGDatFetcher.swift Sources/VPNGateMac/AccountManager.swift
-     Sources/VPNGateMac/ConnectionLog.swift Sources/VPNGateMac/VGStatistics.swift
-     Sources/VPNGateMac/TrafficCounter.swift Sources/VPNGateMac/AccountEditorState.swift Sources/VPNGateMac/CertImport.swift Sources/VPNGateMac/LoginItem.swift)
+     Sources/VPNGateMac/Model/*.swift)
 # main.swift must be the only top-level-code file
 swiftc "${FLAGS[@]}" ${SAN[@]+"${SAN[@]}"} -I "$OUT" "${SRC[@]}" Tests/Harness/main.swift "$OUT/libVPNGateCore.a" -o "$BIN" 2> "$OUT/compile.log" || {
   grep -E "error:" -A3 "$OUT/compile.log" | head -80; echo "COMPILE FAILED (full log: $OUT/compile.log)"; exit 2; }

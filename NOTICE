@@ -1,3 +1,9 @@
+VPN Gate for macOS
+Copyright 2026 yazdanifar
+
+Licensed under the Apache License 2.0 (see LICENSE). This product includes material from the SoftEther VPN
+project (https://github.com/SoftEtherVPN/SoftEtherVPN), © SoftEther VPN Project, Apache License 2.0.
+
 # Icon
 
 `AppIcon-256.png` is the 256×256 image from `src/PenCore/VPN.ico` of the SoftEther VPN project

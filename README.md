@@ -17,7 +17,7 @@ with VPN Gate or SoftEther and does not claim full parity with the Windows clien
 | [SECURITY.md](SECURITY.md) | Reporting vulnerabilities, trust model |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 | [LICENSE](LICENSE) | Apache-2.0 |
-| [assets/NOTICE.md](assets/NOTICE.md) | Third-party notices |
+| [NOTICE](NOTICE) | Third-party notices |
 
 ## Install
 ```
@@ -64,6 +64,6 @@ without privileges. Fuzz tests are seeded (`FUZZ_SEED`, `FUZZ_ITERATIONS`).
 - If the helper crashes, stale routes/DNS are cleaned on its next start (only routes it added).
 - `scripts/gen-watermark.sh` regenerates the SoftEther signature image (Apache-2.0, © SoftEther VPN Project).
 - `docs/research/` holds reverse-engineering notes: Ghidra pseudocode of the Windows client and plugin plus a `VPNGate.dat`
-  decoder, used to understand the protocol (not part of the build). `assets/NOTICE.md` has the third-party notices.
+  decoder, used to understand the protocol (not part of the build). `NOTICE` has the third-party notices.
 - Not affiliated with VPN Gate or SoftEther. VPN Gate relays are volunteer-run public servers: don't send
   sensitive traffic through them unless you trust the operator.

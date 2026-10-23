@@ -22,7 +22,7 @@ build_arch() {
     swiftc "${flags[@]}" -I "$aout" -o "$aout/vpngate-helper" Sources/vpngate-helper/*.swift "$aout/libVPNGateCore.a"
   fi
   if [[ $what == app || $what == all ]]; then
-    swiftc "${flags[@]}" -I "$aout" -parse-as-library -o "$aout/VPNGateMac" Sources/VPNGateMac/*.swift "$aout/libVPNGateCore.a"
+    swiftc "${flags[@]}" -I "$aout" -parse-as-library -o "$aout/VPNGateMac" Sources/VPNGateMac/*/*.swift "$aout/libVPNGateCore.a"
   fi
 }
 

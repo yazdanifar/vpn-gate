@@ -10,7 +10,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp build/bin/VPNGateMac "$APP/Contents/MacOS/VPNGateMac"
 cp build/bin/vpngate-helper "$APP/Contents/Resources/vpngate-helper"
 cp assets/VPNGate.dat "$APP/Contents/Resources/VPNGate.dat"
-# app icon: the SoftEther VPN Client Manager icon (see assets/NOTICE.md), rendered with the standard margin
+# app icon: the SoftEther VPN Client Manager icon (see NOTICE), rendered with the standard margin
 swift scripts/make-icon.swift assets/AppIcon-256.png build/AppIcon.iconset
 iconutil -c icns build/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
 cat > "$APP/Contents/Info.plist" <<PLIST
