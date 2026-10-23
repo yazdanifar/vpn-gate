@@ -16,6 +16,7 @@ with VPN Gate or SoftEther and does not claim full parity with the Windows clien
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Build, test and change workflow |
 | [SECURITY.md](SECURITY.md) | Reporting vulnerabilities, trust model |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
+| [LICENSE](LICENSE) | Apache-2.0 |
 | [assets/NOTICE.md](assets/NOTICE.md) | Third-party notices |
 
 ## Install

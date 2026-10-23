@@ -8,6 +8,7 @@ macOS 14+, Xcode Command Line Tools (Swift 6 toolchain, language mode 5). SwiftP
 make build     # universal binaries in build/bin
 make test      # full suite, no network or root (~100 s)
 make test-tsan # before touching concurrency code
+make lint      # swift-format check (make format fixes in place)
 make coverage  # thresholds: 90% core, 80% key helper files
 ```
 Run a subset with `scripts/test.sh <name-substring>`; `--live` and `scripts/e2e-tunnel.sh` need network (and root).
