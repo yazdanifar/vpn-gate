@@ -5,18 +5,18 @@ on:
 
 jobs:
   lint:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - run: scripts/lint.sh
   swiftpm:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Package.swift still builds (guards against drift from scripts/build.sh)
         run: swift build
   test:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Build
@@ -24,7 +24,7 @@ jobs:
       - name: Test
         run: scripts/test.sh --each
   package:
-    runs-on: macos-14
+    runs-on: macos-15
     needs: test
     steps:
       - uses: actions/checkout@v4

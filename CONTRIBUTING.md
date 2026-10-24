@@ -11,7 +11,8 @@ make test-tsan # before touching concurrency code
 make lint      # swift-format check (make format fixes in place)
 make coverage  # thresholds: 90% core, 80% key helper files
 ```
-Run a subset with `scripts/test.sh <name-substring>`; `--live` and `scripts/e2e-tunnel.sh` need network (and root).
+Run a subset with `scripts/test.sh <name-substring>`; `--live` and `scripts/e2e-tunnel.sh` need network (and root). `scripts/probe-sample.sh [count]` probes a random sample of real relays; the weekly
+`Live relay checks` workflow runs both and is informational (never gates a merge).
 
 ## Conventions
 - `Sources/VPNGateCore` is pure protocol/logic with no UI or privileged code; keep it that way.

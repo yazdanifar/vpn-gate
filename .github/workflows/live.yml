@@ -1,0 +1,33 @@
+name: Live relay checks
+# Real network checks against public VPN Gate relays. Kept out of ci.yml: relays are volunteer-run and come and go,
+# so this must never gate a merge or a release. It answers "does the protocol still work against real servers?"
+# (handshake, DHCP, signed list sync) from a GitHub runner, which is not a censored network.
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      relays:
+        description: "Optional ip:port list (comma separated) instead of relays from the bundled signed list"
+        required: false
+        default: ""
+
+jobs:
+  live:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: scripts/build.sh all
+      - name: Live tests (relays chosen from the bundled signed list unless overridden)
+        env:
+          VPNGATE_LIVE_RELAYS: ${{ inputs.relays }}
+        run: scripts/test.sh --live live/ 2>&1 | tee live-report.txt
+      - name: Probe sample of relays from the bundled list
+        run: |
+          set -o pipefail
+          scripts/probe-sample.sh 20 | tee probe-report.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: live-reports, path: "*-report.txt" }

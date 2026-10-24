@@ -46,7 +46,13 @@ public struct ARPPacket {
         self.targetMAC = targetMAC; self.targetIP = targetIP
     }
     public func encode() -> [UInt8] {
-        [0, 1, 8, 0, 6, 4] + be16(op) + senderMAC + be32(senderIP) + targetMAC + be32(targetIP)
+        var out: [UInt8] = [0, 1, 8, 0, 6, 4]
+        out += be16(op)
+        out += senderMAC
+        out += be32(senderIP)
+        out += targetMAC
+        out += be32(targetIP)
+        return out
     }
     public init?(_ p: [UInt8]) {
         guard p.count >= 28, rd16(p, 0) == 1, rd16(p, 2) == 0x0800 else { return nil }
