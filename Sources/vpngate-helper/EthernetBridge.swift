@@ -302,12 +302,14 @@ final class EthernetBridge {
         lock.unlock()
         if let a = known { onAddress(a, 64) }
         let first = timing.rsInterval, cap = timing.rsMaxInterval, tries = timing.rsRetries
+        // The first solicitation goes out synchronously so an immediate advertisement can't race the task start.
+        guard tries > 0, solicitRouterIfNeeded() else { return }
         Task.detached { [weak self] in
             var wait = first
-            for _ in 0..<tries {
-                guard self?.solicitRouterIfNeeded() == true else { return }
+            for _ in 1..<tries {
                 try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
                 wait = min(wait * 2, cap)
+                guard self?.solicitRouterIfNeeded() == true else { return }
             }
         }
     }

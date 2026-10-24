@@ -7,18 +7,18 @@ jobs:
   lint:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: scripts/lint.sh
   swiftpm:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Package.swift still builds (guards against drift from scripts/build.sh)
         run: swift build
   test:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build
         run: scripts/build.sh all
       - name: Test
@@ -27,7 +27,7 @@ jobs:
     runs-on: macos-15
     needs: test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: scripts/build-pkg.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with: { name: vpn-gate-pkg, path: build/VPN Gate.pkg }
