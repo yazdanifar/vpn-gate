@@ -33,7 +33,7 @@ SRC=(Tests/Harness/Harness.swift Tests/Support/*.swift Tests/Unit/*.swift Tests/
      Sources/VPNGateMac/Model/*.swift)
 # main.swift must be the only top-level-code file
 swiftc "${FLAGS[@]}" ${SAN[@]+"${SAN[@]}"} -I "$OUT" "${SRC[@]}" Tests/Harness/main.swift "$OUT/libVPNGateCore.a" -o "$BIN" 2> "$OUT/compile.log" || {
-  grep -E "error:" -A3 "$OUT/compile.log" | head -80; echo "COMPILE FAILED (full log: $OUT/compile.log)"; exit 2; }
+  grep -E "error:" -A3 "$OUT/compile.log" | head -80; echo "COMPILE FAILED (full log: $OUT/compile.log). Model/ is compiled without UI/: Model code must not use types defined in UI/."; exit 2; }
 export LLVM_PROFILE_FILE="$PWD/$OUT/cov-%p.profraw"
 if [[ $EACH == 1 ]]; then
   fails=0; total=0

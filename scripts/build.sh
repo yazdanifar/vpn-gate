@@ -9,6 +9,10 @@ ARCHS=(arm64 x86_64)
 CORE=(Sources/VPNGateCore/*.swift)
 what=${1:-all}
 
+# App sources live in exactly Model/ (unit-tested) and UI/; anything else would be built by one tool and not the other.
+bad=$(find Sources/VPNGateMac -mindepth 1 -maxdepth 1 ! -name Model ! -name UI)
+[[ -z $bad ]] || { echo "error: Sources/VPNGateMac may only contain Model/ and UI/, found: $bad" >&2; exit 1; }
+
 build_arch() {
   local arch=$1
   local aout="$OUT/$arch"

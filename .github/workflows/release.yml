@@ -12,6 +12,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Tag must match VERSION
         run: test "v$(tr -d '[:space:]' < VERSION)" = "${GITHUB_REF_NAME}"
+      - name: CHANGELOG must mention this version
+        run: grep -q "$(tr -d '[:space:]' < VERSION)" CHANGELOG.md
+      - run: scripts/lint.sh
+      - name: Package.swift still builds
+        run: swift build
+      - run: scripts/build.sh all
       - run: scripts/test.sh --each
       - run: scripts/build-pkg.sh
       - name: Publish
