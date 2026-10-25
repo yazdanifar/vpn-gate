@@ -8,7 +8,7 @@ Update at the end of every session (see the session protocol in [PLAN.md](PLAN.m
 | U01a | Golden vectors: pure codecs (Swift) | ✅ | xp/U01a-golden-vectors | 14 files in `Tests/Fixtures/golden/` (~590 KB), exporter `Tests/Golden/Export.swift`, `scripts/gen-golden.sh`, staleness test in `GoldenTests.swift`. Deterministic (verified by double run). |
 | U01b | Golden transcripts: protocol exchanges | ✅ | xp/U01b-golden-transcripts | 4 files in `Tests/Fixtures/golden/transcripts/` (login x10, host id, bridge x5, DNS proxy x6); exporter `Tests/Golden/ExportTranscripts.swift`; `Entropy`/`ClientEnvironment` injection in `SoftEtherClient` and `EthernetBridge`. Deterministic (3 runs). |
 | U02 | Rust workspace scaffold | ✅ | xp/U02-rust-scaffold | 7 crates in `crates/`, toolchain pinned 1.98.1, `rust` CI matrix job, `make rust-test/rust-lint`, `vpngate-testkit::golden` (load/unhex) with a test that every golden file parses and none is unlisted. Windows/Linux legs verified only by CI. |
-| U03 | Pure core: Pack, ByteBuffer, HTTPHead, errors, validation | ⬜ | | |
+| U03 | Pure core: Pack, ByteBuffer, HTTPHead, errors, validation | ✅ | xp/U03-core-pack | `byte_buffer`, `pack`, `http_head`, `softether_error`, `validation` in `vpngate-core`; golden vectors pass. Only dependency added: serde (unused yet, for U06). |
 | U04 | Pure core: RC4, SHA0, VGDat, CertPin | ⬜ | | |
 | U05 | Pure core: Packets, DataPhase, UdpAccelPacket | ⬜ | | |
 | U06 | Pure core: ServerList, ServerFilter, RoutingRule, ClientAccount, IPC messages | ⬜ | | |
@@ -55,3 +55,5 @@ Update at the end of every session (see the session protocol in [PLAN.md](PLAN.m
 - U01b: the watermark upload is recorded as `watermark: true` plus the random padding after the constant image (`softEtherWaterMark`), not as ~8 KB of hex.
 - U02: crates have no dependencies beyond serde/serde_json (testkit); the plan's crate list (tokio, rustls, ...) is pinned by the unit that first uses each. `rust-version` is 1.85 while the toolchain is 1.98.1.
 - U02: `Tests/Fixtures/VPNGate.dat` is a symlink; Windows checkouts need `core.symlinks=true` (or a copy) before U04 reads it. Check the Windows CI leg then.
+- U03: `validation::is_ip_literal` has its own IPv4/IPv6 parser because the Swift one reuses `CIDRMatcher` (RoutingRule, U06); U06 should share one parser.
+- U03: Pack name matching uses Unicode lowercase comparison (Swift `caseInsensitiveCompare` is not byte-identical for exotic names); `HttpHead` headers are a `BTreeMap`.
