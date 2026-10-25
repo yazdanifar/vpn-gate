@@ -105,6 +105,8 @@ final class SoftEtherClient: VPNTransport {
     /// IPv4 address the TCP/TLS connection of the established session really went to (nil behind a proxy or if unknown).
     private var connectedIPv4: String?
     private let makeStream: StreamFactory
+    private let entropy: Entropy
+    private let environment: ClientEnvironment
 
     private let pool = ConnectionPool()
     private var udpAccel: UdpAccel?  // guarded by sendLock together with closed and the task handles
@@ -156,8 +158,12 @@ final class SoftEtherClient: VPNTransport {
         halfConnection: Bool = false,
         uniqueId: HostUniqueId? = nil,
         serverCertPolicy: ServerCertPolicy = .acceptAny,
-        makeStream: StreamFactory? = nil
+        makeStream: StreamFactory? = nil,
+        entropy: Entropy = .system,
+        environment: ClientEnvironment = .current
     ) {
+        self.entropy = entropy
+        self.environment = environment
         self.host = host
         self.port = port
         self.hubName = hubName
@@ -170,7 +176,7 @@ final class SoftEtherClient: VPNTransport {
         self.useUdpAccelConfig = useUdpAccel
         self.disableQoS = disableQoS
         self.halfConnectionConfig = halfConnection
-        let uid = uniqueId ?? HostUniqueId(key: HostUniqueId.secureRandom(32))
+        let uid = uniqueId ?? HostUniqueId(key: entropy.bytes(32))
         self.loginUniqueId = uid.loginId
         self.nodeUniqueId = uid.nodeId
         self.makeStream = makeStream ?? { TLSStream(host: $0, port: $1, proxy: $2, policy: serverCertPolicy) }
@@ -468,7 +474,7 @@ final class SoftEtherClient: VPNTransport {
     /// The signature body of every connection: the watermark plus random padding (HTTP_PACK_RAND_SIZE_MAX*2), or the plain
     /// marker when the server refused the watermark on the first connection.
     private func signatureBody() -> Data {
-        plainSignature ? Data("VPNCONNECT".utf8) : softEtherWaterMark + randomBytes(Int.random(in: 0..<2000))
+        plainSignature ? Data("VPNCONNECT".utf8) : softEtherWaterMark + randomBytes(entropy.below(2000))
     }
 
     private func uploadSignature(_ s: ByteStream, body: Data, host: String) async throws -> Pack {
@@ -493,7 +499,7 @@ final class SoftEtherClient: VPNTransport {
 
     private func withDummy(_ p: Pack) -> Pack {
         var p = p
-        p.addData("pencore", randomBytes(Int.random(in: 0..<1000)))
+        p.addData("pencore", randomBytes(entropy.below(1000)))
         return p
     }
 
@@ -523,9 +529,6 @@ final class SoftEtherClient: VPNTransport {
         let host = host ?? self.host
         let port = port ?? self.port
         let clientVer: UInt32 = 444, build: UInt32 = 9807
-        let os = ProcessInfo.processInfo.operatingSystemVersion
-        let osVer = "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
-        let hostname = ProcessInfo.processInfo.hostName
 
         p.addStr("method", "login")
         p.addStr("hubname", hubName)
@@ -591,10 +594,10 @@ final class SoftEtherClient: VPNTransport {
         // Node info
         p.addStr("ClientProductName", "SoftEther VPN Client")
         p.addStr("ServerProductName", serverInfo.name)
-        p.addStr("ClientOsName", "macOS")
-        p.addStr("ClientOsVer", osVer)
+        p.addStr("ClientOsName", environment.osName)
+        p.addStr("ClientOsVer", environment.osVersion)
         p.addStr("ClientOsProductId", "")
-        p.addStr("ClientHostname", hostname)
+        p.addStr("ClientHostname", environment.hostname)
         p.addStr("ServerHostname", host)
         p.addStr("ProxyHostname", proxy.kind == .none ? "" : proxy.host)
         p.addData("UniqueId", nodeUniqueId)
@@ -634,13 +637,14 @@ final class SoftEtherClient: VPNTransport {
         let timeoutMs = welcome.timeoutMs
         let useCompress = welcome.useCompress
 
-        // 1. KeepAlive task
+        // 1. KeepAlive task. Timer jitter and junk length are timing-driven, so they stay on the system generator and
+        // out of the injected `entropy` (whose draw order the golden transcripts pin).
         let keepAlive = Task.detached { [weak self] in
             while !Task.isCancelled {
                 let lo = max(timeoutMs / 5, 1000), hi = max(timeoutMs / 2, lo + 1)
                 try? await Task.sleep(nanoseconds: UInt64(Int.random(in: lo...hi)) * 1_000_000)
                 guard let self = self, !Task.isCancelled else { return }
-                let junk = self.randomBytes(Int.random(in: 0..<512))
+                let junk = Entropy.system.bytes(Entropy.system.below(512))
                 let packet = Data(DataPhase.encodeKeepAlive(junk: [UInt8](junk)))
                 await self.pool.broadcastKeepAlive(packet)
             }
@@ -782,9 +786,5 @@ final class SoftEtherClient: VPNTransport {
 
     private var isClosed: Bool { sendLock.lock(); defer { sendLock.unlock() }; return closed }
 
-    func randomBytes(_ n: Int) -> Data {
-        var d = Data(count: n)
-        _ = d.withUnsafeMutableBytes { SecRandomCopyBytes(kSecRandomDefault, n, $0.baseAddress!) }
-        return d
-    }
+    func randomBytes(_ n: Int) -> Data { entropy.bytes(n) }
 }

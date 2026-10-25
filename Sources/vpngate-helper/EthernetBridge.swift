@@ -41,7 +41,8 @@ final class EthernetBridge {
     private var arpCache: [UInt32: ARPEntry] = [:]
     private var waiting: [UInt32: Pending] = [:]
     private var lastDHCP: DHCPMessage?
-    private var xid = UInt32.random(in: 1...UInt32.max)
+    private var xid: UInt32 = 0
+    private let entropy: Entropy
 
     var sendFrame: (([UInt8]) -> Void)?  // to hub
     var deliverIPv4: (([UInt8]) -> Void)?  // to utun
@@ -64,9 +65,10 @@ final class EthernetBridge {
     /// Our SLAAC address while its valid lifetime has not run out.
     var ipv6Address: [UInt8]? { lock.lock(); defer { lock.unlock() }; return slaacAddress(at: now()) }
 
-    init(timing: BridgeTiming = BridgeTiming(), mac fixedMAC: MAC? = nil) {
+    init(timing: BridgeTiming = BridgeTiming(), mac fixedMAC: MAC? = nil, entropy: Entropy = .system) {
         self.timing = timing
-        var m = (0..<6).map { _ in UInt8.random(in: 0...255) }
+        self.entropy = entropy
+        var m = [UInt8](fixedMAC == nil ? entropy.bytes(6) : Data(count: 6))
         m[0] = 0x5E; m[1] = 0x00 | (m[1] & 0xFE)  // locally administered-style prefix like SoftEther (5E:xx), unicast
         mac = fixedMAC ?? m
     }
@@ -75,7 +77,7 @@ final class EthernetBridge {
 
     private func newXid() -> UInt32 {
         lock.lock(); defer { lock.unlock() }
-        xid = UInt32.random(in: 1...UInt32.max)
+        xid = UInt32(1 + entropy.below(Int(UInt32.max)))
         lastDHCP = nil
         return xid
     }

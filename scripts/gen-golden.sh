@@ -10,6 +10,8 @@ FLAGS=(-swift-version 5 -Onone -g -target arm64-apple-macos14.0)
 swiftc "${FLAGS[@]}" -parse-as-library -emit-library -static -emit-module -module-name VPNGateCore \
   Sources/VPNGateCore/*.swift -o "$OUT/libVPNGateCore.a" -emit-module-path "$OUT/VPNGateCore.swiftmodule" 2> "$OUT/compile-core.log" || {
   grep -E "error:" -A3 "$OUT/compile-core.log" | head -40; echo "CORE COMPILE FAILED"; exit 2; }
-swiftc "${FLAGS[@]}" -I "$OUT" Tests/Golden/Export.swift Tests/Golden/main.swift "$OUT/libVPNGateCore.a" -o "$OUT/gen-golden" 2> "$OUT/compile.log" || {
+# The transcripts run the real helper sources (SoftEtherClient, EthernetBridge, DNSProxy) against the test fakes.
+swiftc "${FLAGS[@]}" -I "$OUT" Tests/Harness/Harness.swift Tests/Support/{AsyncQueue,CertFixtures,FakeNetwork,FakeSoftEtherServer}.swift Tests/Golden/Export.swift Tests/Golden/ExportTranscripts.swift \
+  $(ls Sources/vpngate-helper/*.swift | grep -v '/main.swift') Tests/Golden/main.swift "$OUT/libVPNGateCore.a" -o "$OUT/gen-golden" 2> "$OUT/compile.log" || {
   grep -E "error:" -A3 "$OUT/compile.log" | head -40; echo "EXPORTER COMPILE FAILED"; exit 2; }
 "$OUT/gen-golden" Tests/Fixtures Tests/Fixtures/golden
