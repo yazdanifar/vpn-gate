@@ -12,6 +12,7 @@ with VPN Gate or SoftEther and does not claim full parity with the Windows clien
 |---|---|
 | [docs/FEATURES.md](docs/FEATURES.md) | What is implemented, known limits, telemetry, IPv6, routing rules, SOCKS5 mode |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Targets, process model, repository layout |
+| [docs/cross-platform/PLAN.md](docs/cross-platform/PLAN.md) | Multi-session plan for the Rust core + Windows/Linux/Android ports; progress in [STATUS.md](docs/cross-platform/STATUS.md) |
 | [docs/research/](docs/research/) | Reverse-engineering notes on the Windows client (not part of the build) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Build, test and change workflow |
 | [SECURITY.md](SECURITY.md) | Reporting vulnerabilities, trust model |
