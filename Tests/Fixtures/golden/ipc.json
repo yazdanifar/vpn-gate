@@ -1,0 +1,435 @@
+{
+  "cases" : [
+    {
+      "json" : {
+        "authType" : "anonymous",
+        "autoReconnect" : true,
+        "blockIPv6" : true,
+        "checkServerCert" : false,
+        "disableQoS" : false,
+        "halfConnection" : false,
+        "host" : "h",
+        "hubName" : "VPNGATE",
+        "maxConnection" : 1,
+        "ports" : [
+          443,
+          992,
+          5555,
+          1194
+        ],
+        "proxy" : {
+          "host" : "",
+          "kind" : "none",
+          "port" : 0
+        },
+        "socksPort" : 1080,
+        "tunnelMode" : "fullTunnel",
+        "useCompress" : false,
+        "userName" : "vpn",
+        "useUdpAccel" : true
+      },
+      "name" : "connect-config-default"
+    },
+    {
+      "json" : {
+        "authType" : "cert",
+        "autoReconnect" : false,
+        "blockIPv6" : false,
+        "certDer" : "AQID",
+        "checkServerCert" : true,
+        "disableQoS" : true,
+        "halfConnection" : true,
+        "host" : "h",
+        "hubName" : "HUB",
+        "maxConnection" : 4,
+        "mtu" : 1400,
+        "password" : "pw",
+        "ports" : [
+          443,
+          992
+        ],
+        "privateKeyDer" : "BAU=",
+        "proxy" : {
+          "host" : "p",
+          "kind" : "socks5",
+          "password" : "pw",
+          "port" : 1080,
+          "username" : "u"
+        },
+        "reconnectCount" : 5,
+        "reconnectInterval" : 2.5,
+        "routing" : {
+          "bypassPrivateNetworks" : true,
+          "defaultAction" : "block",
+          "rules" : [
+            {
+              "action" : "direct",
+              "enabled" : false,
+              "id" : "00000000-0000-0000-0000-000000000001",
+              "type" : "cidr",
+              "value" : "10.0.0.0/8"
+            }
+          ]
+        },
+        "serverCertFingerprint" : "ab",
+        "socksPort" : 9050,
+        "ticket" : "Bg==",
+        "tunnelMode" : "socksProxy",
+        "useCompress" : true,
+        "userName" : "u",
+        "useUdpAccel" : false,
+        "virtualMacAddress" : "aa:bb:cc:dd:ee:ff"
+      },
+      "name" : "connect-config-full"
+    },
+    {
+      "cases" : [
+        {
+          "config" : {
+            "authType" : "anonymous",
+            "autoReconnect" : true,
+            "blockIPv6" : true,
+            "checkServerCert" : false,
+            "disableQoS" : false,
+            "halfConnection" : false,
+            "host" : "h",
+            "hubName" : "VPNGATE",
+            "maxConnection" : 1,
+            "ports" : [
+              443,
+              992,
+              5555,
+              1194
+            ],
+            "proxy" : {
+              "host" : "",
+              "kind" : "none",
+              "port" : 0
+            },
+            "socksPort" : 1080,
+            "tunnelMode" : "fullTunnel",
+            "useCompress" : false,
+            "userName" : "vpn",
+            "useUdpAccel" : true
+          },
+          "input" : "{\"host\":\"h\"}"
+        },
+        {
+          "config" : {
+            "authType" : "anonymous",
+            "autoReconnect" : true,
+            "blockIPv6" : true,
+            "checkServerCert" : false,
+            "disableQoS" : false,
+            "halfConnection" : false,
+            "host" : "h",
+            "hubName" : "VPNGATE",
+            "maxConnection" : 1,
+            "ports" : [
+              1
+            ],
+            "proxy" : {
+              "host" : "",
+              "kind" : "none",
+              "port" : 0
+            },
+            "socksPort" : 1080,
+            "tunnelMode" : "fullTunnel",
+            "useCompress" : false,
+            "userName" : "vpn",
+            "useUdpAccel" : true
+          },
+          "input" : "{\"host\":\"h\",\"ports\":[1],\"unknown\":1}"
+        },
+        {
+          "error" : true,
+          "input" : "{\"ports\":[1]}"
+        },
+        {
+          "error" : true,
+          "input" : "{\"host\":\"h\",\"tunnelMode\":\"bogus\"}"
+        },
+        {
+          "config" : {
+            "authType" : "anonymous",
+            "autoReconnect" : true,
+            "blockIPv6" : true,
+            "certDer" : "AQID",
+            "checkServerCert" : false,
+            "disableQoS" : false,
+            "halfConnection" : false,
+            "host" : "h",
+            "hubName" : "VPNGATE",
+            "maxConnection" : 1,
+            "ports" : [
+              443,
+              992,
+              5555,
+              1194
+            ],
+            "proxy" : {
+              "host" : "",
+              "kind" : "none",
+              "port" : 0
+            },
+            "routing" : {
+              "bypassPrivateNetworks" : false,
+              "defaultAction" : "proxy",
+              "rules" : [
+
+              ]
+            },
+            "socksPort" : 1080,
+            "tunnelMode" : "fullTunnel",
+            "useCompress" : false,
+            "userName" : "vpn",
+            "useUdpAccel" : true
+          },
+          "input" : "{\"host\":\"h\",\"certDer\":\"AQID\",\"routing\":{}}"
+        },
+        {
+          "error" : true,
+          "input" : "{\"host\":\"h\",\"certDer\":\"!!\"}"
+        }
+      ],
+      "name" : "connect-config-decode"
+    },
+    {
+      "cases" : [
+        {
+          "cmd" : "status"
+        },
+        {
+          "cmd" : "disconnect"
+        },
+        {
+          "autoReconnect" : true,
+          "blockIPv6" : false,
+          "cmd" : "connect",
+          "config" : {
+            "authType" : "cert",
+            "autoReconnect" : false,
+            "blockIPv6" : false,
+            "certDer" : "AQID",
+            "checkServerCert" : true,
+            "disableQoS" : true,
+            "halfConnection" : true,
+            "host" : "h",
+            "hubName" : "HUB",
+            "maxConnection" : 4,
+            "mtu" : 1400,
+            "password" : "pw",
+            "ports" : [
+              443,
+              992
+            ],
+            "privateKeyDer" : "BAU=",
+            "proxy" : {
+              "host" : "p",
+              "kind" : "socks5",
+              "password" : "pw",
+              "port" : 1080,
+              "username" : "u"
+            },
+            "reconnectCount" : 5,
+            "reconnectInterval" : 2.5,
+            "routing" : {
+              "bypassPrivateNetworks" : true,
+              "defaultAction" : "block",
+              "rules" : [
+                {
+                  "action" : "direct",
+                  "enabled" : false,
+                  "id" : "00000000-0000-0000-0000-000000000001",
+                  "type" : "cidr",
+                  "value" : "10.0.0.0/8"
+                }
+              ]
+            },
+            "serverCertFingerprint" : "ab",
+            "socksPort" : 9050,
+            "ticket" : "Bg==",
+            "tunnelMode" : "socksProxy",
+            "useCompress" : true,
+            "userName" : "u",
+            "useUdpAccel" : false,
+            "virtualMacAddress" : "aa:bb:cc:dd:ee:ff"
+          },
+          "host" : "h",
+          "port" : 443,
+          "ports" : [
+            443,
+            992
+          ],
+          "proxy" : {
+            "host" : "p",
+            "kind" : "socks5",
+            "password" : "pw",
+            "port" : 1080,
+            "username" : "u"
+          },
+          "routing" : {
+            "bypassPrivateNetworks" : true,
+            "defaultAction" : "block",
+            "rules" : [
+              {
+                "action" : "direct",
+                "enabled" : false,
+                "id" : "00000000-0000-0000-0000-000000000001",
+                "type" : "cidr",
+                "value" : "10.0.0.0/8"
+              }
+            ]
+          },
+          "socksPort" : 1080,
+          "tunnelMode" : "fullTunnel"
+        }
+      ],
+      "name" : "request-encode"
+    },
+    {
+      "cases" : [
+        {
+          "input" : "{\"cmd\":\"status\"}",
+          "request" : {
+            "cmd" : "status"
+          }
+        },
+        {
+          "input" : "{\"cmd\":\"connect\",\"host\":\"h\",\"port\":1}",
+          "request" : {
+            "cmd" : "connect",
+            "host" : "h",
+            "port" : 1
+          }
+        },
+        {
+          "error" : true,
+          "input" : "{\"host\":\"h\"}"
+        },
+        {
+          "error" : true,
+          "input" : "not json"
+        },
+        {
+          "input" : "{\"cmd\":\"x\",\"config\":{\"host\":\"c\"}}",
+          "request" : {
+            "cmd" : "x",
+            "config" : {
+              "authType" : "anonymous",
+              "autoReconnect" : true,
+              "blockIPv6" : true,
+              "checkServerCert" : false,
+              "disableQoS" : false,
+              "halfConnection" : false,
+              "host" : "c",
+              "hubName" : "VPNGATE",
+              "maxConnection" : 1,
+              "ports" : [
+                443,
+                992,
+                5555,
+                1194
+              ],
+              "proxy" : {
+                "host" : "",
+                "kind" : "none",
+                "port" : 0
+              },
+              "socksPort" : 1080,
+              "tunnelMode" : "fullTunnel",
+              "useCompress" : false,
+              "userName" : "vpn",
+              "useUdpAccel" : true
+            }
+          }
+        },
+        {
+          "error" : true,
+          "input" : "{\"cmd\":\"connect\",\"port\":\"1\"}"
+        }
+      ],
+      "name" : "request-decode"
+    },
+    {
+      "cases" : [
+        "disconnected",
+        "connecting",
+        "authenticating",
+        "dhcp",
+        "connected",
+        "reconnecting"
+      ],
+      "events" : [
+        {
+          "bytesIn" : 0,
+          "bytesOut" : 0,
+          "state" : "disconnected"
+        },
+        {
+          "bytesIn" : 123,
+          "bytesOut" : 18446744073709551615,
+          "error" : "e",
+          "helperVersion" : 8,
+          "log" : "l",
+          "server" : "s",
+          "state" : "connected",
+          "virtualIP" : "10.0.0.2"
+        }
+      ],
+      "name" : "event-encode"
+    },
+    {
+      "cases" : [
+        {
+          "error" : true,
+          "input" : "{\"state\":\"connecting\"}"
+        },
+        {
+          "event" : {
+            "bytesIn" : 5,
+            "bytesOut" : 6,
+            "state" : "dhcp"
+          },
+          "input" : "{\"state\":\"dhcp\",\"bytesIn\":5,\"bytesOut\":6}"
+        },
+        {
+          "error" : true,
+          "input" : "{\"state\":\"bogus\"}"
+        },
+        {
+          "error" : true,
+          "input" : "{}"
+        },
+        {
+          "error" : true,
+          "input" : "{\"state\":\"connected\",\"helperVersion\":8,\"extra\":1}"
+        }
+      ],
+      "name" : "event-decode"
+    },
+    {
+      "defaultSocksPort" : 1080,
+      "helperSocketPath" : "/var/run/vpngate-mac.sock",
+      "helperVersion" : 8,
+      "name" : "constants"
+    },
+    {
+      "default" : {
+        "host" : "",
+        "kind" : "none",
+        "port" : 0
+      },
+      "json" : {
+        "host" : "p",
+        "kind" : "socks5",
+        "password" : "pw",
+        "port" : 1080,
+        "username" : "u"
+      },
+      "name" : "proxy-settings"
+    }
+  ],
+  "module" : "ipc",
+  "note" : "ConnectConfig, HelperRequest and HelperEvent JSON. helperVersion = 8."
+}

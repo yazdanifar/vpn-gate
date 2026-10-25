@@ -11,7 +11,7 @@ make test-tsan # before touching concurrency code
 make lint      # swift-format check (make format fixes in place)
 make coverage  # thresholds: 90% core, 80% key helper files
 ```
-Run a subset with `scripts/test.sh <name-substring>`; `--live` and `scripts/e2e-tunnel.sh` need network (and root). `scripts/probe-sample.sh [count]` probes a random sample of real relays; the weekly
+If you change core behaviour on purpose (`Sources/VPNGateCore`), run `scripts/gen-golden.sh` and commit the updated `Tests/Fixtures/golden/*.json`; `golden/committed-vectors-are-current` fails otherwise. Run a subset with `scripts/test.sh <name-substring>`; `--live` and `scripts/e2e-tunnel.sh` need network (and root). `scripts/probe-sample.sh [count]` probes a random sample of real relays; the weekly
 `Live relay checks` workflow runs both and is informational (never gates a merge).
 
 ## Conventions

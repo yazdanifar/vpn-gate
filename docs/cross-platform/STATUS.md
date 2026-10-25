@@ -5,7 +5,7 @@ Update at the end of every session (see the session protocol in [PLAN.md](PLAN.m
 | Unit | Title | State | Branch / PR | Notes |
 |---|---|---|---|---|
 | U00 | Plan docs | ✅ | | PLAN/STATUS/DECISIONS/UI-SPEC, README row, CLAUDE.md. Found: mac app has no statistics screen (only opt-in diagnostics). |
-| U01a | Golden vectors: pure codecs (Swift) | ⬜ | | |
+| U01a | Golden vectors: pure codecs (Swift) | ✅ | xp/U01a-golden-vectors | 14 files in `Tests/Fixtures/golden/` (~590 KB), exporter `Tests/Golden/Export.swift`, `scripts/gen-golden.sh`, staleness test in `GoldenTests.swift`. Deterministic (verified by double run). |
 | U01b | Golden transcripts: protocol exchanges | ⬜ | | |
 | U02 | Rust workspace scaffold | ⬜ | | |
 | U03 | Pure core: Pack, ByteBuffer, HTTPHead, errors, validation | ⬜ | | |
@@ -43,3 +43,8 @@ Update at the end of every session (see the session protocol in [PLAN.md](PLAN.m
 - UI-SPEC: routing regex flavour differs between NSRegularExpression and Rust `regex`; pin the supported subset in U01a/U06.
 - UI-SPEC: PKCS#12 import on mac uses Security.framework; decide in U08a/U19 whether the Rust engine parses .p12 for all UIs.
 - Plan wording: "statistics" in U17b/U19/U23/U27 means the opt-in diagnostics upload plus traffic counters; there is no statistics screen.
+- U01a: compressed outputs (`DataPhase.compressFrame`) are marked `"byteExact": false`; Rust must check them by round trip, not bytes.
+- U01a: `ServerFilter` search uses `localizedCaseInsensitiveContains` (`MÜLLER` finds `Müller`, `elodie` does NOT find `ÉLODIE`); U06 must reproduce exactly this (Unicode case folding, no diacritic folding) or log a deliberate change.
+- U01a: JSON `Date` fields use Swift's default (seconds since 2001-01-01 as a number); the Rust/C#/Kotlin account codecs must read and write that.
+- U01a: vectors for `VGDat` use `Tests/Fixtures/VPNGate.dat` (symlink to `assets/`), referenced by name, plus mutation recipes (`truncate:`, `xor:`, `set:`) instead of embedded copies.
+- U01a: not covered (internal or non-pure, left to later units): `ServerList.openVPNEndpoint` directly (covered through `parse`), `ClientAccount` store, `RC4`/`SHA1` streaming APIs.

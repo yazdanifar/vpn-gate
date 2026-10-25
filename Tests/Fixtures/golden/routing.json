@@ -1,0 +1,1644 @@
+{
+  "cases" : [
+    {
+      "cases" : [
+        {
+          "error" : null,
+          "type" : "domainSuffix",
+          "value" : "example.com"
+        },
+        {
+          "error" : null,
+          "type" : "domainSuffix",
+          "value" : " example.com "
+        },
+        {
+          "error" : "Not a valid domain name.",
+          "type" : "domainSuffix",
+          "value" : ".example.com"
+        },
+        {
+          "error" : "Not a valid domain name.",
+          "type" : "domainSuffix",
+          "value" : "example.com."
+        },
+        {
+          "error" : "Not a valid domain name.",
+          "type" : "domainSuffix",
+          "value" : "a..b"
+        },
+        {
+          "error" : "Not a valid domain name.",
+          "type" : "domainSuffix",
+          "value" : "exa mple.com"
+        },
+        {
+          "error" : "Not a valid domain name.",
+          "type" : "domainSuffix",
+          "value" : "ünï.com"
+        },
+        {
+          "error" : "Value is required.",
+          "type" : "domainSuffix",
+          "value" : ""
+        },
+        {
+          "error" : "Value is required.",
+          "type" : "domainSuffix",
+          "value" : "   "
+        },
+        {
+          "error" : null,
+          "type" : "domainFull",
+          "value" : "www.example.com"
+        },
+        {
+          "error" : "Not a valid domain name.",
+          "type" : "domainFull",
+          "value" : "under_score.com"
+        },
+        {
+          "error" : null,
+          "type" : "domainKeyword",
+          "value" : "anything at all"
+        },
+        {
+          "error" : "Value is required.",
+          "type" : "domainKeyword",
+          "value" : ""
+        },
+        {
+          "error" : null,
+          "type" : "domainRegex",
+          "value" : "^(a|b)+\\.example\\.com$"
+        },
+        {
+          "error" : "Not a valid regular expression.",
+          "type" : "domainRegex",
+          "value" : "("
+        },
+        {
+          "error" : "Not a valid regular expression.",
+          "type" : "domainRegex",
+          "value" : "["
+        },
+        {
+          "error" : "Not a valid regular expression.",
+          "type" : "domainRegex",
+          "value" : "*abc"
+        },
+        {
+          "error" : "Value is required.",
+          "type" : "domainRegex",
+          "value" : ""
+        },
+        {
+          "error" : null,
+          "type" : "ip",
+          "value" : "1.2.3.4"
+        },
+        {
+          "error" : null,
+          "type" : "ip",
+          "value" : "::1"
+        },
+        {
+          "error" : null,
+          "type" : "ip",
+          "value" : "1.2.3.4/8"
+        },
+        {
+          "error" : "Not a valid IPv4 or IPv6 address.",
+          "type" : "ip",
+          "value" : "999.1.1.1"
+        },
+        {
+          "error" : null,
+          "type" : "ip",
+          "value" : "2001:db8::1"
+        },
+        {
+          "error" : "Not a valid IPv4 or IPv6 address.",
+          "type" : "ip",
+          "value" : "fe80::1%en0"
+        },
+        {
+          "error" : null,
+          "type" : "cidr",
+          "value" : "10.0.0.0/8"
+        },
+        {
+          "error" : "A CIDR needs a /prefix, e.g. 10.0.0.0/8.",
+          "type" : "cidr",
+          "value" : "10.0.0.0"
+        },
+        {
+          "error" : "Not a valid CIDR range.",
+          "type" : "cidr",
+          "value" : "10.0.0.0/33"
+        },
+        {
+          "error" : null,
+          "type" : "cidr",
+          "value" : "::/0"
+        },
+        {
+          "error" : "Not a valid CIDR range.",
+          "type" : "cidr",
+          "value" : "2001:db8::/129"
+        },
+        {
+          "error" : null,
+          "type" : "cidr",
+          "value" : "2001:db8::/32"
+        },
+        {
+          "error" : "Not a valid CIDR range.",
+          "type" : "cidr",
+          "value" : "1.2.3.4/-1"
+        },
+        {
+          "error" : "Not a valid CIDR range.",
+          "type" : "cidr",
+          "value" : "1.2.3.4/x"
+        },
+        {
+          "error" : "Not a valid CIDR range.",
+          "type" : "cidr",
+          "value" : "1.2.3.4/8/9"
+        },
+        {
+          "error" : null,
+          "type" : "cidr",
+          "value" : "0.0.0.0/0"
+        }
+      ],
+      "name" : "validation"
+    },
+    {
+      "both" : [
+        {
+          "action" : "direct",
+          "domain" : "exact.example.com",
+          "ip" : "203.0.113.1"
+        },
+        {
+          "action" : "block",
+          "domain" : "unknown.test",
+          "ip" : "203.0.113.1"
+        },
+        {
+          "action" : "proxy",
+          "domain" : "unknown.test",
+          "ip" : "9.9.9.9"
+        },
+        {
+          "action" : "block",
+          "domain" : "tracker.ads.net",
+          "ip" : "8.8.8.8"
+        }
+      ],
+      "config" : {
+        "bypassPrivateNetworks" : false,
+        "defaultAction" : "proxy",
+        "rules" : [
+          {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000001",
+            "type" : "domainFull",
+            "value" : "exact.example.com"
+          },
+          {
+            "action" : "proxy",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000002",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          },
+          {
+            "action" : "block",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000003",
+            "type" : "domainKeyword",
+            "value" : "ads"
+          },
+          {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000004",
+            "type" : "domainRegex",
+            "value" : "^cdn[0-9]+\\.site\\.org$"
+          },
+          {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000005",
+            "type" : "ip",
+            "value" : "8.8.8.8"
+          },
+          {
+            "action" : "block",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000006",
+            "type" : "cidr",
+            "value" : "203.0.113.0/24"
+          },
+          {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000007",
+            "type" : "cidr",
+            "value" : "2001:db8::/32"
+          },
+          {
+            "action" : "block",
+            "enabled" : false,
+            "id" : "00000000-0000-0000-0000-000000000008",
+            "type" : "domainSuffix",
+            "value" : "disabled.net"
+          },
+          {
+            "action" : "proxy",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000009",
+            "type" : "cidr",
+            "value" : "10.1.0.0/16"
+          },
+          {
+            "action" : "block",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000010",
+            "type" : "domainSuffix",
+            "value" : "BAD.."
+          },
+          {
+            "action" : "block",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000011",
+            "type" : "cidr",
+            "value" : "garbage"
+          }
+        ]
+      },
+      "domain" : [
+        {
+          "action" : "direct",
+          "input" : "exact.example.com",
+          "matched" : {
+            "action" : "direct",
+            "type" : "domainFull",
+            "value" : "exact.example.com"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "EXACT.EXAMPLE.COM.",
+          "matched" : {
+            "action" : "direct",
+            "type" : "domainFull",
+            "value" : "exact.example.com"
+          }
+        },
+        {
+          "action" : "proxy",
+          "input" : "example.com",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        },
+        {
+          "action" : "proxy",
+          "input" : "www.example.com",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        },
+        {
+          "action" : "proxy",
+          "input" : "notexample.com",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "a.b.example.com",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        },
+        {
+          "action" : "block",
+          "input" : "tracker.ads.net",
+          "matched" : {
+            "action" : "block",
+            "type" : "domainKeyword",
+            "value" : "ads"
+          }
+        },
+        {
+          "action" : "block",
+          "input" : "ADS",
+          "matched" : {
+            "action" : "block",
+            "type" : "domainKeyword",
+            "value" : "ads"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "cdn12.site.org",
+          "matched" : {
+            "action" : "direct",
+            "type" : "domainRegex",
+            "value" : "^cdn[0-9]+\\.site\\.org$"
+          }
+        },
+        {
+          "action" : "proxy",
+          "input" : "cdn.site.org",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "xcdn1.site.org",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "disabled.net",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "www.disabled.net",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "unknown.test",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : ".",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "..example.com..",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        }
+      ],
+      "effectiveRules" : [
+        "exact.example.com",
+        "example.com",
+        "ads",
+        "^cdn[0-9]+\\.site\\.org$",
+        "8.8.8.8",
+        "203.0.113.0/24",
+        "2001:db8::/32",
+        "disabled.net",
+        "10.1.0.0/16",
+        "BAD..",
+        "garbage"
+      ],
+      "ip" : [
+        {
+          "action" : "direct",
+          "input" : "8.8.8.8",
+          "matched" : {
+            "action" : "direct",
+            "type" : "ip",
+            "value" : "8.8.8.8"
+          }
+        },
+        {
+          "action" : "proxy",
+          "input" : "8.8.8.9",
+          "matched" : null
+        },
+        {
+          "action" : "block",
+          "input" : "203.0.113.77",
+          "matched" : {
+            "action" : "block",
+            "type" : "cidr",
+            "value" : "203.0.113.0/24"
+          }
+        },
+        {
+          "action" : "proxy",
+          "input" : "203.0.114.1",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "2001:db8::1",
+          "matched" : {
+            "action" : "direct",
+            "type" : "cidr",
+            "value" : "2001:db8::/32"
+          }
+        },
+        {
+          "action" : "proxy",
+          "input" : "2001:db9::1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "10.1.2.3",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "cidr",
+            "value" : "10.1.0.0/16"
+          }
+        },
+        {
+          "action" : "proxy",
+          "input" : "10.2.2.3",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "192.168.0.1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "127.0.0.1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "100.64.1.1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "172.16.5.5",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "172.32.0.1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "169.254.9.9",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "::1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "fe80::1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "fd00::1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "::ffff:1.2.3.4",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "not an ip",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "1.2.3.4/24",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "",
+          "matched" : null
+        }
+      ],
+      "isEmpty" : false,
+      "name" : "rules-default-proxy"
+    },
+    {
+      "both" : [
+        {
+          "action" : "direct",
+          "domain" : "exact.example.com",
+          "ip" : "203.0.113.1"
+        },
+        {
+          "action" : "block",
+          "domain" : "unknown.test",
+          "ip" : "203.0.113.1"
+        },
+        {
+          "action" : "direct",
+          "domain" : "unknown.test",
+          "ip" : "9.9.9.9"
+        },
+        {
+          "action" : "block",
+          "domain" : "tracker.ads.net",
+          "ip" : "8.8.8.8"
+        }
+      ],
+      "config" : {
+        "bypassPrivateNetworks" : false,
+        "defaultAction" : "direct",
+        "rules" : [
+          {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000001",
+            "type" : "domainFull",
+            "value" : "exact.example.com"
+          },
+          {
+            "action" : "proxy",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000002",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          },
+          {
+            "action" : "block",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000003",
+            "type" : "domainKeyword",
+            "value" : "ads"
+          },
+          {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000004",
+            "type" : "domainRegex",
+            "value" : "^cdn[0-9]+\\.site\\.org$"
+          },
+          {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000005",
+            "type" : "ip",
+            "value" : "8.8.8.8"
+          },
+          {
+            "action" : "block",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000006",
+            "type" : "cidr",
+            "value" : "203.0.113.0/24"
+          },
+          {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000007",
+            "type" : "cidr",
+            "value" : "2001:db8::/32"
+          },
+          {
+            "action" : "block",
+            "enabled" : false,
+            "id" : "00000000-0000-0000-0000-000000000008",
+            "type" : "domainSuffix",
+            "value" : "disabled.net"
+          },
+          {
+            "action" : "proxy",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000009",
+            "type" : "cidr",
+            "value" : "10.1.0.0/16"
+          },
+          {
+            "action" : "block",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000010",
+            "type" : "domainSuffix",
+            "value" : "BAD.."
+          },
+          {
+            "action" : "block",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000011",
+            "type" : "cidr",
+            "value" : "garbage"
+          }
+        ]
+      },
+      "domain" : [
+        {
+          "action" : "direct",
+          "input" : "exact.example.com",
+          "matched" : {
+            "action" : "direct",
+            "type" : "domainFull",
+            "value" : "exact.example.com"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "EXACT.EXAMPLE.COM.",
+          "matched" : {
+            "action" : "direct",
+            "type" : "domainFull",
+            "value" : "exact.example.com"
+          }
+        },
+        {
+          "action" : "proxy",
+          "input" : "example.com",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        },
+        {
+          "action" : "proxy",
+          "input" : "www.example.com",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "notexample.com",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "a.b.example.com",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        },
+        {
+          "action" : "block",
+          "input" : "tracker.ads.net",
+          "matched" : {
+            "action" : "block",
+            "type" : "domainKeyword",
+            "value" : "ads"
+          }
+        },
+        {
+          "action" : "block",
+          "input" : "ADS",
+          "matched" : {
+            "action" : "block",
+            "type" : "domainKeyword",
+            "value" : "ads"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "cdn12.site.org",
+          "matched" : {
+            "action" : "direct",
+            "type" : "domainRegex",
+            "value" : "^cdn[0-9]+\\.site\\.org$"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "cdn.site.org",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "xcdn1.site.org",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "disabled.net",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "www.disabled.net",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "unknown.test",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : ".",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "..example.com..",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        }
+      ],
+      "effectiveRules" : [
+        "exact.example.com",
+        "example.com",
+        "ads",
+        "^cdn[0-9]+\\.site\\.org$",
+        "8.8.8.8",
+        "203.0.113.0/24",
+        "2001:db8::/32",
+        "disabled.net",
+        "10.1.0.0/16",
+        "BAD..",
+        "garbage"
+      ],
+      "ip" : [
+        {
+          "action" : "direct",
+          "input" : "8.8.8.8",
+          "matched" : {
+            "action" : "direct",
+            "type" : "ip",
+            "value" : "8.8.8.8"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "8.8.8.9",
+          "matched" : null
+        },
+        {
+          "action" : "block",
+          "input" : "203.0.113.77",
+          "matched" : {
+            "action" : "block",
+            "type" : "cidr",
+            "value" : "203.0.113.0/24"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "203.0.114.1",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "2001:db8::1",
+          "matched" : {
+            "action" : "direct",
+            "type" : "cidr",
+            "value" : "2001:db8::/32"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "2001:db9::1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "10.1.2.3",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "cidr",
+            "value" : "10.1.0.0/16"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "10.2.2.3",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "192.168.0.1",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "127.0.0.1",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "100.64.1.1",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "172.16.5.5",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "172.32.0.1",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "169.254.9.9",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "::1",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "fe80::1",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "fd00::1",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "::ffff:1.2.3.4",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "not an ip",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "1.2.3.4/24",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "",
+          "matched" : null
+        }
+      ],
+      "isEmpty" : false,
+      "name" : "rules-default-direct"
+    },
+    {
+      "both" : [
+        {
+          "action" : "direct",
+          "domain" : "exact.example.com",
+          "ip" : "203.0.113.1"
+        },
+        {
+          "action" : "block",
+          "domain" : "unknown.test",
+          "ip" : "203.0.113.1"
+        },
+        {
+          "action" : "block",
+          "domain" : "unknown.test",
+          "ip" : "9.9.9.9"
+        },
+        {
+          "action" : "block",
+          "domain" : "tracker.ads.net",
+          "ip" : "8.8.8.8"
+        }
+      ],
+      "config" : {
+        "bypassPrivateNetworks" : true,
+        "defaultAction" : "block",
+        "rules" : [
+          {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000001",
+            "type" : "domainFull",
+            "value" : "exact.example.com"
+          },
+          {
+            "action" : "proxy",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000002",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          },
+          {
+            "action" : "block",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000003",
+            "type" : "domainKeyword",
+            "value" : "ads"
+          },
+          {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000004",
+            "type" : "domainRegex",
+            "value" : "^cdn[0-9]+\\.site\\.org$"
+          },
+          {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000005",
+            "type" : "ip",
+            "value" : "8.8.8.8"
+          },
+          {
+            "action" : "block",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000006",
+            "type" : "cidr",
+            "value" : "203.0.113.0/24"
+          },
+          {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000007",
+            "type" : "cidr",
+            "value" : "2001:db8::/32"
+          },
+          {
+            "action" : "block",
+            "enabled" : false,
+            "id" : "00000000-0000-0000-0000-000000000008",
+            "type" : "domainSuffix",
+            "value" : "disabled.net"
+          },
+          {
+            "action" : "proxy",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000009",
+            "type" : "cidr",
+            "value" : "10.1.0.0/16"
+          },
+          {
+            "action" : "block",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000010",
+            "type" : "domainSuffix",
+            "value" : "BAD.."
+          },
+          {
+            "action" : "block",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000011",
+            "type" : "cidr",
+            "value" : "garbage"
+          }
+        ]
+      },
+      "domain" : [
+        {
+          "action" : "direct",
+          "input" : "exact.example.com",
+          "matched" : {
+            "action" : "direct",
+            "type" : "domainFull",
+            "value" : "exact.example.com"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "EXACT.EXAMPLE.COM.",
+          "matched" : {
+            "action" : "direct",
+            "type" : "domainFull",
+            "value" : "exact.example.com"
+          }
+        },
+        {
+          "action" : "proxy",
+          "input" : "example.com",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        },
+        {
+          "action" : "proxy",
+          "input" : "www.example.com",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        },
+        {
+          "action" : "block",
+          "input" : "notexample.com",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "a.b.example.com",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        },
+        {
+          "action" : "block",
+          "input" : "tracker.ads.net",
+          "matched" : {
+            "action" : "block",
+            "type" : "domainKeyword",
+            "value" : "ads"
+          }
+        },
+        {
+          "action" : "block",
+          "input" : "ADS",
+          "matched" : {
+            "action" : "block",
+            "type" : "domainKeyword",
+            "value" : "ads"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "cdn12.site.org",
+          "matched" : {
+            "action" : "direct",
+            "type" : "domainRegex",
+            "value" : "^cdn[0-9]+\\.site\\.org$"
+          }
+        },
+        {
+          "action" : "block",
+          "input" : "cdn.site.org",
+          "matched" : null
+        },
+        {
+          "action" : "block",
+          "input" : "xcdn1.site.org",
+          "matched" : null
+        },
+        {
+          "action" : "block",
+          "input" : "disabled.net",
+          "matched" : null
+        },
+        {
+          "action" : "block",
+          "input" : "www.disabled.net",
+          "matched" : null
+        },
+        {
+          "action" : "block",
+          "input" : "unknown.test",
+          "matched" : null
+        },
+        {
+          "action" : "block",
+          "input" : "",
+          "matched" : null
+        },
+        {
+          "action" : "block",
+          "input" : ".",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "..example.com..",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        }
+      ],
+      "effectiveRules" : [
+        "exact.example.com",
+        "example.com",
+        "ads",
+        "^cdn[0-9]+\\.site\\.org$",
+        "8.8.8.8",
+        "203.0.113.0/24",
+        "2001:db8::/32",
+        "disabled.net",
+        "10.1.0.0/16",
+        "BAD..",
+        "garbage",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "169.254.0.0/16",
+        "127.0.0.0/8",
+        "100.64.0.0/10",
+        "fc00::/7",
+        "fe80::/10",
+        "::1/128"
+      ],
+      "ip" : [
+        {
+          "action" : "direct",
+          "input" : "8.8.8.8",
+          "matched" : {
+            "action" : "direct",
+            "type" : "ip",
+            "value" : "8.8.8.8"
+          }
+        },
+        {
+          "action" : "block",
+          "input" : "8.8.8.9",
+          "matched" : null
+        },
+        {
+          "action" : "block",
+          "input" : "203.0.113.77",
+          "matched" : {
+            "action" : "block",
+            "type" : "cidr",
+            "value" : "203.0.113.0/24"
+          }
+        },
+        {
+          "action" : "block",
+          "input" : "203.0.114.1",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "2001:db8::1",
+          "matched" : {
+            "action" : "direct",
+            "type" : "cidr",
+            "value" : "2001:db8::/32"
+          }
+        },
+        {
+          "action" : "block",
+          "input" : "2001:db9::1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "10.1.2.3",
+          "matched" : {
+            "action" : "proxy",
+            "type" : "cidr",
+            "value" : "10.1.0.0/16"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "10.2.2.3",
+          "matched" : {
+            "action" : "direct",
+            "type" : "cidr",
+            "value" : "10.0.0.0/8"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "192.168.0.1",
+          "matched" : {
+            "action" : "direct",
+            "type" : "cidr",
+            "value" : "192.168.0.0/16"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "127.0.0.1",
+          "matched" : {
+            "action" : "direct",
+            "type" : "cidr",
+            "value" : "127.0.0.0/8"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "100.64.1.1",
+          "matched" : {
+            "action" : "direct",
+            "type" : "cidr",
+            "value" : "100.64.0.0/10"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "172.16.5.5",
+          "matched" : {
+            "action" : "direct",
+            "type" : "cidr",
+            "value" : "172.16.0.0/12"
+          }
+        },
+        {
+          "action" : "block",
+          "input" : "172.32.0.1",
+          "matched" : null
+        },
+        {
+          "action" : "direct",
+          "input" : "169.254.9.9",
+          "matched" : {
+            "action" : "direct",
+            "type" : "cidr",
+            "value" : "169.254.0.0/16"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "::1",
+          "matched" : {
+            "action" : "direct",
+            "type" : "cidr",
+            "value" : "::1/128"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "fe80::1",
+          "matched" : {
+            "action" : "direct",
+            "type" : "cidr",
+            "value" : "fe80::/10"
+          }
+        },
+        {
+          "action" : "direct",
+          "input" : "fd00::1",
+          "matched" : {
+            "action" : "direct",
+            "type" : "cidr",
+            "value" : "fc00::/7"
+          }
+        },
+        {
+          "action" : "block",
+          "input" : "::ffff:1.2.3.4",
+          "matched" : null
+        },
+        {
+          "action" : "block",
+          "input" : "not an ip",
+          "matched" : null
+        },
+        {
+          "action" : "block",
+          "input" : "1.2.3.4/24",
+          "matched" : null
+        },
+        {
+          "action" : "block",
+          "input" : "",
+          "matched" : null
+        }
+      ],
+      "isEmpty" : false,
+      "name" : "rules-bypass-private"
+    },
+    {
+      "both" : [
+        {
+          "action" : "proxy",
+          "domain" : "exact.example.com",
+          "ip" : "203.0.113.1"
+        },
+        {
+          "action" : "proxy",
+          "domain" : "unknown.test",
+          "ip" : "203.0.113.1"
+        },
+        {
+          "action" : "proxy",
+          "domain" : "unknown.test",
+          "ip" : "9.9.9.9"
+        },
+        {
+          "action" : "proxy",
+          "domain" : "tracker.ads.net",
+          "ip" : "8.8.8.8"
+        }
+      ],
+      "config" : {
+        "bypassPrivateNetworks" : false,
+        "defaultAction" : "proxy",
+        "rules" : [
+
+        ]
+      },
+      "domain" : [
+        {
+          "action" : "proxy",
+          "input" : "exact.example.com",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "EXACT.EXAMPLE.COM.",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "example.com",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "www.example.com",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "notexample.com",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "a.b.example.com",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "tracker.ads.net",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "ADS",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "cdn12.site.org",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "cdn.site.org",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "xcdn1.site.org",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "disabled.net",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "www.disabled.net",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "unknown.test",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : ".",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "..example.com..",
+          "matched" : null
+        }
+      ],
+      "effectiveRules" : [
+
+      ],
+      "ip" : [
+        {
+          "action" : "proxy",
+          "input" : "8.8.8.8",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "8.8.8.9",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "203.0.113.77",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "203.0.114.1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "2001:db8::1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "2001:db9::1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "10.1.2.3",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "10.2.2.3",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "192.168.0.1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "127.0.0.1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "100.64.1.1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "172.16.5.5",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "172.32.0.1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "169.254.9.9",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "::1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "fe80::1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "fd00::1",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "::ffff:1.2.3.4",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "not an ip",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "1.2.3.4/24",
+          "matched" : null
+        },
+        {
+          "action" : "proxy",
+          "input" : "",
+          "matched" : null
+        }
+      ],
+      "isEmpty" : true,
+      "name" : "empty"
+    },
+    {
+      "name" : "private-ranges",
+      "ranges" : [
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "169.254.0.0/16",
+        "127.0.0.0/8",
+        "100.64.0.0/10",
+        "fc00::/7",
+        "fe80::/10",
+        "::1/128"
+      ]
+    },
+    {
+      "cases" : [
+        {
+          "idPresent" : false,
+          "input" : "{\"type\":\"cidr\",\"value\":\"10.0.0.0/8\",\"action\":\"direct\"}",
+          "rule" : {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000030",
+            "type" : "cidr",
+            "value" : "10.0.0.0/8"
+          }
+        },
+        {
+          "idPresent" : true,
+          "input" : "{\"id\":\"00000000-0000-0000-0000-000000000001\",\"type\":\"ip\",\"value\":\"1.1.1.1\",\"action\":\"block\",\"enabled\":false}",
+          "rule" : {
+            "action" : "block",
+            "enabled" : false,
+            "id" : "00000000-0000-0000-0000-000000000001",
+            "type" : "ip",
+            "value" : "1.1.1.1"
+          }
+        },
+        {
+          "error" : true,
+          "input" : "{\"type\":\"nope\",\"value\":\"x\",\"action\":\"block\"}"
+        }
+      ],
+      "name" : "rule-json"
+    },
+    {
+      "cases" : [
+        {
+          "config" : {
+            "bypassPrivateNetworks" : false,
+            "defaultAction" : "proxy",
+            "rules" : [
+
+            ]
+          },
+          "input" : "{}"
+        },
+        {
+          "config" : {
+            "bypassPrivateNetworks" : false,
+            "defaultAction" : "block",
+            "rules" : [
+
+            ]
+          },
+          "input" : "{\"rules\":[],\"defaultAction\":\"block\"}"
+        },
+        {
+          "config" : {
+            "bypassPrivateNetworks" : true,
+            "defaultAction" : "proxy",
+            "rules" : [
+
+            ]
+          },
+          "input" : "{\"bypassPrivateNetworks\":true}"
+        },
+        {
+          "error" : true,
+          "input" : "{\"defaultAction\":\"x\"}"
+        }
+      ],
+      "name" : "config-json"
+    }
+  ],
+  "module" : "routing",
+  "note" : "RoutingRule validation and RoutingMatcher. Regexes are limited to the ICU/Rust-common subset."
+}

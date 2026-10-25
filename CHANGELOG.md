@@ -3,6 +3,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
 
 ## [Unreleased]
 ### Added
+- Golden vectors (`Tests/Fixtures/golden/*.json`, `scripts/gen-golden.sh`): Swift-exported input/output pairs for the pure
+  codecs, which the cross-platform ports must reproduce byte for byte; a test fails when they go stale.
 - `Live relay checks` workflow (weekly + manual) and `scripts/probe-sample.sh`: real-relay handshake/DHCP/list-sync
   checks with a pass rate per server build; relays come from the bundled list, not hard-coded addresses.
 
