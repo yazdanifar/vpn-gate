@@ -1,0 +1,574 @@
+{
+  "cases" : [
+    {
+      "json" : {
+        "authType" : "Standard Password (SHA-0)",
+        "autoReconnect" : true,
+        "checkServerCert" : false,
+        "compression" : false,
+        "createdAt" : 750000000,
+        "disableQoS" : false,
+        "halfConnection" : false,
+        "host" : "h.example.com",
+        "hub" : "DEFAULT",
+        "id" : "00000000-0000-0000-0000-000000000002",
+        "maxConnection" : 1,
+        "name" : "min",
+        "portList" : [
+          443,
+          992,
+          5555,
+          1194
+        ],
+        "proxy" : {
+          "host" : "",
+          "kind" : "none",
+          "port" : 0
+        },
+        "reconnectCount" : 8,
+        "reconnectInterval" : 3,
+        "udpAcceleration" : true,
+        "updatedAt" : 750000000,
+        "username" : ""
+      },
+      "name" : "encode-minimal"
+    },
+    {
+      "json" : {
+        "authType" : "User Certificate",
+        "autoReconnect" : false,
+        "checkServerCert" : true,
+        "compression" : true,
+        "createdAt" : 750000000,
+        "disableQoS" : true,
+        "halfConnection" : true,
+        "host" : "1.2.3.4",
+        "hub" : "VPN",
+        "id" : "00000000-0000-0000-0000-000000000003",
+        "maxConnection" : 8,
+        "mtu" : 1400,
+        "name" : "full",
+        "portList" : [
+          443,
+          992
+        ],
+        "proxy" : {
+          "host" : "proxy.local",
+          "kind" : "http",
+          "port" : 8080,
+          "username" : "u"
+        },
+        "reconnectCount" : 3,
+        "reconnectInterval" : 7.5,
+        "routing" : {
+          "bypassPrivateNetworks" : true,
+          "defaultAction" : "block",
+          "rules" : [
+            {
+              "action" : "direct",
+              "enabled" : true,
+              "id" : "00000000-0000-0000-0000-000000000001",
+              "type" : "domainSuffix",
+              "value" : "example.com"
+            }
+          ]
+        },
+        "serverCertFingerprint" : "abababababababababababababababababababab",
+        "udpAcceleration" : false,
+        "updatedAt" : 750000000,
+        "username" : "bob",
+        "virtualMacAddress" : "aa:bb:cc:dd:ee:ff"
+      },
+      "name" : "encode-full-strips-proxy-password"
+    },
+    {
+      "blockIPv6" : false,
+      "certDer" : "0102",
+      "config" : {
+        "authType" : "Standard Password (SHA-0)",
+        "autoReconnect" : true,
+        "blockIPv6" : false,
+        "certDer" : "AQI=",
+        "checkServerCert" : false,
+        "disableQoS" : false,
+        "halfConnection" : false,
+        "host" : "h.example.com",
+        "hubName" : "DEFAULT",
+        "maxConnection" : 1,
+        "password" : "pw",
+        "ports" : [
+          443,
+          992,
+          5555,
+          1194
+        ],
+        "privateKeyDer" : "AwQ=",
+        "proxy" : {
+          "host" : "",
+          "kind" : "none",
+          "port" : 0
+        },
+        "reconnectCount" : 8,
+        "reconnectInterval" : 3,
+        "routing" : {
+          "bypassPrivateNetworks" : true,
+          "defaultAction" : "block",
+          "rules" : [
+            {
+              "action" : "direct",
+              "enabled" : true,
+              "id" : "00000000-0000-0000-0000-000000000001",
+              "type" : "domainSuffix",
+              "value" : "example.com"
+            }
+          ]
+        },
+        "socksPort" : 9050,
+        "tunnelMode" : "socksProxy",
+        "useCompress" : false,
+        "userName" : "",
+        "useUdpAccel" : true
+      },
+      "globalRouting" : {
+        "bypassPrivateNetworks" : true,
+        "defaultAction" : "block",
+        "rules" : [
+          {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000001",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        ]
+      },
+      "name" : "connect-config-minimal",
+      "password" : "pw",
+      "privateKeyDer" : "0304",
+      "socksPort" : 9050,
+      "tunnelMode" : "socksProxy"
+    },
+    {
+      "blockIPv6" : false,
+      "certDer" : "0102",
+      "config" : {
+        "authType" : "User Certificate",
+        "autoReconnect" : false,
+        "blockIPv6" : false,
+        "certDer" : "AQI=",
+        "checkServerCert" : true,
+        "disableQoS" : true,
+        "halfConnection" : true,
+        "host" : "1.2.3.4",
+        "hubName" : "VPN",
+        "maxConnection" : 8,
+        "mtu" : 1400,
+        "password" : "pw",
+        "ports" : [
+          443,
+          992
+        ],
+        "privateKeyDer" : "AwQ=",
+        "proxy" : {
+          "host" : "proxy.local",
+          "kind" : "http",
+          "password" : "secret",
+          "port" : 8080,
+          "username" : "u"
+        },
+        "reconnectCount" : 3,
+        "reconnectInterval" : 7.5,
+        "routing" : {
+          "bypassPrivateNetworks" : true,
+          "defaultAction" : "block",
+          "rules" : [
+            {
+              "action" : "direct",
+              "enabled" : true,
+              "id" : "00000000-0000-0000-0000-000000000001",
+              "type" : "domainSuffix",
+              "value" : "example.com"
+            }
+          ]
+        },
+        "serverCertFingerprint" : "abababababababababababababababababababab",
+        "socksPort" : 9050,
+        "tunnelMode" : "socksProxy",
+        "useCompress" : true,
+        "userName" : "bob",
+        "useUdpAccel" : false,
+        "virtualMacAddress" : "aa:bb:cc:dd:ee:ff"
+      },
+      "globalRouting" : {
+        "bypassPrivateNetworks" : true,
+        "defaultAction" : "block",
+        "rules" : [
+          {
+            "action" : "direct",
+            "enabled" : true,
+            "id" : "00000000-0000-0000-0000-000000000001",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        ]
+      },
+      "name" : "connect-config-full",
+      "password" : "pw",
+      "privateKeyDer" : "0304",
+      "socksPort" : 9050,
+      "tunnelMode" : "socksProxy"
+    },
+    {
+      "config" : {
+        "authType" : "User Certificate",
+        "autoReconnect" : false,
+        "blockIPv6" : true,
+        "checkServerCert" : true,
+        "disableQoS" : true,
+        "halfConnection" : true,
+        "host" : "1.2.3.4",
+        "hubName" : "VPN",
+        "maxConnection" : 8,
+        "mtu" : 1400,
+        "ports" : [
+          443,
+          992
+        ],
+        "proxy" : {
+          "host" : "proxy.local",
+          "kind" : "http",
+          "password" : "secret",
+          "port" : 8080,
+          "username" : "u"
+        },
+        "reconnectCount" : 3,
+        "reconnectInterval" : 7.5,
+        "routing" : {
+          "bypassPrivateNetworks" : true,
+          "defaultAction" : "block",
+          "rules" : [
+            {
+              "action" : "direct",
+              "enabled" : true,
+              "id" : "00000000-0000-0000-0000-000000000001",
+              "type" : "domainSuffix",
+              "value" : "example.com"
+            }
+          ]
+        },
+        "serverCertFingerprint" : "abababababababababababababababababababab",
+        "socksPort" : 1080,
+        "tunnelMode" : "fullTunnel",
+        "useCompress" : true,
+        "userName" : "bob",
+        "useUdpAccel" : false,
+        "virtualMacAddress" : "aa:bb:cc:dd:ee:ff"
+      },
+      "name" : "connect-config-defaults"
+    },
+    {
+      "cases" : [
+        {
+          "account" : {
+            "authType" : "Standard Password (SHA-0)",
+            "autoReconnect" : true,
+            "checkServerCert" : false,
+            "compression" : false,
+            "createdAt" : 750000000,
+            "disableQoS" : false,
+            "halfConnection" : false,
+            "host" : "h",
+            "hub" : "DEFAULT",
+            "id" : "00000000-0000-0000-0000-000000000004",
+            "maxConnection" : 1,
+            "name" : "n",
+            "portList" : [
+              443,
+              992,
+              5555,
+              1194
+            ],
+            "proxy" : {
+              "host" : "",
+              "kind" : "none",
+              "port" : 0
+            },
+            "reconnectCount" : 8,
+            "reconnectInterval" : 3,
+            "udpAcceleration" : true,
+            "updatedAt" : 750000000,
+            "username" : ""
+          },
+          "datesDefaulted" : true,
+          "input" : "{\"id\":\"00000000-0000-0000-0000-000000000004\",\"name\":\"n\",\"host\":\"h\"}"
+        },
+        {
+          "account" : {
+            "authType" : "Standard Password (SHA-0)",
+            "autoReconnect" : true,
+            "checkServerCert" : false,
+            "compression" : false,
+            "createdAt" : 750000000,
+            "disableQoS" : false,
+            "halfConnection" : false,
+            "host" : "h",
+            "hub" : "DEFAULT",
+            "id" : "00000000-0000-0000-0000-000000000004",
+            "maxConnection" : 32,
+            "name" : "n",
+            "portList" : [
+              443
+            ],
+            "proxy" : {
+              "host" : "",
+              "kind" : "none",
+              "port" : 0
+            },
+            "reconnectCount" : 8,
+            "reconnectInterval" : 3,
+            "udpAcceleration" : true,
+            "updatedAt" : 750000000,
+            "username" : ""
+          },
+          "datesDefaulted" : true,
+          "input" : "{\"id\":\"00000000-0000-0000-0000-000000000004\",\"name\":\"n\",\"host\":\"h\",\"portList\":[],\"maxConnection\":99}"
+        },
+        {
+          "account" : {
+            "authType" : "Standard Password (SHA-0)",
+            "autoReconnect" : true,
+            "checkServerCert" : false,
+            "compression" : false,
+            "createdAt" : 750000000,
+            "disableQoS" : false,
+            "halfConnection" : false,
+            "host" : "h",
+            "hub" : "DEFAULT",
+            "id" : "00000000-0000-0000-0000-000000000004",
+            "maxConnection" : 1,
+            "name" : "n",
+            "portList" : [
+              443,
+              992,
+              5555,
+              1194
+            ],
+            "proxy" : {
+              "host" : "",
+              "kind" : "none",
+              "port" : 0
+            },
+            "reconnectCount" : 8,
+            "reconnectInterval" : 3,
+            "udpAcceleration" : true,
+            "updatedAt" : 750000000,
+            "username" : ""
+          },
+          "datesDefaulted" : true,
+          "input" : "{\"id\":\"00000000-0000-0000-0000-000000000004\",\"name\":\"n\",\"host\":\"h\",\"maxConnection\":0}"
+        },
+        {
+          "account" : {
+            "authType" : "Standard Password (SHA-0)",
+            "autoReconnect" : true,
+            "checkServerCert" : false,
+            "compression" : false,
+            "createdAt" : 750000000,
+            "disableQoS" : false,
+            "halfConnection" : false,
+            "host" : "h",
+            "hub" : "DEFAULT",
+            "id" : "00000000-0000-0000-0000-000000000004",
+            "maxConnection" : 1,
+            "name" : "n",
+            "portList" : [
+              443,
+              992,
+              5555,
+              1194
+            ],
+            "proxy" : {
+              "host" : "",
+              "kind" : "none",
+              "port" : 0
+            },
+            "reconnectCount" : 8,
+            "reconnectInterval" : 3,
+            "udpAcceleration" : true,
+            "updatedAt" : 750000000,
+            "username" : ""
+          },
+          "datesDefaulted" : true,
+          "input" : "{\"id\":\"00000000-0000-0000-0000-000000000004\",\"name\":\"n\",\"host\":\"h\",\"maxConnection\":-5}"
+        },
+        {
+          "account" : {
+            "authType" : "Plain Password",
+            "autoReconnect" : true,
+            "checkServerCert" : false,
+            "compression" : false,
+            "createdAt" : 750000000,
+            "disableQoS" : false,
+            "halfConnection" : false,
+            "host" : "h",
+            "hub" : "DEFAULT",
+            "id" : "00000000-0000-0000-0000-000000000004",
+            "maxConnection" : 1,
+            "name" : "n",
+            "portList" : [
+              443,
+              992,
+              5555,
+              1194
+            ],
+            "proxy" : {
+              "host" : "",
+              "kind" : "none",
+              "port" : 0
+            },
+            "reconnectCount" : 8,
+            "reconnectInterval" : 3,
+            "udpAcceleration" : true,
+            "updatedAt" : 750000000,
+            "username" : ""
+          },
+          "datesDefaulted" : true,
+          "input" : "{\"id\":\"00000000-0000-0000-0000-000000000004\",\"name\":\"n\",\"host\":\"h\",\"hideFromVpnGateList\":true,\"futureField\":{\"x\":1},\"authType\":\"Plain Password\"}"
+        },
+        {
+          "account" : {
+            "authType" : "Anonymous",
+            "autoReconnect" : true,
+            "checkServerCert" : false,
+            "compression" : false,
+            "createdAt" : 1.5,
+            "disableQoS" : false,
+            "halfConnection" : false,
+            "host" : "h",
+            "hub" : "DEFAULT",
+            "id" : "00000000-0000-0000-0000-000000000004",
+            "maxConnection" : 1,
+            "name" : "n",
+            "portList" : [
+              443,
+              992,
+              5555,
+              1194
+            ],
+            "proxy" : {
+              "host" : "",
+              "kind" : "none",
+              "port" : 0
+            },
+            "reconnectCount" : 8,
+            "reconnectInterval" : 3,
+            "udpAcceleration" : true,
+            "updatedAt" : 2.5,
+            "username" : ""
+          },
+          "datesDefaulted" : false,
+          "input" : "{\"id\":\"00000000-0000-0000-0000-000000000004\",\"name\":\"n\",\"host\":\"h\",\"authType\":\"Anonymous\",\"createdAt\":1.5,\"updatedAt\":2.5}"
+        },
+        {
+          "account" : {
+            "authType" : "Standard Password (SHA-0)",
+            "autoReconnect" : true,
+            "checkServerCert" : false,
+            "compression" : false,
+            "createdAt" : 750000000,
+            "disableQoS" : false,
+            "halfConnection" : false,
+            "host" : "h",
+            "hub" : "DEFAULT",
+            "id" : "00000000-0000-0000-0000-000000000004",
+            "maxConnection" : 1,
+            "name" : "n",
+            "portList" : [
+              443,
+              992,
+              5555,
+              1194
+            ],
+            "proxy" : {
+              "host" : "p",
+              "kind" : "socks5",
+              "port" : 1080
+            },
+            "reconnectCount" : 8,
+            "reconnectInterval" : 3,
+            "udpAcceleration" : true,
+            "updatedAt" : 750000000,
+            "username" : ""
+          },
+          "datesDefaulted" : true,
+          "input" : "{\"id\":\"00000000-0000-0000-0000-000000000004\",\"name\":\"n\",\"host\":\"h\",\"proxy\":{\"kind\":\"socks5\",\"host\":\"p\",\"port\":1080,\"password\":\"leak\"}}"
+        },
+        {
+          "error" : true,
+          "input" : "{\"id\":\"00000000-0000-0000-0000-000000000004\",\"name\":\"n\",\"host\":\"h\",\"authType\":\"nope\"}"
+        },
+        {
+          "error" : true,
+          "input" : "{\"name\":\"n\",\"host\":\"h\"}"
+        },
+        {
+          "error" : true,
+          "input" : "{\"id\":\"00000000-0000-0000-0000-000000000004\",\"name\":\"n\",\"host\":\"h\",\"portList\":[70000]}"
+        }
+      ],
+      "name" : "decode"
+    },
+    {
+      "cases" : [
+        {
+          "maxConnection" : 0,
+          "result" : 1
+        },
+        {
+          "maxConnection" : 1,
+          "result" : 1
+        },
+        {
+          "maxConnection" : 32,
+          "result" : 32
+        },
+        {
+          "maxConnection" : 33,
+          "result" : 32
+        },
+        {
+          "maxConnection" : -1,
+          "result" : 1
+        },
+        {
+          "portList" : [
+
+          ],
+          "result" : [
+            443
+          ]
+        }
+      ],
+      "name" : "init-clamps"
+    },
+    {
+      "cases" : [
+        {
+          "raw" : "Anonymous"
+        },
+        {
+          "raw" : "Standard Password (SHA-0)"
+        },
+        {
+          "raw" : "Plain Password"
+        },
+        {
+          "raw" : "User Certificate"
+        }
+      ],
+      "name" : "auth-types"
+    }
+  ],
+  "module" : "account",
+  "note" : "ClientAccount JSON (file format) and toConnectConfig."
+}
