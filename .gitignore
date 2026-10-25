@@ -55,3 +55,6 @@ Icon?
 # Decompiled native sources (keep analysis + data, ignore generated C/Java)
 docs/research/*.c
 docs/research/*.java
+
+# Rust
+target/

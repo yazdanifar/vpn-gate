@@ -1,0 +1,15 @@
+[package]
+name = "vpngate-uniffi"
+description = "UniFFI API for the in-process Android engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+vpngate-core.workspace = true
+vpngate-net.workspace = true

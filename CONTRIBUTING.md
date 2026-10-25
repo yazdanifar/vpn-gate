@@ -14,6 +14,15 @@ make coverage  # thresholds: 90% core, 80% key helper files
 If you change core behaviour on purpose (`Sources/VPNGateCore`), run `scripts/gen-golden.sh` and commit the updated `Tests/Fixtures/golden/*.json`; `golden/committed-vectors-are-current` fails otherwise. Run a subset with `scripts/test.sh <name-substring>`; `--live` and `scripts/e2e-tunnel.sh` need network (and root). `scripts/probe-sample.sh [count]` probes a random sample of real relays; the weekly
 `Live relay checks` workflow runs both and is informational (never gates a merge).
 
+## Rust (cross-platform port)
+The workspace in `crates/` is pinned by `rust-toolchain.toml` (rustup installs it on first use).
+```
+make rust-test   # cargo test --workspace
+make rust-lint   # cargo fmt --check + clippy -D warnings
+```
+`vpngate-testkit::golden` loads the Swift-exported vectors from `Tests/Fixtures/golden`; port code must reproduce them. CI runs the
+`rust` job on macOS, Windows and Linux. See `docs/cross-platform/PLAN.md` for the unit plan.
+
 ## Conventions
 - `Sources/VPNGateCore` is pure protocol/logic with no UI or privileged code; keep it that way.
 - New behaviour needs a test in `Tests/Unit` (pure logic) or `Tests/Behaviour` (fakes in `Tests/Support`).
