@@ -7,6 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
   codecs, which the cross-platform ports must reproduce byte for byte; a test fails when they go stale.
 - `Live relay checks` workflow (weekly + manual) and `scripts/probe-sample.sh`: real-relay handshake/DHCP/list-sync
   checks with a pass rate per server build; relays come from the bundled list, not hard-coded addresses.
+- Golden transcripts (`Tests/Fixtures/golden/transcripts/`): login/redirect/welcome exchanges, DHCP/ARP/IPv6 bridge frames and DNS proxy
+  rewrites recorded with injected randomness, for byte-level replay by the ports. `SoftEtherClient` and `EthernetBridge` take an
+  injectable `Entropy` (default: system random, behaviour unchanged).
 
 ### Fixed
 - CI: run on `macos-15` (Swift 6 toolchain; `macos-14` has 5.10, which rejects `swift-tools-version:6.0`), and split

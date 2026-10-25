@@ -15,9 +15,20 @@ func registerGoldenTests() {
             expect(committed == f.data, "\(f.name) is stale: run scripts/gen-golden.sh and commit the result")
         }
     }
+    // Transcripts run the real client/bridge/DNS proxy with injected entropy: any change to the bytes they put on the wire shows here.
+    test("golden/committed-transcripts-are-current") {
+        let files = try await transcriptFiles()
+        expect(files.count >= 4, "exporter produced \(files.count) transcript files")
+        for f in files {
+            let url = fixturesDir.appendingPathComponent("golden/" + f.name)
+            guard let committed = try? Data(contentsOf: url) else { fail("\(f.name) is missing: run scripts/gen-golden.sh"); continue }
+            expect(committed == f.data, "\(f.name) is stale: run scripts/gen-golden.sh and commit the result")
+        }
+    }
     test("golden/no-stray-files") {
-        let expected = Set(try goldenFiles(fixturesDir: fixturesDir).map(\.name))
-        let onDisk = (try? FileManager.default.contentsOfDirectory(atPath: fixturesDir.appendingPathComponent("golden").path)) ?? []
+        let expected = Set(try goldenFiles(fixturesDir: fixturesDir).map(\.name) + (try await transcriptFiles()).map(\.name))
+        let dir = fixturesDir.appendingPathComponent("golden")
+        let onDisk = (FileManager.default.enumerator(atPath: dir.path)?.allObjects as? [String]) ?? []
         for n in onDisk where n.hasSuffix(".json") && !expected.contains(n) { fail("\(n) is not produced by the exporter any more") }
     }
 }

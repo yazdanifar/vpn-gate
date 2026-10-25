@@ -1,0 +1,21 @@
+{
+  "cases" : [
+    {
+      "keyHex" : "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "loginIdHex" : "f69c0ec0d5cd6890bc3449e5ad534b449af617b0",
+      "nodeIdHex" : "7ad7601b96f92d72e0bff8db301ef507"
+    },
+    {
+      "keyHex" : "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+      "loginIdHex" : "466c454c6c281099477711b45b24ff540b5940d6",
+      "nodeIdHex" : "f4ead624c993287b82ecdcf424e495bc"
+    },
+    {
+      "keyHex" : "0000000000000000000000000000000000000000000000000000000000000000",
+      "loginIdHex" : "8e4cd0ce12769844837b115628003d7975944e82",
+      "nodeIdHex" : "2d91e790de7ba300314deaba1a19d0ce"
+    }
+  ],
+  "module" : "host_unique_id",
+  "note" : "HostUniqueId.loginId (SHA-1 of \"login\"+key) and nodeId (first 16 bytes of SHA-256 of \"node\"+key)."
+}
