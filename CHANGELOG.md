@@ -12,6 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
   injectable `Entropy` (default: system random, behaviour unchanged).
 - Rust workspace scaffold (`crates/vpngate-{core,net,platform,daemon,ipc-client,uniffi,testkit}`), pinned toolchain, `rust` CI job on
   macOS/Windows/Linux, `make rust-test` / `make rust-lint`, and the golden-vector loader in `vpngate-testkit`. No behaviour change.
+- `vpngate-core`: Rust ports of ByteBuffer, Pack, HTTPHead, SoftEtherError and InputValidation, passing the golden vectors. No behaviour change.
 
 ### Fixed
 - CI: run on `macos-15` (Swift 6 toolchain; `macos-14` has 5.10, which rejects `swift-tools-version:6.0`), and split

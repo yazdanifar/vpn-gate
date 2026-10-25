@@ -95,6 +95,11 @@ checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 [[package]]
 name = "vpngate-core"
 version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "vpngate-testkit",
+]
 
 [[package]]
 name = "vpngate-daemon"
