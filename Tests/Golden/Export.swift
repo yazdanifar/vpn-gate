@@ -233,11 +233,17 @@ private func vgdatCases(_ dir: URL) throws -> [GJ] {
     let probeTs: UInt64 = 1_700_000_000_000
     let probe = VGDat.generateProbe(timestampMs: probeTs)
     var tampered = probe; tampered[15] ^= 1
-    for (n, p, nowMs) in [
-        ("verify-ok", probe, probeTs), ("verify-ok-35h", probe, probeTs + 35 * 3_600_000), ("verify-too-old", probe, probeTs + 37 * 3_600_000),
-        ("verify-future-ok", probe, probeTs - 3_600_000), ("verify-future-too-far", probe, probeTs - 40 * 3_600_000), ("verify-tampered", tampered, probeTs),
-        ("verify-short", Array(probe.prefix(15)), probeTs), ("verify-long", probe + [0], probeTs),
-    ] {
+    let h: UInt64 = 3_600_000
+    var verifyCases: [(String, [UInt8], UInt64)] = []
+    verifyCases.append(("verify-ok", probe, probeTs))
+    verifyCases.append(("verify-ok-35h", probe, probeTs + 35 * h))
+    verifyCases.append(("verify-too-old", probe, probeTs + 37 * h))
+    verifyCases.append(("verify-future-ok", probe, probeTs - h))
+    verifyCases.append(("verify-future-too-far", probe, probeTs - 40 * h))
+    verifyCases.append(("verify-tampered", tampered, probeTs))
+    verifyCases.append(("verify-short", Array(probe.prefix(15)), probeTs))
+    verifyCases.append(("verify-long", probe + [0], probeTs))
+    for (n, p, nowMs) in verifyCases {
         out.append(["name": n, "probe": gHex(p), "nowMs": nowMs, "valid": VGDat.verifyProbe(p, now: Date(timeIntervalSince1970: Double(nowMs) / 1000.0))])
     }
 
@@ -341,11 +347,10 @@ private func serverListCases(_ dir: URL) throws -> [GJ] {
     // Ports
     let portSets: [[UInt16]] = [[], [443], [22, 993, 443], [1443, 5555], [5555, 22, 995, 1443, 443, 992, 465, 585, 993], [0], [443, 443]]
     out.append(["name": "port-priority", "cases": portSets.map { ["ports": $0.map(Int.init), "result": VPNServer.portPriority($0).map(Int.init)] as GJ }])
-    func srv(_ ssl: [UInt16], listed: Int) -> VPNServer { VPNServer(hostName: "x", ip: "1.1.1.1", listedPort: listed, sslPorts: ssl) }
+    func srv(_ ssl: [UInt16], _ listed: Int) -> VPNServer { VPNServer(hostName: "x", ip: "1.1.1.1", listedPort: listed, sslPorts: ssl) }
     out.append([
         "name": "connect-port",
-        "cases": [([UInt16](), 0), ([], 443), ([], 70000), ([], -1), ([22], 1194), ([0], 995), ([0, 995], 1)]
-            .map { (p, l) in ["sslPorts": p.map(Int.init), "listedPort": l, "result": srv(p, listed: l).connectPort as Any? ?? NSNull()] as GJ },
+        "cases": connectPortCases(srv),
     ])
     out.append([
         "name": "flag",
@@ -436,6 +441,16 @@ private func gMatched(_ r: RoutingRule?) -> Any {
 }
 
 private let gFixedIDs = (1...30).map { UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", $0))! }
+
+private func connectPortCases(_ srv: ([UInt16], Int) -> VPNServer) -> [GJ] {
+    let inputs: [([UInt16], Int)] = [([], 0), ([], 443), ([], 70000), ([], -1), ([22], 1194), ([0], 995), ([0, 995], 1)]
+    var out: [GJ] = []
+    for (p, l) in inputs {
+        let port: Any = srv(p, l).connectPort ?? NSNull()
+        out.append(["sslPorts": p.map { Int($0) }, "listedPort": l, "result": port])
+    }
+    return out
+}
 
 private func routingCases() -> [GJ] {
     var out: [GJ] = []
@@ -737,6 +752,25 @@ private func certPinCases() -> [GJ] {
 
 // MARK: - packets
 
+private func helperCases() -> GJ {
+    let ipStrings: [UInt32] = [0, 0x0102_0304, UInt32.max]
+    let packIPs: [UInt32] = [0, 0x0102_0304, 0x0a00_0001]
+    let b16: [Int] = [0, 1, 0x1234, 0xffff]
+    let b32: [UInt32] = [0, 1, 0x1234_5678, UInt32.max]
+    var ipOut: [GJ] = []
+    for v in ipStrings { ipOut.append(["v": v, "text": ipString(v)]) }
+    var packOut: [GJ] = []
+    for v in packIPs {
+        let octets: [UInt8] = [UInt8(v & 0xff), UInt8(v >> 8 & 0xff), UInt8(v >> 16 & 0xff), UInt8(v >> 24)]
+        packOut.append(["v": v, "text": packIPString(v), "back": packIPValue(octets.reversed())])
+    }
+    var o16: [GJ] = []
+    for v in b16 { o16.append(["v": v, "hex": gHex(be16(v))]) }
+    var o32: [GJ] = []
+    for v in b32 { o32.append(["v": v, "hex": gHex(be32(v))]) }
+    return ["name": "helpers", "ipString": ipOut, "packIP": packOut, "be16": o16, "be32": o32]
+}
+
 private func packetCases() -> [GJ] {
     var out: [GJ] = []
     let macA: MAC = [0x02, 0x11, 0x22, 0x33, 0x44, 0x55], macB: MAC = [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]
@@ -747,17 +781,7 @@ private func packetCases() -> [GJ] {
             ["input": gHex($0 as [UInt8]), "result": checksum($0)] as GJ
         },
     ])
-    out.append([
-        "name": "helpers", "ipString": [0, 0x01020304, UInt32.max].map { ["v": $0, "text": ipString($0)] as GJ },
-        "packIP": [0, 0x01020304, 0x0a000001].map {
-            [
-                "v": $0, "text": packIPString($0),
-                "back": packIPValue([UInt8($0 & 0xff), UInt8($0 >> 8 & 0xff), UInt8($0 >> 16 & 0xff), UInt8($0 >> 24)].reversed()),
-            ] as GJ
-        },
-        "be16": [0, 1, 0x1234, 0xffff].map { ["v": $0, "hex": gHex(be16($0))] as GJ },
-        "be32": [0, 1, 0x12345678, UInt32.max].map { ["v": $0, "hex": gHex(be32($0))] as GJ },
-    ])
+    out.append(helperCases())
     out.append(["name": "ethernet", "hex": gHex(Ethernet.frame(dst: macB, src: macA, type: 0x0806, payload: [1, 2, 3]))])
 
     let arp = ARPPacket(op: 1, senderMAC: macA, senderIP: v4(10, 0, 0, 2), targetMAC: [0, 0, 0, 0, 0, 0], targetIP: v4(10, 0, 0, 1))
@@ -861,17 +885,29 @@ private func packetCases() -> [GJ] {
             } as Any? ?? NSNull(),
         ])
     }
-    func reply(type: UInt8, xid: UInt32 = 0x12345678, yi: UInt32 = v4(10, 0, 0, 77), options: [UInt8]) -> [UInt8] {
-        var b: [UInt8] =
-            [2, 1, 6, 0] + be32(xid) + [0, 0, 0x80, 0] + be32(0) + be32(yi) + be32(0) + be32(0) + macA + [UInt8](repeating: 0, count: 10)
-            + [UInt8](repeating: 0, count: 192)
-        b += [99, 130, 83, 99] + [53, 1, type] + options + [255]
+    func reply(type: UInt8, xid: UInt32 = 0x1234_5678, yi: UInt32 = v4(10, 0, 0, 77), options: [UInt8]) -> [UInt8] {
+        var b: [UInt8] = [2, 1, 6, 0]
+        b += be32(xid)
+        b += [0, 0, 0x80, 0]
+        b += be32(0)
+        b += be32(yi)
+        b += be32(0)
+        b += be32(0)
+        b += macA
+        b += [UInt8](repeating: 0, count: 10)
+        b += [UInt8](repeating: 0, count: 192)
+        b += [99, 130, 83, 99, 53, 1, type]
+        b += options
+        b += [255]
         return b
     }
-    let full: [UInt8] =
-        [54, 4] + be32(v4(10, 0, 0, 1)) + [1, 4] + be32(0xffffff00) + [3, 4] + be32(v4(10, 0, 0, 1)) + [6, 8] + be32(v4(8, 8, 8, 8)) + be32(v4(8, 8, 4, 4)) + [
-            51, 4,
-        ] + be32(86400) + [26, 2, 5, 220]
+    var full: [UInt8] = [54, 4]
+    full += be32(v4(10, 0, 0, 1))
+    full += [1, 4] + be32(0xffff_ff00)
+    full += [3, 4] + be32(v4(10, 0, 0, 1))
+    full += [6, 8] + be32(v4(8, 8, 8, 8)) + be32(v4(8, 8, 4, 4))
+    full += [51, 4] + be32(86400)
+    full += [26, 2, 5, 220]
     dhcpParse("dhcp-parse-offer-full", reply(type: 2, options: full))
     dhcpParse("dhcp-parse-ack-pad-bytes", reply(type: 5, options: [0, 0] + full))
     dhcpParse("dhcp-parse-nak", reply(type: 6, options: []))
