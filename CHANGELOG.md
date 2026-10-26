@@ -15,6 +15,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
 - `vpngate-core`: Rust ports of ByteBuffer, Pack, HTTPHead, SoftEtherError and InputValidation, passing the golden vectors. No behaviour change.
 - `vpngate-core`: Rust ports of RC4, SHA-0, VGDat (RSA signature check, inflate, probe, tunables) and CertPin/ServerCertPolicy, passing the golden vectors. No behaviour change.
 - `vpngate-core`: Rust ports of Packets (Ethernet, ARP, IPv4, UDP, DHCP, IPv6, ICMPv6), DataPhase and UdpAccelPacket (hand-written ChaCha20-Poly1305), passing the golden vectors. No behaviour change.
+- `vpngate-core`: Rust ports of ServerList (CSV parse, ports, list text), ServerFilter, RoutingRule/RoutingMatcher, ClientAccount and the IPC messages (serde, same JSON and missing-field defaults as the Swift Codable output), passing the golden vectors. No behaviour change.
 
 ### Fixed
 - CI: run on `macos-15` (Swift 6 toolchain; `macos-14` has 5.10, which rejects `swift-tools-version:6.0`), and split

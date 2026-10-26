@@ -11,7 +11,7 @@ Update at the end of every session (see the session protocol in [PLAN.md](PLAN.m
 | U03 | Pure core: Pack, ByteBuffer, HTTPHead, errors, validation | ✅ | xp/U03-core-pack | `byte_buffer`, `pack`, `http_head`, `softether_error`, `validation` in `vpngate-core`; golden vectors pass. Only dependency added: serde (unused yet, for U06). |
 | U04 | Pure core: RC4, SHA0, VGDat, CertPin | ✅ | xp/U04-crypto-vgdat | `rc4`, `sha0`, `cert_pin`, `vgdat` in `vpngate-core`; golden vectors pass (28 tests). Added deps: sha1, sha2, rsa 0.9 (verify only), flate2 (rust_backend), base64. Verified offline only (`--offline`); CI will resolve fresh. |
 | U05 | Pure core: Packets, DataPhase, UdpAccelPacket | ✅ | xp/U05-packets | `packets`, `data_phase`, `udp_accel` (+ private `chacha_poly`) in `vpngate-core`; golden vectors pass. No new dependencies. |
-| U06 | Pure core: ServerList, ServerFilter, RoutingRule, ClientAccount, IPC messages | ⬜ | | |
+| U06 | Pure core: ServerList, ServerFilter, RoutingRule, ClientAccount, IPC messages | ✅ | xp/U06-serverlist-routing | `server_list` (+ `list_format`), `server_filter`, `routing_rule`, `client_account`, `ipc` in `vpngate-core`; golden vectors pass (54 tests). New deps: regex, uuid (v4, serde), serde_json (now a normal dep); `vpngate-testkit::golden::json_eq` (3 == 3.0). Verified offline only. |
 | U07 | Streams + TLS + probe | ⬜ | | |
 | U08a | SoftEther handshake + login | ⬜ | | |
 | U08b | Redirects + ConnectionPool | ⬜ | | |
@@ -66,3 +66,11 @@ Update at the end of every session (see the session protocol in [PLAN.md](PLAN.m
 - U05: `DataPhase.compressFrame` output is not byte-identical to Apple zlib (flate2 rust_backend); vectors check round trip and that Swift's bytes inflate. `uncompress_frame` caps output at `max_len` and, unlike C `uncompress`, ignores bytes after the stream end.
 - U05: the Swift `packIPValue` golden `back` is computed from reversed octets by the exporter (byte-swapped value); the Rust test mirrors that. `pack_ip_value` itself takes dotted-order octets.
 - U05: the Swift unit-test files (PacketTests, DataPhaseTests, IPv6Tests) were not ported one by one; the golden vectors (52 packet, 34 data-phase, 25 UDP-accel cases) cover the same behaviour.
+- U06: IDs are `uuid::Uuid`; Rust writes them lowercase, Swift writes uppercase. Both read either, so files round-trip, but a byte diff of an accounts file would show case changes.
+- U06: whole-number Doubles (`reconnectInterval`, dates) are written as `3.0`, Swift writes `3`; both decode either. The golden tests compare with `json_eq`.
+- U06: non-Optional fields with a default (e.g. `ConnectConfig.ports`) fall back only when the key is missing; an explicit `null` is an error in Rust, while Swift's `decodeIfPresent` treats it as missing. Swift never writes such nulls.
+- U06: `ClientAccount` missing `createdAt`/`updatedAt` default to now (system clock) inside `Deserialize`; tests only check they are within 60 s of now.
+- U06: IPv6 groups in `CidrMatcher` reject a leading `+` that Swift's `UInt16(_, radix: 16)` would accept (`+1::`); not worth porting.
+- U06: `ServerFilter` search uses Unicode lower-casing of both sides, which matches the golden vectors but is not ICU's locale-aware compare (e.g. Turkish dotted I).
+- U06: routing regexes use the Rust `regex` crate (no look-around or back-references); the golden vectors only cover the common subset. The UI should warn on patterns the engine rejects, which `validation_error` already reports.
+- U06: `ServerList.fetch` (HTTP) and `ServerProbe` are not ported here; they belong to U07 with the network layer.

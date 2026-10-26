@@ -24,6 +24,26 @@ pub fn unhex(s: &str) -> Vec<u8> {
         .collect()
 }
 
+/// JSON equality that treats `3` and `3.0` as equal (Swift writes whole-number Doubles without a fraction).
+pub fn json_eq(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => {
+            if let (Some(x), Some(y)) = (x.as_u64(), y.as_u64()) {
+                x == y
+            } else if let (Some(x), Some(y)) = (x.as_i64(), y.as_i64()) {
+                x == y
+            } else {
+                x.as_f64() == y.as_f64()
+            }
+        }
+        (Value::Array(x), Value::Array(y)) => x.len() == y.len() && x.iter().zip(y).all(|(x, y)| json_eq(x, y)),
+        (Value::Object(x), Value::Object(y)) => {
+            x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| json_eq(v, w)))
+        }
+        _ => a == b,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
