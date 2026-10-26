@@ -12,7 +12,7 @@ Update at the end of every session (see the session protocol in [PLAN.md](PLAN.m
 | U04 | Pure core: RC4, SHA0, VGDat, CertPin | ✅ | xp/U04-crypto-vgdat | `rc4`, `sha0`, `cert_pin`, `vgdat` in `vpngate-core`; golden vectors pass (28 tests). Added deps: sha1, sha2, rsa 0.9 (verify only), flate2 (rust_backend), base64. Verified offline only (`--offline`); CI will resolve fresh. |
 | U05 | Pure core: Packets, DataPhase, UdpAccelPacket | ✅ | xp/U05-packets | `packets`, `data_phase`, `udp_accel` (+ private `chacha_poly`) in `vpngate-core`; golden vectors pass. No new dependencies. |
 | U06 | Pure core: ServerList, ServerFilter, RoutingRule, ClientAccount, IPC messages | ✅ | xp/U06-serverlist-routing | `server_list` (+ `list_format`), `server_filter`, `routing_rule`, `client_account`, `ipc` in `vpngate-core`; golden vectors pass (54 tests). New deps: regex, uuid (v4, serde), serde_json (now a normal dep); `vpngate-testkit::golden::json_eq` (3 == 3.0). Verified offline only. |
-| U07 | Streams + TLS + probe | ⬜ | | |
+| U07 | Streams + TLS + probe | ✅ | xp/U07-streams-tls-probe | `stream` (ByteStream, StreamError, StreamFactory), `proxy` (HTTP CONNECT, SOCKS5), `tls` (TlsStream + policy verifier), `probe` in `vpngate-net`; 7 unit + 7 loopback-TLS tests. New deps: tokio, tokio-rustls/rustls (ring), rustls-platform-verifier, async-trait, socket2, base64; dev: rcgen. |
 | U08a | SoftEther handshake + login | ⬜ | | |
 | U08b | Redirects + ConnectionPool | ⬜ | | |
 | U09 | Bridge + DNS | ⬜ | | |
@@ -74,3 +74,8 @@ Update at the end of every session (see the session protocol in [PLAN.md](PLAN.m
 - U06: `ServerFilter` search uses Unicode lower-casing of both sides, which matches the golden vectors but is not ICU's locale-aware compare (e.g. Turkish dotted I).
 - U06: routing regexes use the Rust `regex` crate (no look-around or back-references); the golden vectors only cover the common subset. The UI should warn on patterns the engine rejects, which `validation_error` already reports.
 - U06: `ServerList.fetch` (HTTP) and `ServerProbe` are not ported here; they belong to U07 with the network layer.
+- U07: `ServerList.fetch` (HTTPS list download with mirrors) and the ported `LocalHTTPServer` are not done; the plan's U07 text does not list them. They need an HTTP client (reqwest or similar) and fit U11/U12 (thick engine) better.
+- U07: the system-trust leg (`rustls-platform-verifier`) is only tested for rejecting the self-signed fixture; the accept path against a real CA is not covered. Windows/Linux legs verified only by CI.
+- U07: `ByteStream` is an `async_trait` object (`Box<dyn ByteStream>`) with `&mut self` methods; the probe's timeout drops the in-flight handshake instead of cancelling the stream from another task. U08a's fake server must implement the same trait (testkit would form a dev-dependency cycle with `vpngate-net`, so put the fake in `vpngate-net` test support or a `testing` feature).
+- U07: unlike Network.framework, a hostname that resolves to several addresses is tried in order by Tokio's `connect`; no Happy Eyeballs. SNI is sent for DNS names only (Swift also sent it for IPv6 literals by accident).
+- U07: error text differs slightly from Network.framework for transport failures (`StreamError::Io` carries the OS message); the probe maps them to "Cannot connect" like Swift.
