@@ -1,6 +1,6 @@
 # Thin wrapper over scripts/. The scripts are the source of truth.
 .DEFAULT_GOAL := help
-.PHONY: lint format help build app pkg test test-each test-tsan test-asan coverage clean
+.PHONY: lint format help build app pkg test test-each test-tsan test-asan coverage clean rust-test rust-lint
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -28,3 +28,9 @@ lint: ## Style check (swift-format)
 	scripts/lint.sh
 format: ## Apply swift-format in place
 	scripts/lint.sh --fix
+
+rust-test: ## Rust workspace tests
+	cargo test --workspace
+rust-lint: ## Rust fmt + clippy (warnings are errors)
+	cargo fmt --all --check
+	cargo clippy --workspace --all-targets -- -D warnings

@@ -1,0 +1,192 @@
+{
+  "cases" : [
+    {
+      "config" : {
+        "defaultAction" : "proxy",
+        "directDns" : [
+          "9.9.9.9"
+        ],
+        "rules" : [
+          {
+            "action" : "block",
+            "type" : "domainSuffix",
+            "value" : "ads.example"
+          }
+        ],
+        "timeoutMs" : 4000,
+        "tunnelDns" : [
+          "10.0.0.1"
+        ]
+      },
+      "dynamicRules" : [
+
+      ],
+      "name" : "blocked-domain-nxdomain",
+      "queryHex" : "12340100000100000000000007747261636b657203616473076578616d706c650000010001",
+      "responseHex" : "12348103000100000000000007747261636b657203616473076578616d706c650000010001",
+      "upstreamCalls" : [
+
+      ]
+    },
+    {
+      "config" : {
+        "defaultAction" : "proxy",
+        "directDns" : [
+          "9.9.9.9"
+        ],
+        "rules" : [
+          {
+            "action" : "direct",
+            "type" : "domainSuffix",
+            "value" : "example.com"
+          }
+        ],
+        "timeoutMs" : 4000,
+        "tunnelDns" : [
+          "10.0.0.1"
+        ]
+      },
+      "dynamicRules" : [
+        {
+          "action" : "direct",
+          "ip" : "93.184.216.34"
+        },
+        {
+          "action" : "direct",
+          "ip" : "1.2.3.4"
+        }
+      ],
+      "name" : "direct-domain-uses-physical-resolver",
+      "queryHex" : "12340100000100000000000003777777076578616d706c6503636f6d0000010001",
+      "responseHex" : "12348100000100020000000003777777076578616d706c6503636f6d0000010001c00c000100010000003c00045db8d822c00c000100010000003c000401020304",
+      "upstreamCalls" : [
+        {
+          "queryHex" : "12340100000100000000000003777777076578616d706c6503636f6d0000010001",
+          "responseHex" : "12348100000100020000000003777777076578616d706c6503636f6d0000010001c00c000100010000003c00045db8d822c00c000100010000003c000401020304",
+          "server" : "9.9.9.9",
+          "timeoutMs" : 4000
+        }
+      ]
+    },
+    {
+      "config" : {
+        "defaultAction" : "direct",
+        "directDns" : [
+          "9.9.9.9"
+        ],
+        "rules" : [
+          {
+            "action" : "proxy",
+            "type" : "domainSuffix",
+            "value" : "example.org"
+          }
+        ],
+        "timeoutMs" : 4000,
+        "tunnelDns" : [
+          "10.0.0.1"
+        ]
+      },
+      "dynamicRules" : [
+        {
+          "action" : "proxy",
+          "ip" : "5.6.7.8"
+        }
+      ],
+      "name" : "proxy-rule-installs-dynamic-route",
+      "queryHex" : "123401000001000000000000076578616d706c65036f72670000010001",
+      "responseHex" : "123481000001000100000000076578616d706c65036f72670000010001c00c000100010000003c000405060708",
+      "upstreamCalls" : [
+        {
+          "queryHex" : "123401000001000000000000076578616d706c65036f72670000010001",
+          "responseHex" : "123481000001000100000000076578616d706c65036f72670000010001c00c000100010000003c000405060708",
+          "server" : "10.0.0.1",
+          "timeoutMs" : 4000
+        }
+      ]
+    },
+    {
+      "config" : {
+        "defaultAction" : "proxy",
+        "directDns" : [
+          "9.9.9.9"
+        ],
+        "rules" : [
+
+        ],
+        "timeoutMs" : 4000,
+        "tunnelDns" : [
+          "10.0.0.1"
+        ]
+      },
+      "dynamicRules" : [
+
+      ],
+      "name" : "unmatched-domain-uses-tunnel-resolver",
+      "queryHex" : "12340100000100000000000009756e6d61746368656404746573740000010001",
+      "responseHex" : "12348100000100010000000009756e6d61746368656404746573740000010001c00c000100010000003c00040a090807",
+      "upstreamCalls" : [
+        {
+          "queryHex" : "12340100000100000000000009756e6d61746368656404746573740000010001",
+          "responseHex" : "12348100000100010000000009756e6d61746368656404746573740000010001c00c000100010000003c00040a090807",
+          "server" : "10.0.0.1",
+          "timeoutMs" : 4000
+        }
+      ]
+    },
+    {
+      "config" : {
+        "defaultAction" : "proxy",
+        "directDns" : [
+          "9.9.9.9"
+        ],
+        "rules" : [
+
+        ],
+        "timeoutMs" : 4000,
+        "tunnelDns" : [
+          "10.0.0.1"
+        ]
+      },
+      "dynamicRules" : [
+
+      ],
+      "name" : "upstream-timeout-servfail",
+      "queryHex" : "12340100000100000000000004736c6f7704746573740000010001",
+      "responseHex" : "12348102000100000000000004736c6f7704746573740000010001",
+      "upstreamCalls" : [
+        {
+          "queryHex" : "12340100000100000000000004736c6f7704746573740000010001",
+          "responseHex" : null,
+          "server" : "10.0.0.1",
+          "timeoutMs" : 4000
+        }
+      ]
+    },
+    {
+      "config" : {
+        "defaultAction" : "proxy",
+        "directDns" : [
+          "9.9.9.9"
+        ],
+        "rules" : [
+
+        ],
+        "timeoutMs" : 4000,
+        "tunnelDns" : [
+          "10.0.0.1"
+        ]
+      },
+      "dynamicRules" : [
+
+      ],
+      "name" : "unparsable-query-servfail",
+      "queryHex" : "123401000001000000000000c00000010001",
+      "responseHex" : "123481020001000000000000c00000010001",
+      "upstreamCalls" : [
+
+      ]
+    }
+  ],
+  "module" : "dnsproxy",
+  "note" : "DNSProxy.handle: routing decision, upstream query, rewritten response and dynamic routes."
+}

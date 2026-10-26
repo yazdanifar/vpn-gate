@@ -1,0 +1,410 @@
+{
+  "cases" : [
+    {
+      "compressed" : false,
+      "cookie" : 3735928559,
+      "decoded" : {
+        "compressed" : false,
+        "cookie" : 3735928559,
+        "myTick" : 72623859790382856,
+        "payload" : "",
+        "size" : 0,
+        "yourTick" : 1230066625199609624
+      },
+      "iv" : "a0a1a2a3a4a5a6a7a8a9aaab",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "myTick" : 72623859790382856,
+      "name" : "empty-keepalive",
+      "nextIV" : "92a85b02a9a730921a868934",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab488fe71af05909601fbd7392a85b02a9a730921a868934dc159103e71638e2bafae7d7f39e0c91",
+      "padding" : 0,
+      "payload" : "",
+      "plainMode" : false,
+      "yourTick" : 1230066625199609624
+    },
+    {
+      "compressed" : false,
+      "cookie" : 3735928559,
+      "decoded" : {
+        "compressed" : false,
+        "cookie" : 3735928559,
+        "myTick" : 72623859790382856,
+        "payload" : "68656c6c6f",
+        "size" : 5,
+        "yourTick" : 1230066625199609624
+      },
+      "iv" : "a0a1a2a3a4a5a6a7a8a9aaab",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "myTick" : 72623859790382856,
+      "name" : "small",
+      "nextIV" : "a730921a868c34b46ed61aa8",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab488fe71af05909601fbd7392a85b02a9a730921a868c34b46ed61aa847710c9f08399b01c9296c3577f517d8",
+      "padding" : 0,
+      "payload" : "68656c6c6f",
+      "plainMode" : false,
+      "yourTick" : 1230066625199609624
+    },
+    {
+      "compressed" : true,
+      "cookie" : 3735928559,
+      "decoded" : {
+        "compressed" : true,
+        "cookie" : 3735928559,
+        "myTick" : 72623859790382856,
+        "payload" : "010203",
+        "size" : 3,
+        "yourTick" : 1230066625199609624
+      },
+      "iv" : "a0a1a2a3a4a5a6a7a8a9aaab",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "myTick" : 72623859790382856,
+      "name" : "compressed-flag",
+      "nextIV" : "02a9a730921a868a35dd09b9",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab488fe71af05909601fbd7392a85b02a9a730921a868a35dd09b93a16a9541d5d2e62bfa8072af919b5ac",
+      "padding" : 0,
+      "payload" : "010203",
+      "plainMode" : false,
+      "yourTick" : 1230066625199609624
+    },
+    {
+      "compressed" : false,
+      "cookie" : 3735928559,
+      "decoded" : {
+        "compressed" : false,
+        "cookie" : 3735928559,
+        "myTick" : 72623859790382856,
+        "payload" : "706164206d65",
+        "size" : 6,
+        "yourTick" : 1230066625199609624
+      },
+      "iv" : "a0a1a2a3a4a5a6a7a8a9aaab",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "myTick" : 72623859790382856,
+      "name" : "padded",
+      "nextIV" : "86696f4141485e30dfc7cffe",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab488fe71af05909601fbd7392a85b02a9a730921a868f34ac6ade56aa1603e634e6b3578862201870bfb95f3b221ce19186696f4141485e30dfc7cffe5aece9db9799c01ae3bb621941f0ea8f",
+      "padding" : 31,
+      "payload" : "706164206d65",
+      "plainMode" : false,
+      "yourTick" : 1230066625199609624
+    },
+    {
+      "compressed" : false,
+      "cookie" : 3735928559,
+      "decoded" : {
+        "compressed" : false,
+        "cookie" : 3735928559,
+        "myTick" : 72623859790382856,
+        "payload" : "706164206d65",
+        "size" : 6,
+        "yourTick" : 1230066625199609624
+      },
+      "iv" : "a0a1a2a3a4a5a6a7a8a9aaab",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "myTick" : 72623859790382856,
+      "name" : "padding-clamped-32",
+      "nextIV" : "696f4141485e30dfc7cffe02",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab488fe71af05909601fbd7392a85b02a9a730921a868f34ac6ade56aa1603e634e6b3578862201870bfb95f3b221ce19186696f4141485e30dfc7cffe0269c97f84de9434457ee7c8c45047647c",
+      "padding" : 100,
+      "payload" : "706164206d65",
+      "plainMode" : false,
+      "yourTick" : 1230066625199609624
+    },
+    {
+      "compressed" : false,
+      "cookie" : 3735928559,
+      "decoded" : {
+        "compressed" : false,
+        "cookie" : 3735928559,
+        "myTick" : 1,
+        "payload" : "09",
+        "size" : 1,
+        "yourTick" : 1230066625199609624
+      },
+      "iv" : "a0a1a2a3a4a5a6a7a8a9aaab",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "myTick" : 0,
+      "name" : "tick-zero-becomes-1",
+      "nextIV" : "a85b02a9a730921a868834d5",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab488fe71af15b0a641abb749ba85b02a9a730921a868834d552b7d8e2f186ad7722f00fc710c25d3f",
+      "padding" : 0,
+      "payload" : "09",
+      "plainMode" : false,
+      "yourTick" : 1230066625199609624
+    },
+    {
+      "compressed" : false,
+      "cookie" : 4294967295,
+      "decoded" : {
+        "compressed" : false,
+        "cookie" : 4294967295,
+        "myTick" : 18446744073709551615,
+        "payload" : "09",
+        "size" : 1,
+        "yourTick" : 18446744073709551615
+      },
+      "iv" : "a0a1a2a3a4a5a6a7a8a9aaab",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "myTick" : 18446744073709551615,
+      "name" : "max-ticks",
+      "nextIV" : "46b6ee424dd97afd868834d5",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab69dda60a0ea4f59be5448b6546b6ee424dd97afd868834d54e69153b7d98b3ef8d02de1507a6b59e",
+      "padding" : 0,
+      "payload" : "09",
+      "plainMode" : false,
+      "yourTick" : 18446744073709551615
+    },
+    {
+      "compressed" : false,
+      "cookie" : 3735928559,
+      "decoded" : {
+        "compressed" : false,
+        "cookie" : 3735928559,
+        "myTick" : 72623859790382856,
+        "payload" : "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374757677",
+        "size" : 1400,
+        "yourTick" : 1230066625199609624
+      },
+      "iv" : "a0a1a2a3a4a5a6a7a8a9aaab",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "myTick" : 72623859790382856,
+      "name" : "mtu-sized",
+      "nextIV" : "7f342f5cb80651182b5071d4",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab488fe71af05909601fbd7392a85b02a9a730921a83f134dc0ab875c37605e13cefb95c846f2e1760aeab4c2f370af6899f73745d5c564110fee5ecda27372818e52d29477cbe633d2f630de4be08394c40bbc26277a6eceee91d0600def56fcd27c0406d36829295a9e97f5470fd417dbeae152c67f391916d29a52ff0965f9ee3dfc7917ad6ce42012a284b47b33999866e54ea9721b73838303d2446bd18d92e782d617dc9242427e45c2e0c470835dc4116cde46f83901bf96727e8f8ed1ceb449e092723c8a7bdbac2dea25b62fb828a3b853e8abfddb24672f2f1b8a2ca4e149d6a2b2cf3de4a503667e5fb607cd00ec4f0b98839a280b8768d3e9b4d4ae4234f7eb9d2ee9867e303b1d11535c119eff6f45fe60f62d8c27bc85c74c76aada874df514cadb6b62d6a62f51420769850b58eff3e0ee477fc97cfc21f91b85821f204b18df9ed762203dd9c11d1efa39eb4dc36284867b8d8403953968b8d4784681020624ccc7d202869d2455e3e0069d6efa897ecd8c9dd0490256be41da3a2af8b6da31dc61186c5de4f6e66dcb2aab149d6c46a3352aad910e7972cc57583c4010961046f33160a0e84c3192eaa7ad2cb4981ac9cabde0c58ab653429e168b502276dd9eac0ba41793743d3060939145e1f6905cd46985056f69f9351c382225c0b74a6715de2334b1a5df474695920ef60074a4944d2a25f207a25d41da6c689a3ac9506b12f428ea94828f23cc8d3b85dd4b8ef478c56617f7027540f3832034f0cfad1c5fb60cdefde7f530146ad8d62a9bf853b9de2bffe7079c556b53bce74e1ee13eb9b6ec77b399bf8faeb5dcc3581de4ef13660e94b3469f7e332a73ac2d84601958db5b54bc899f5a6b7b6e0123a909261e614b5c591effe005ae8eaf41671d2461dbb9dddd47272d36a3696ac9c8436008a2bb4a3a8a99635fee76141fdb60c874e75a3f8efbb6da0e702dc2b5737791457467b5668dcdb33985d8150ceb07824aa6967894057038dcfeb0fe2c1306260635b3297ddb40b17b7fd79a4720f0807f7d2e7601623321af461f6c875f0ea43f91760d030f0765f32a0e65a7dcdec0a5e1cd2b2c37d67d9332a30b375bfed8ef4b9862675c70d6669c985b37d3c3d317d2b7f7e72a96cf6433311c71183a54841b5072b41038121e9190507a43994327e4d801a8a57462d3493a5bfbd3a3b6c4361653c6f3cfd058f9483f73d9464f1fc47003942539a74e6a81980cf4a437bf932ff65b6f2284408680416253011dcc10ccdadba1f06ccf6563a7aac31f9ddb9f6f5c5be53b2fb1439c22c7e2894f8866ac81541c591da5e19d6ebec5291f22c5b049eec93eedfc4eb7285c3fa5772105d7e27e9467f93262e84e30a1a738762f36931eb74151d409508d2788e0baef7d7888d10d7bfc439430efc0610e2650fecac8e172fd4701a3d397e382d09552f630b1692b061ec86d97a39d7b90727a04556d94ae3183ee6f0dd5cc016bb683fa65ef4a54cc871e3327f2d0fe148fa841d3b678d57ac0d01f1cbba9638fe6be0e6feaff6ab376390ca7369aee48c78649af06191710b07af3757ca7cdc8b01d96f5d67c85a39c4c82fc15b5177da7d64c8a1cb8e625eae535ff9e9ee403c5ae294289caae56d917b3e4e00aa3df250faf66eff1ef0286034d09df9e4573fe98fdbf4c5811f105417ab531ffecbc690590b8bbb4c6c2d681e76c6bdd080a2e14543167990be79434f7c1569d96e3ad9aeacecaf684c6124396bb103f723497c764fb946e4d5afc69fdeab975a094f6d6cd7ade62310dd93fe108223367cd5fffeec554e0b457631a26442b6a9061c3f5c3564ba048927419a01f0c1a4227286ea49106461e4ba93f52654a6b7e1051f271e3c1be1a4cd171c961c6bc44ad28d11a553de3f0d8950caf69ea0a49f8bbead55407de456ee3e806c1dcede10196a42f2621d052287b26887fee5b4e1337c7f24947db211f567b8cc7f342f5cb80651182b5071d4ed9e2d3f51c36330c0137f61dec41554",
+      "padding" : 0,
+      "payload" : "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374757677",
+      "plainMode" : false,
+      "yourTick" : 1230066625199609624
+    },
+    {
+      "compressed" : false,
+      "cookie" : 3735928559,
+      "decoded" : {
+        "compressed" : false,
+        "cookie" : 3735928559,
+        "myTick" : 72623859790382856,
+        "payload" : "706c61696e",
+        "size" : 5,
+        "yourTick" : 1230066625199609624
+      },
+      "iv" : "a0a1a2a3a4a5a6a7a8a9aaab",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "myTick" : 72623859790382856,
+      "name" : "plain-mode",
+      "nextIV" : "a0a1a2a3a4a5a6a7a8a9aaab",
+      "packet" : "deadbeef01020304050607081112131415161718000500706c61696e",
+      "padding" : 10,
+      "payload" : "706c61696e",
+      "plainMode" : true,
+      "yourTick" : 1230066625199609624
+    },
+    {
+      "compressed" : false,
+      "cookie" : 3735928559,
+      "decoded" : {
+        "compressed" : false,
+        "cookie" : 3735928559,
+        "myTick" : 72623859790382856,
+        "payload" : "01",
+        "size" : 1,
+        "yourTick" : 1230066625199609624
+      },
+      "iv" : "a0a1a2a3a4a5a6a7a8a9aaab",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f206362",
+      "myTick" : 72623859790382856,
+      "name" : "key-longer-than-32",
+      "nextIV" : "a85b02a9a730921a868834dd",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab488fe71af05909601fbd7392a85b02a9a730921a868834dd8d12c691f9f315d5cf2b6494460882e1",
+      "padding" : 0,
+      "payload" : "01",
+      "plainMode" : false,
+      "yourTick" : 1230066625199609624
+    },
+    {
+      "compressed" : false,
+      "cookie" : 3735928559,
+      "error" : "protocolError(\"Invalid ChaCha20-Poly1305 key size (31 < 32)\")",
+      "iv" : "a0a1a2a3a4a5a6a7a8a9aaab",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "myTick" : 72623859790382856,
+      "name" : "short-key",
+      "padding" : 0,
+      "payload" : "01",
+      "plainMode" : false,
+      "yourTick" : 1230066625199609624
+    },
+    {
+      "compressed" : false,
+      "cookie" : 3735928559,
+      "error" : "protocolError(\"Invalid IV size (3 != 12)\")",
+      "iv" : "010203",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "myTick" : 72623859790382856,
+      "name" : "short-iv",
+      "padding" : 0,
+      "payload" : "01",
+      "plainMode" : false,
+      "yourTick" : 1230066625199609624
+    },
+    {
+      "decoded" : {
+        "compressed" : false,
+        "cookie" : 1,
+        "myTick" : 2,
+        "payload" : "78",
+        "size" : 1,
+        "yourTick" : 3
+      },
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "name" : "decode-good",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab962259f4f15b0a641abb7498b94911bdb2268501868834a44bb6a9d6a495b14815cd2fd707fe8d0f",
+      "plainMode" : false
+    },
+    {
+      "error" : "authenticationFailure",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "name" : "decode-tampered-ciphertext",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab962259f4f15b0a641bbb7498b94911bdb2268501868834a44bb6a9d6a495b14815cd2fd707fe8d0f",
+      "plainMode" : false
+    },
+    {
+      "error" : "authenticationFailure",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "name" : "decode-tampered-tag",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab962259f4f15b0a641abb7498b94911bdb2268501868834a44bb6a9d6a495b14815cd2fd707fe8d0e",
+      "plainMode" : false
+    },
+    {
+      "error" : "authenticationFailure",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "name" : "decode-tampered-iv",
+      "packet" : "a1a1a2a3a4a5a6a7a8a9aaab962259f4f15b0a641abb7498b94911bdb2268501868834a44bb6a9d6a495b14815cd2fd707fe8d0f",
+      "plainMode" : false
+    },
+    {
+      "error" : "authenticationFailure",
+      "key" : "0707070707070707070707070707070707070707070707070707070707070707",
+      "name" : "decode-wrong-key",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab962259f4f15b0a641abb7498b94911bdb2268501868834a44bb6a9d6a495b14815cd2fd707fe8d0f",
+      "plainMode" : false
+    },
+    {
+      "error" : "protocolError(\"Invalid ChaCha20-Poly1305 key size (3 < 32)\")",
+      "key" : "010203",
+      "name" : "decode-short-key",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab962259f4f15b0a641abb7498b94911bdb2268501868834a44bb6a9d6a495b14815cd2fd707fe8d0f",
+      "plainMode" : false
+    },
+    {
+      "error" : "protocolError(\"UDP packet too short (50 < 51)\")",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "name" : "decode-too-short",
+      "packet" : "a0a1a2a3a4a5a6a7a8a9aaab962259f4f15b0a641abb7498b94911bdb2268501868834a44bb6a9d6a495b14815cd2fd707fe",
+      "plainMode" : false
+    },
+    {
+      "error" : "protocolError(\"UDP packet too short (0 < 51)\")",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "name" : "decode-empty",
+      "packet" : "",
+      "plainMode" : false
+    },
+    {
+      "error" : "protocolError(\"Decrypted UDP packet too short (22)\")",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "name" : "decode-plain-too-short",
+      "packet" : "00000000000000000000000000000000000000000000",
+      "plainMode" : true
+    },
+    {
+      "error" : "protocolError(\"Truncated UDP payload (25 < 279)\")",
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "name" : "decode-plain-truncated-payload",
+      "packet" : "00000000000000000000000000000000000000000100000000",
+      "plainMode" : true
+    },
+    {
+      "decoded" : {
+        "compressed" : false,
+        "cookie" : 1,
+        "myTick" : 0,
+        "payload" : "ee",
+        "size" : 1,
+        "yourTick" : 0
+      },
+      "key" : "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "name" : "decode-plain-trailing-padding-ignored",
+      "packet" : "0000000100000000000000000000000000000000000100ee000000",
+      "plainMode" : true
+    },
+    {
+      "ivSize" : 12,
+      "macSize" : 16,
+      "maxPadding" : 31,
+      "minPacketSize" : 51,
+      "minPlaintextSize" : 23,
+      "name" : "constants"
+    },
+    {
+      "cases" : [
+        {
+          "dataSize" : 0,
+          "maxSize" : 1500,
+          "randomBound" : 32,
+          "result" : 31
+        },
+        {
+          "dataSize" : 1000,
+          "maxSize" : 1500,
+          "randomBound" : 32,
+          "result" : 31
+        },
+        {
+          "dataSize" : 1449,
+          "maxSize" : 1500,
+          "randomBound" : null,
+          "result" : 0
+        },
+        {
+          "dataSize" : 1450,
+          "maxSize" : 1500,
+          "randomBound" : null,
+          "result" : 0
+        },
+        {
+          "dataSize" : 1451,
+          "maxSize" : 1500,
+          "randomBound" : null,
+          "result" : 0
+        },
+        {
+          "dataSize" : 2000,
+          "maxSize" : 1500,
+          "randomBound" : null,
+          "result" : 0
+        },
+        {
+          "dataSize" : 0,
+          "maxSize" : 60,
+          "randomBound" : 9,
+          "result" : 8
+        },
+        {
+          "dataSize" : 0,
+          "maxSize" : 51,
+          "randomBound" : null,
+          "result" : 0
+        },
+        {
+          "dataSize" : 0,
+          "maxSize" : 40,
+          "randomBound" : null,
+          "result" : 0
+        }
+      ],
+      "name" : "padding-size"
+    }
+  ],
+  "module" : "udpaccel",
+  "note" : "UdpAccelPacket with fixed key, IV and ticks."
+}

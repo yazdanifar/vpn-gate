@@ -1,0 +1,543 @@
+{
+  "cases" : [
+    {
+      "cases" : [
+        {
+          "input" : "example.com",
+          "result" : false
+        },
+        {
+          "input" : "a",
+          "result" : false
+        },
+        {
+          "input" : "1.2.3.4",
+          "result" : true
+        },
+        {
+          "input" : "256.1.1.1",
+          "result" : false
+        },
+        {
+          "input" : "1.2.3",
+          "result" : false
+        },
+        {
+          "input" : "1.2.3.4.5",
+          "result" : false
+        },
+        {
+          "input" : "-bad",
+          "result" : false
+        },
+        {
+          "input" : "bad-",
+          "result" : false
+        },
+        {
+          "input" : ".bad",
+          "result" : false
+        },
+        {
+          "input" : "bad.",
+          "result" : false
+        },
+        {
+          "input" : "a..b",
+          "result" : false
+        },
+        {
+          "input" : "a b",
+          "result" : false
+        },
+        {
+          "input" : "ü.com",
+          "result" : false
+        },
+        {
+          "input" : "UPPER.Case.org",
+          "result" : false
+        },
+        {
+          "input" : "123",
+          "result" : false
+        },
+        {
+          "input" : "1.2.3.",
+          "result" : false
+        },
+        {
+          "input" : "01.02.03.04",
+          "result" : true
+        },
+        {
+          "input" : "host_name",
+          "result" : false
+        },
+        {
+          "input" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "result" : false
+        },
+        {
+          "input" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "result" : false
+        },
+        {
+          "input" : "",
+          "result" : false
+        },
+        {
+          "input" : "localhost",
+          "result" : false
+        },
+        {
+          "input" : "127.0.0.1",
+          "result" : true
+        },
+        {
+          "input" : "127.255.255.255",
+          "result" : true
+        },
+        {
+          "input" : "169.254.1.1",
+          "result" : true
+        },
+        {
+          "input" : "169.254",
+          "result" : false
+        },
+        {
+          "input" : "0.0.0.0",
+          "result" : true
+        },
+        {
+          "input" : "10.0.0.1",
+          "result" : true
+        },
+        {
+          "input" : "8.8.8.8",
+          "result" : true
+        },
+        {
+          "input" : "localhost",
+          "result" : false
+        },
+        {
+          "input" : "LOCALHOST",
+          "result" : false
+        },
+        {
+          "input" : "example.com",
+          "result" : false
+        },
+        {
+          "input" : "172.15.0.1",
+          "result" : true
+        }
+      ],
+      "function" : "isIPv4Literal"
+    },
+    {
+      "cases" : [
+        {
+          "input" : "example.com",
+          "result" : true
+        },
+        {
+          "input" : "a",
+          "result" : true
+        },
+        {
+          "input" : "1.2.3.4",
+          "result" : true
+        },
+        {
+          "input" : "256.1.1.1",
+          "result" : false
+        },
+        {
+          "input" : "1.2.3",
+          "result" : false
+        },
+        {
+          "input" : "1.2.3.4.5",
+          "result" : false
+        },
+        {
+          "input" : "-bad",
+          "result" : false
+        },
+        {
+          "input" : "bad-",
+          "result" : false
+        },
+        {
+          "input" : ".bad",
+          "result" : false
+        },
+        {
+          "input" : "bad.",
+          "result" : false
+        },
+        {
+          "input" : "a..b",
+          "result" : false
+        },
+        {
+          "input" : "a b",
+          "result" : false
+        },
+        {
+          "input" : "ü.com",
+          "result" : false
+        },
+        {
+          "input" : "UPPER.Case.org",
+          "result" : true
+        },
+        {
+          "input" : "123",
+          "result" : false
+        },
+        {
+          "input" : "1.2.3.",
+          "result" : false
+        },
+        {
+          "input" : "01.02.03.04",
+          "result" : true
+        },
+        {
+          "input" : "host_name",
+          "result" : false
+        },
+        {
+          "input" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "result" : true
+        },
+        {
+          "input" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "result" : false
+        },
+        {
+          "input" : "",
+          "result" : false
+        },
+        {
+          "input" : "localhost",
+          "result" : true
+        }
+      ],
+      "function" : "isValidHost"
+    },
+    {
+      "cases" : [
+        {
+          "input" : "127.0.0.1",
+          "result" : true
+        },
+        {
+          "input" : "127.255.255.255",
+          "result" : true
+        },
+        {
+          "input" : "169.254.1.1",
+          "result" : true
+        },
+        {
+          "input" : "169.254",
+          "result" : false
+        },
+        {
+          "input" : "0.0.0.0",
+          "result" : true
+        },
+        {
+          "input" : "10.0.0.1",
+          "result" : false
+        },
+        {
+          "input" : "8.8.8.8",
+          "result" : false
+        },
+        {
+          "input" : "localhost",
+          "result" : true
+        },
+        {
+          "input" : "LOCALHOST",
+          "result" : true
+        },
+        {
+          "input" : "example.com",
+          "result" : false
+        },
+        {
+          "input" : "172.15.0.1",
+          "result" : false
+        }
+      ],
+      "function" : "isLocalAddress"
+    },
+    {
+      "cases" : [
+        {
+          "input" : "10.1.2.3",
+          "result" : true
+        },
+        {
+          "input" : "172.16.0.1",
+          "result" : true
+        },
+        {
+          "input" : "172.31.255.255",
+          "result" : true
+        },
+        {
+          "input" : "172.32.0.1",
+          "result" : false
+        },
+        {
+          "input" : "172.15.0.1",
+          "result" : false
+        },
+        {
+          "input" : "192.168.1.1",
+          "result" : true
+        },
+        {
+          "input" : "192.169.1.1",
+          "result" : false
+        },
+        {
+          "input" : "169.254.0.1",
+          "result" : true
+        },
+        {
+          "input" : "127.0.0.1",
+          "result" : true
+        },
+        {
+          "input" : "0.0.0.0",
+          "result" : true
+        },
+        {
+          "input" : "8.8.8.8",
+          "result" : false
+        },
+        {
+          "input" : "abc",
+          "result" : false
+        }
+      ],
+      "function" : "isNonPublicIPv4"
+    },
+    {
+      "cases" : [
+        {
+          "input" : "abababababababababababababababababababab",
+          "result" : "abababababababababababababababababababab"
+        },
+        {
+          "input" : "ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB",
+          "result" : "abababababababababababababababababababababababababababababababab"
+        },
+        {
+          "input" : "00:01:02:03:04:05:06:07:08:09:0A:0B:0C:0D:0E:0F:10:11:12:13",
+          "result" : "000102030405060708090a0b0c0d0e0f10111213"
+        },
+        {
+          "input" : "00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13",
+          "result" : "000102030405060708090a0b0c0d0e0f10111213"
+        },
+        {
+          "input" : "00-01-02-03-04-05-06-07-08-09-0a-0b-0c-0d-0e-0f-10-11-12-13",
+          "result" : "000102030405060708090a0b0c0d0e0f10111213"
+        },
+        {
+          "input" : "abc",
+          "result" : null
+        },
+        {
+          "input" : "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+          "result" : null
+        },
+        {
+          "input" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "result" : null
+        },
+        {
+          "input" : "",
+          "result" : null
+        }
+      ],
+      "function" : "normalizedFingerprint"
+    },
+    {
+      "cases" : [
+        {
+          "input" : "aa:bb:cc:dd:ee:ff",
+          "result" : "aabbccddeeff"
+        },
+        {
+          "input" : "AA-BB-CC-DD-EE-FF",
+          "result" : "aabbccddeeff"
+        },
+        {
+          "input" : "aa:bb:cc:dd:ee",
+          "result" : null
+        },
+        {
+          "input" : "aa:bb:cc:dd:ee:ff:00",
+          "result" : null
+        },
+        {
+          "input" : "gg:bb:cc:dd:ee:ff",
+          "result" : null
+        },
+        {
+          "input" : "a:b:c:d:e:f",
+          "result" : "0a0b0c0d0e0f"
+        },
+        {
+          "input" : "100:bb:cc:dd:ee:ff",
+          "result" : null
+        },
+        {
+          "input" : "",
+          "result" : null
+        },
+        {
+          "input" : "aa:bb-cc:dd-ee:ff",
+          "result" : "aabbccddeeff"
+        }
+      ],
+      "function" : "parseMacAddress"
+    },
+    {
+      "cases" : [
+        {
+          "input" : "hub",
+          "result" : true
+        },
+        {
+          "input" : "",
+          "result" : true
+        },
+        {
+          "input" : "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "result" : true
+        },
+        {
+          "input" : "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "result" : false
+        },
+        {
+          "input" : "nul\u0000byte",
+          "result" : false
+        },
+        {
+          "input" : "ünï",
+          "result" : true
+        },
+        {
+          "input" : "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+          "result" : true
+        },
+        {
+          "input" : "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+          "result" : false
+        }
+      ],
+      "function" : "isValidIdentityField"
+    },
+    {
+      "cases" : [
+        {
+          "input" : "1.2.3.4",
+          "result" : true
+        },
+        {
+          "input" : "::1",
+          "result" : true
+        },
+        {
+          "input" : "2001:db8::1",
+          "result" : true
+        },
+        {
+          "input" : "fe80::1",
+          "result" : true
+        },
+        {
+          "input" : "1.2.3.4/24",
+          "result" : false
+        },
+        {
+          "input" : "::1/128",
+          "result" : false
+        },
+        {
+          "input" : "1.2.3",
+          "result" : false
+        },
+        {
+          "input" : "gggg::",
+          "result" : false
+        },
+        {
+          "input" : "::ffff:1.2.3.4",
+          "result" : false
+        },
+        {
+          "input" : "1:2:3:4:5:6:7:8",
+          "result" : true
+        },
+        {
+          "input" : "1:2:3:4:5:6:7:8:9",
+          "result" : false
+        },
+        {
+          "input" : "",
+          "result" : false
+        }
+      ],
+      "function" : "isIPLiteral"
+    },
+    {
+      "cases" : [
+        {
+          "input" : -1,
+          "result" : false
+        },
+        {
+          "input" : 0,
+          "result" : false
+        },
+        {
+          "input" : 1,
+          "result" : true
+        },
+        {
+          "input" : 80,
+          "result" : true
+        },
+        {
+          "input" : 65535,
+          "result" : true
+        },
+        {
+          "input" : 65536,
+          "result" : false
+        },
+        {
+          "input" : null,
+          "result" : false
+        }
+      ],
+      "function" : "isValidPort"
+    }
+  ],
+  "module" : "validation",
+  "note" : "InputValidation: one entry per function, each input with its result (null = nil)."
+}

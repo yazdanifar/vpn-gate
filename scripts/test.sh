@@ -28,7 +28,7 @@ swiftc "${CORE_FLAGS[@]}" ${SAN[@]+"${SAN[@]}"} Sources/VPNGateCore/*.swift -o "
   -emit-module-path "$OUT/VPNGateCore.swiftmodule" 2> "$OUT/compile-core.log" || {
   grep -E "error:" -A3 "$OUT/compile-core.log" | head -40; echo "CORE COMPILE FAILED"; exit 2; }
 SRC=(Tests/Harness/Harness.swift Tests/Support/*.swift Tests/Unit/*.swift Tests/Behaviour/*.swift
-     Tests/Fuzz/*.swift Tests/Live/*.swift
+     Tests/Fuzz/*.swift Tests/Live/*.swift Tests/Golden/Export.swift Tests/Golden/ExportTranscripts.swift
      $(ls Sources/vpngate-helper/*.swift | grep -v '/main.swift')
      Sources/VPNGateMac/Model/*.swift)
 # main.swift must be the only top-level-code file
