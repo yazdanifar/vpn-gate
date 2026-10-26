@@ -10,7 +10,7 @@ Update at the end of every session (see the session protocol in [PLAN.md](PLAN.m
 | U02 | Rust workspace scaffold | ✅ | xp/U02-rust-scaffold | 7 crates in `crates/`, toolchain pinned 1.98.1, `rust` CI matrix job, `make rust-test/rust-lint`, `vpngate-testkit::golden` (load/unhex) with a test that every golden file parses and none is unlisted. Windows/Linux legs verified only by CI. |
 | U03 | Pure core: Pack, ByteBuffer, HTTPHead, errors, validation | ✅ | xp/U03-core-pack | `byte_buffer`, `pack`, `http_head`, `softether_error`, `validation` in `vpngate-core`; golden vectors pass. Only dependency added: serde (unused yet, for U06). |
 | U04 | Pure core: RC4, SHA0, VGDat, CertPin | ✅ | xp/U04-crypto-vgdat | `rc4`, `sha0`, `cert_pin`, `vgdat` in `vpngate-core`; golden vectors pass (28 tests). Added deps: sha1, sha2, rsa 0.9 (verify only), flate2 (rust_backend), base64. Verified offline only (`--offline`); CI will resolve fresh. |
-| U05 | Pure core: Packets, DataPhase, UdpAccelPacket | ⬜ | | |
+| U05 | Pure core: Packets, DataPhase, UdpAccelPacket | ✅ | xp/U05-packets | `packets`, `data_phase`, `udp_accel` (+ private `chacha_poly`) in `vpngate-core`; golden vectors pass. No new dependencies. |
 | U06 | Pure core: ServerList, ServerFilter, RoutingRule, ClientAccount, IPC messages | ⬜ | | |
 | U07 | Streams + TLS + probe | ⬜ | | |
 | U08a | SoftEther handshake + login | ⬜ | | |
@@ -62,3 +62,7 @@ Update at the end of every session (see the session protocol in [PLAN.md](PLAN.m
 - U04: Rust inflates raw deflate with `flate2` and checks the zlib header and Adler-32 by hand, like Swift. Trailing bytes after the deflate stream are not covered by any vector; Swift/Apple behaviour there is untested.
 - U04: `CertPin::parse` accepts ASCII hex only (Swift `isHexDigit` also accepts full-width digits, which would then crash its `UInt8(radix:)!`); not a behaviour worth porting.
 - U04: crates.io was unreachable from the sandbox, so Cargo.lock was resolved offline from the local registry cache (rsa 0.9.10, sha1/sha2 0.10, flate2 1.1.x, base64 0.22). Run `cargo update --dry-run` once online if newer patch versions matter.
+- U05: crates.io was unreachable again, so ChaCha20-Poly1305 (RFC 8439, empty AAD) is hand-written in `chacha_poly.rs` (checked by the RFC ChaCha/Poly1305 vectors and the golden packets) instead of the `chacha20poly1305` crate. Swap it for the crate when online if an audited implementation is preferred; the module is private, so only `udp_accel` changes.
+- U05: `DataPhase.compressFrame` output is not byte-identical to Apple zlib (flate2 rust_backend); vectors check round trip and that Swift's bytes inflate. `uncompress_frame` caps output at `max_len` and, unlike C `uncompress`, ignores bytes after the stream end.
+- U05: the Swift `packIPValue` golden `back` is computed from reversed octets by the exporter (byte-swapped value); the Rust test mirrors that. `pack_ip_value` itself takes dotted-order octets.
+- U05: the Swift unit-test files (PacketTests, DataPhaseTests, IPv6Tests) were not ported one by one; the golden vectors (52 packet, 34 data-phase, 25 UDP-accel cases) cover the same behaviour.
