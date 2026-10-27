@@ -1,6 +1,5 @@
 import Darwin
 import Foundation
-import VPNGateCore
 
 private let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
@@ -81,7 +80,7 @@ func registerPackagingTests() {
         let d = try Data(contentsOf: repoRoot.appendingPathComponent("packaging/com.yazdanifar.vpngate.helper.plist"))
         let plist = try PropertyListSerialization.propertyList(from: d, format: nil) as? [String: Any]
         expectEqual(plist?["Label"] as? String, HelperInstaller.label)
-        expectEqual(plist?["ProgramArguments"] as? [String], [HelperInstaller.installedPath, "--daemon"])
+        expectEqual(plist?["ProgramArguments"] as? [String], [HelperInstaller.installedPath, "--daemon", "--bundle", HelperInstaller.bundledDatPath])
         expectEqual(plist?["KeepAlive"] as? Bool, true)
         expectEqual(HelperInstaller.plistPath, "/Library/LaunchDaemons/com.yazdanifar.vpngate.helper.plist")
     }

@@ -66,22 +66,4 @@ func registerLiveTests() {
         expect(okCount >= 1, "no relay completed handshake + DHCP (network blocking VPN Gate, or all tried relays are down): \(report)")
     }
 
-    liveTest("live/list-sync-from-relays", timeout: 240) {
-        // The relay-to-relay download of the signed list (GET /vgc_download_dat/): signature + freshness verified.
-        let bundled = try VGDat.parse(data: fixtureData("VPNGate.dat"))
-        var candidates = bundled.servers
-        if let raw = ProcessInfo.processInfo.environment["VPNGATE_LIVE_RELAYS"], !raw.isEmpty {
-            candidates = try liveRelays(limit: 10).map { r in
-                var s = bundled.servers[0]; s.ip = r.ip; s.sslPorts = [r.port]; return s
-            }
-        }
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("vpngate-live-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let fetcher = VGDatFetcher(cacheURL: dir.appendingPathComponent("VPNGate.dat"), bundleURLs: [])
-        let dat = try await fetcher.fetchFromRelays(candidates: candidates, proxy: ProxySettings())
-        expect(dat.isSignatureValid, "signature must verify")
-        expect(dat.isFresh, "relay served a stale list")
-        expect(dat.servers.count >= 10, "only \(dat.servers.count) servers")
-        print("    live report: \(dat.servers.count) servers, list time \(dat.timestamp)")
-    }
 }

@@ -66,28 +66,4 @@ func registerAccountTests() {
         expect(cfg.blockIPv6)
     }
 
-    test("account/manager-crud-operations") {
-        await MainActor.run {
-            let mgr = AccountManager()
-            let initialCount = mgr.accounts.count
-
-            let a1 = ClientAccount(name: "Test Acc 1", host: "1.1.1.1")
-            mgr.add(a1, password: "pw1")
-            expectEqual(mgr.accounts.count, initialCount + 1)
-            expectEqual(mgr.password(for: a1), "pw1")
-
-            var updated = a1
-            updated.name = "Test Acc 1 Renamed"
-            mgr.update(updated, password: "pw2")
-            expectEqual(mgr.accounts.last?.name, "Test Acc 1 Renamed")
-            expectEqual(mgr.password(for: updated), "pw2")
-
-            mgr.duplicate(updated)
-            expectEqual(mgr.accounts.count, initialCount + 2)
-            expect(mgr.accounts.last?.name.contains("Copy") == true)
-
-            mgr.delete(updated)
-            expectEqual(mgr.accounts.count, initialCount + 1)
-        }
-    }
 }

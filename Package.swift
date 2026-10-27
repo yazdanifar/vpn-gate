@@ -16,6 +16,6 @@ let package = Package(
     targets: [
         .target(name: "VPNGateCore", swiftSettings: swift5),
         .executableTarget(name: "vpngate-helper", dependencies: ["VPNGateCore"], swiftSettings: swift5),
-        .executableTarget(name: "VPNGateMac", dependencies: ["VPNGateCore"], swiftSettings: swift5),
+        .executableTarget(name: "VPNGateMac", swiftSettings: swift5),
     ]
 )

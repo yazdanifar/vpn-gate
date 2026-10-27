@@ -1,5 +1,4 @@
 import SwiftUI
-import VPNGateCore
 
 final class ListState: ObservableObject {
     @Published var search = ""

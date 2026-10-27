@@ -1,11 +1,11 @@
 # Contributing
 
 ## Requirements
-macOS 14+, Xcode Command Line Tools (Swift 6 toolchain, language mode 5). SwiftPM is optional.
+macOS 14+, Xcode Command Line Tools (Swift 6 toolchain, language mode 5) and rustup (the daemon is Rust; `rust-toolchain.toml` pins it). SwiftPM is optional.
 
 ## Workflow
 ```
-make build     # universal binaries in build/bin
+make build     # universal binaries in build/bin: the Rust daemon (installed as vpngate-helper) and the app
 make test      # full suite, no network or root (~100 s)
 make test-tsan # before touching concurrency code
 make lint      # swift-format check (make format fixes in place)
@@ -26,7 +26,8 @@ make rust-lint   # cargo fmt --check + clippy -D warnings
 ## Conventions
 - `Sources/VPNGateCore` is pure protocol/logic with no UI or privileged code; keep it that way.
 - New behaviour needs a test in `Tests/Unit` (pure logic) or `Tests/Behaviour` (fakes in `Tests/Support`).
-- In the Mac app, anything testable goes in `Sources/VPNGateMac/Model/` (compiled into the tests by glob); `UI/` holds SwiftUI views only.
+- In the Mac app, anything testable goes in `Sources/VPNGateMac/Model/` (compiled into the app tests by glob); `UI/` holds SwiftUI views only. The app does not import `VPNGateCore`: `Model/IPCTypes.swift`, `ClientAccount.swift`, `ServerModel.swift`... mirror the daemon's JSON and `Tests/App/MirrorTests.swift` checks them against the golden vectors.
+- `scripts/test.sh` builds two test binaries: `tests` (Core + the Swift helper, until U15 deletes them) and `tests-app` (`Model/` + `Tests/App`, against `FakeHelperServer` in `Tests/Support/FakeHelper.swift`). Files used by both live in `Tests/Support/Shared.swift`.
 - `Package.swift` and `scripts/build.sh` must both build; CI runs `swift build` as a drift check.
 - Releases: bump `VERSION`, update the changelog, push tag `v<VERSION>`; the Release workflow publishes the pkg.
 - `git config blame.ignoreRevsFile .git-blame-ignore-revs` hides the formatting commit from blame.

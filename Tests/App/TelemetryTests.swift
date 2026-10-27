@@ -1,22 +1,49 @@
 import Foundation
-import VPNGateCore
+
+/// Reads the telemetry body independently of the production serializer: count, then per element the name length (NUL
+/// counted, but not written), the name, a type code (0 int, 2 str), a value count and the value.
+private struct MiniPack {
+    struct Bad: Error {}
+    var ints: [String: UInt32] = [:], strs: [String: String] = [:], names: [String] = []
+    init(_ d: Data) throws {
+        let b = [UInt8](d); var pos = 0
+        func u32() throws -> UInt32 {
+            guard pos + 4 <= b.count else { throw Bad() }
+            defer { pos += 4 }
+            return b[pos..<pos + 4].reduce(0) { ($0 << 8) | UInt32($1) }
+        }
+        let n = try u32()
+        for _ in 0..<n {
+            let nl = Int(try u32()) - 1
+            guard nl >= 0, pos + nl <= b.count else { throw Bad() }
+            let name = String(decoding: b[pos..<pos + nl], as: UTF8.self); pos += nl
+            let type = try u32(); guard try u32() == 1 else { throw Bad() }
+            names.append(name)
+            switch type {
+            case 0: ints[name] = try u32()
+            case 2:
+                let l = Int(try u32()); guard pos + l <= b.count else { throw Bad() }
+                strs[name] = String(decoding: b[pos..<pos + l], as: UTF8.self); pos += l
+            default: throw Bad()
+            }
+        }
+        guard pos == b.count else { throw Bad() }
+    }
+    func int(_ n: String) -> UInt32? { ints[n] }
+    func str(_ n: String) -> String? { strs[n] }
+}
 
 func registerTelemetryTests() {
     test("telemetry/pack-fields-and-serialization") {
         let hostKey = "0123456789abcdef0123456789abcdef"
 
-        let pack = VGStatistics.makeTelemetryPack(hostKey: hostKey)
+        let pack = try MiniPack(TelemetryPayload.serialize(hostKey: hostKey))
         expectEqual(pack.str("HostKey"), hostKey)
         expectEqual(pack.int("Build"), 9807)
         expectEqual(pack.int("ClientVer"), 444)
         expectEqual(pack.int("ClientBuild"), 9807)
         expectEqual(pack.str("ClientOsName"), "macOS")
         expectEqual(pack.int("IsClient"), 1)
-
-        let bytes = pack.serialize()
-        expect(bytes.count > 0)
-        let roundtrip = try Pack(parsing: bytes)
-        expectEqual(roundtrip.str("HostKey"), hostKey)
     }
 
     test("telemetry/url-generation-and-base36") {
@@ -47,7 +74,7 @@ func registerTelemetryTests() {
         expect(req.headers["user-agent"]?.contains("opt-in") == true, "the user agent must disclose what this is")
 
         // Parse the body with the same Pack format a server would, not by re-running our own serializer.
-        let sent = try Pack(parsing: req.body)
+        let sent = try MiniPack(req.body)
         expectEqual(sent.str("HostKey"), hostKey)
         expectEqual(sent.int("Build"), 9807)
         expectEqual(sent.int("ClientVer"), 444)
@@ -55,7 +82,7 @@ func registerTelemetryTests() {
         expectEqual(sent.str("ClientOsName"), "macOS")
         expectEqual(sent.int("IsClient"), 1)
         // Exactly these six fields: the documented payload must not grow silently.
-        expectEqual(Set(sent.elements.map(\.name)), ["HostKey", "Build", "ClientVer", "ClientBuild", "ClientOsName", "IsClient"])
+        expectEqual(Set(sent.names), ["HostKey", "Build", "ClientVer", "ClientBuild", "ClientOsName", "IsClient"])
 
         await MainActor.run { stats.isEnabled = false }
         defaults.removePersistentDomain(forName: "telemetry-test")

@@ -229,22 +229,6 @@ func threadCount() -> Int {
     return Int(count)
 }
 
-func tempPath(_ name: String) -> String {
-    let dir = NSTemporaryDirectory() + "vpngate-tests-\(getpid())"
-    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    return dir + "/" + name
-}
-
-func fixture(_ name: String, file: String = #filePath) -> String {
-    let root = URL(fileURLWithPath: file).deletingLastPathComponent().deletingLastPathComponent()
-    return (try? String(contentsOf: root.appendingPathComponent("Fixtures/" + name), encoding: .utf8)) ?? ""
-}
-
-func fixtureData(_ name: String, file: String = #filePath) -> Data {
-    let root = URL(fileURLWithPath: file).deletingLastPathComponent().deletingLastPathComponent()
-    return (try? Data(contentsOf: root.appendingPathComponent("Fixtures/" + name))) ?? Data()
-}
-
 /// Runs a DHCP exchange through the fake network and returns the lease.
 func wire(_ bridge: EthernetBridge, to net: FakeNetworkServer) {
     bridge.sendFrame = { [weak bridge] f in
@@ -252,7 +236,5 @@ func wire(_ bridge: EthernetBridge, to net: FakeNetworkServer) {
     }
 }
 
-// UserDefaults is documented thread-safe but older SDKs do not say so; the tests hand throwaway suites to @Sendable closures.
-extension UserDefaults: @unchecked @retroactive Sendable {}
 // UdpAccel guards all of its state with its own lock; the concurrency tests call it from several threads on purpose.
 extension UdpAccel: @unchecked Sendable {}

@@ -19,6 +19,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
       - name: Build
         run: scripts/build.sh all
       - name: Test
@@ -47,6 +49,8 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v5
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
       - run: scripts/build-pkg.sh
       - uses: actions/upload-artifact@v5
         with: { name: vpn-gate-pkg, path: build/VPN Gate.pkg }

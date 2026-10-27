@@ -1,5 +1,4 @@
 import SwiftUI
-import VPNGateCore
 
 let vpngateWebSite = URL(string: "http://www.vpngate.net/")!
 

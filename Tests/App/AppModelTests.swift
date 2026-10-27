@@ -1,5 +1,4 @@
 import Foundation
-import VPNGateCore
 
 /// The first-run setup flow: Connect with no (or an outdated) helper asks once, opens the installer, then
 /// continues by itself when the helper is up.
@@ -12,7 +11,7 @@ private func makeDefaults() -> UserDefaults {
 }
 
 private func server(_ host: String = "vpn1", ip: String = "1.2.3.4", port: Int = 443) -> VPNServer {
-    ServerList.parse("#h\n\(host),\(ip),1,1,1,Japan,JP,1,1,1,1,2weeks,Op,msg,\(Data("proto tcp\nremote \(ip) \(port)\n".utf8).base64EncodedString())\n")[0]
+    parsedServer(host, ip: ip, port: port)
 }
 
 @MainActor private func model(_ path: String, opened: Locked<Int>, installerExists: Bool = true) -> AppModel {
@@ -23,11 +22,11 @@ private func server(_ host: String = "vpn1", ip: String = "1.2.3.4", port: Int =
         })
 }
 
-private func startHelper(_ path: String, version: Int?) -> (IPCServer, FakeSession) {
-    let fake = FakeSession()
+private func startHelper(_ path: String, version: Int?) -> (FakeHelperServer, FakeHelperSession) {
+    let fake = FakeHelperSession()
     var snap = HelperEvent(state: .disconnected); snap.helperVersion = version
     fake.snapshot = snap
-    let srv = IPCServer(path: path, allowedUID: getuid(), session: fake)
+    let srv = FakeHelperServer(path: path, session: fake)
     try! srv.start()
     return (srv, fake)
 }

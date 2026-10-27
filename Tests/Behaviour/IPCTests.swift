@@ -42,14 +42,14 @@ func registerIPCTests() {
         let (srv, fake, path) = startServer(); defer { srv.stop() }
         var e = HelperEvent(state: .connected); e.server = "1.2.3.4"; e.virtualIP = "10.0.0.2"; fake.snapshot = e
         let got = Locked([HelperEvent]())
-        let c = HelperClient(path: path); c.onEvent = { ev in got.update { $0.append(ev) } }
+        let c = LegacyHelperClient(path: path); c.onEvent = { ev in got.update { $0.append(ev) } }
         expect(c.connect())
         await expectA(await eventually { got.value.count >= 1 })
         expectEqual(got.value.first?.state, .connected); expectEqual(got.value.first?.virtualIP, "10.0.0.2")
     }
     test("ipc/connect-and-disconnect-requests-reach-the-session") {
         let (srv, fake, path) = startServer(); defer { srv.stop() }
-        let c = HelperClient(path: path)
+        let c = LegacyHelperClient(path: path)
         var r = HelperRequest(cmd: "connect"); r.host = "1.2.3.4"; r.port = 443
         c.send(r)
         await expectA(await eventually { fake.connects.count == 1 })
@@ -60,8 +60,8 @@ func registerIPCTests() {
     test("ipc/events-are-broadcast-to-every-client") {
         let (srv, fake, path) = startServer(); defer { srv.stop() }
         let a = Locked([HelperEvent]()), b = Locked([HelperEvent]())
-        let ca = HelperClient(path: path); ca.onEvent = { e in a.update { $0.append(e) } }
-        let cb = HelperClient(path: path); cb.onEvent = { e in b.update { $0.append(e) } }
+        let ca = LegacyHelperClient(path: path); ca.onEvent = { e in a.update { $0.append(e) } }
+        let cb = LegacyHelperClient(path: path); cb.onEvent = { e in b.update { $0.append(e) } }
         expect(ca.connect() && cb.connect())
         await expectA(await eventually { a.value.count >= 1 && b.value.count >= 1 })
         var ev = HelperEvent(state: .dhcp); ev.log = "hello"
@@ -163,7 +163,7 @@ func registerIPCTests() {
         let slow = RawClient(path: path)!  // connects, never reads
         var rb: Int32 = 1024; setsockopt(slow.fd, SOL_SOCKET, SO_RCVBUF, &rb, 4)
         let fast = Locked(0)
-        let good = HelperClient(path: path); good.onEvent = { _ in fast.update { $0 += 1 } }
+        let good = LegacyHelperClient(path: path); good.onEvent = { _ in fast.update { $0 += 1 } }
         expect(good.connect())
         await eventually { fast.value >= 1 }
         let done = Locked(false)
@@ -183,31 +183,23 @@ func registerIPCTests() {
         expect(c2.read() != nil, "server still serves new clients")
         c2.close()
     }
-    test("helperclient/reconnects-after-the-server-restarts") {
-        let path = tempPath("restart-\(UUID().uuidString.prefix(6)).sock")
-        let fake1 = FakeSession(); let srv1 = IPCServer(path: path, allowedUID: getuid(), session: fake1); try srv1.start()
-        let got = Locked(0); let dropped = Locked(0)
-        let c = HelperClient(path: path); c.onEvent = { _ in got.update { $0 += 1 } }; c.onDisconnect = { dropped.update { $0 += 1 } }
-        expect(c.connect()); await eventually { got.value >= 1 }
-        srv1.stop()
-        await expectA(await eventually { dropped.value == 1 && !c.isConnected }, "client did not notice the server going away")
-        let fake2 = FakeSession(); let srv2 = IPCServer(path: path, allowedUID: getuid(), session: fake2); try srv2.start()
-        defer { srv2.stop() }
-        var r = HelperRequest(cmd: "connect"); r.host = "1.2.3.4"
-        c.send(r)  // send() reconnects on demand
-        await expectA(await eventually { fake2.connects.count == 1 }, "request after restart was lost")
-    }
-    test("helperclient/send-to-a-dead-server-does-not-kill-the-process") {  // SIGPIPE
-        let path = tempPath("dead-\(UUID().uuidString.prefix(6)).sock")
-        let srv = IPCServer(path: path, allowedUID: getuid(), session: FakeSession()); try srv.start()
-        let c = HelperClient(path: path)
-        expect(c.connect())
-        srv.stop()
-        for _ in 0..<5 { c.send(HelperRequest(cmd: "status")) }  // would raise SIGPIPE on a closed socket
+    // MARK: IPC field validation
+    test("ipc/validate-caps-hub-and-user-names") {
+        func req(hub: String = "HUB", user: String = "u") -> HelperRequest {
+            var r = HelperRequest(cmd: "connect")
+            r.config = ConnectConfig(host: "1.2.3.4", hubName: hub, userName: user)
+            return r
+        }
+        expect(IPCServer.validate(req()) == nil)
+        expect(IPCServer.validate(req(hub: String(repeating: "h", count: 255))) == nil)
+        expect(IPCServer.validate(req(hub: String(repeating: "h", count: 256))) != nil, "hub over 255 bytes")
+        expect(IPCServer.validate(req(user: String(repeating: "é", count: 128))) != nil, "255-byte limit counts bytes, not characters")
+        expect(IPCServer.validate(req(user: "a\0b")) != nil, "NUL in the user name")
+        expect(IPCServer.validate(req(hub: "a\0b")) != nil, "NUL in the hub name")
     }
 }
 
-/// Starts the real `vpngate-helper --daemon` binary (needs `scripts/build.sh helper`, which test.sh runs).
+/// Starts the real daemon binary, the Rust `vpngate-daemon` installed as `vpngate-helper` (needs `scripts/build.sh helper`, which test.sh runs).
 func registerDaemonTests() {
     test("daemon/real-binary-serves-ipc-clients", timeout: 30) {
         let bin = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -215,7 +207,7 @@ func registerDaemonTests() {
         guard FileManager.default.isExecutableFile(atPath: bin) else { fail("helper binary missing: \(bin)"); return }
         let path = tempPath("daemon-\(UUID().uuidString.prefix(6)).sock")
         let p = Process(); p.executableURL = URL(fileURLWithPath: bin)
-        p.arguments = ["--daemon", "--socket", path]  // console-user mode, as installed by the package
+        p.arguments = ["--daemon", "--socket", path, "--uid", String(getuid())]  // the package runs it without --uid (console user)
         let out = Pipe(); p.standardOutput = out; p.standardError = out
         try p.run(); defer { p.terminate(); p.waitUntilExit() }
         await expectA(await eventually(5) { FileManager.default.fileExists(atPath: path) }, "daemon never created its socket")

@@ -1,5 +1,4 @@
 import Foundation
-import VPNGateCore
 
 /// Mac-only, opt-in diagnostic upload (OFF by default, nothing is sent or scheduled until the user turns it on).
 /// The Windows client does NOT send this for an ordinary client: its upload (client_exe.c ~12600-12700) only happens
@@ -53,11 +52,7 @@ public final class VGStatistics: ObservableObject {
 
     /// Exactly what an upload contains, for the Settings screen.
     nonisolated public static var payloadDescription: [String] {
-        let p = makeTelemetryPack(hostKey: "<random per-install ID>")
-        return [
-            "HostKey: \(p.str("HostKey") ?? "")", "Build: \(p.int("Build") ?? 0)", "ClientVer: \(p.int("ClientVer") ?? 0)",
-            "ClientBuild: \(p.int("ClientBuild") ?? 0)", "ClientOsName: \(p.str("ClientOsName") ?? "")", "IsClient: \(p.int("IsClient") ?? 0)",
-        ]
+        TelemetryPayload.fields(hostKey: "<random per-install ID>").map { "\($0.name): \($0.value)" }
     }
 
     public func start() {
@@ -94,24 +89,12 @@ public final class VGStatistics: ObservableObject {
         return URL(string: urlStr) ?? URL(string: "https://www.vpngate.net/api/statistics/")!
     }
 
-    nonisolated public static func makeTelemetryPack(hostKey: String) -> Pack {
-        var p = Pack()
-        p.addStr("HostKey", hostKey)
-        p.addInt("Build", 9807)
-        p.addInt("ClientVer", 444)
-        p.addInt("ClientBuild", 9807)
-        p.addStr("ClientOsName", "macOS")
-        p.addInt("IsClient", 1)
-        return p
-    }
-
     public func sendStatistics(overrideURL: URL? = nil) async -> Bool {
         guard isEnabled else { return false }
 
         let hostKey = self.hostKey
         let targetURL = overrideURL ?? endpointOverride ?? Self.telemetryURL(hostKey: hostKey)
-        let pack = Self.makeTelemetryPack(hostKey: hostKey)
-        let body = pack.serialize()
+        let body = TelemetryPayload.serialize(hostKey: hostKey)
 
         var req = URLRequest(url: targetURL, timeoutInterval: 120)
         req.httpMethod = "POST"
@@ -136,5 +119,36 @@ public final class VGStatistics: ObservableObject {
             scheduleNext(interval: Self.retryInterval)
             return false
         }
+    }
+}
+
+/// The upload body: a SoftEther PACK of six elements (hand-written, big-endian: count, then per element the name with
+/// its NUL counted, the type code, the value count and the value). The app has no general PACK codec any more.
+enum TelemetryPayload {
+    enum Value { case int(UInt32), str(String) }
+    struct Field { var name: String; var value: String; var raw: Value }
+
+    nonisolated static func fields(hostKey: String) -> [Field] {
+        func i(_ n: String, _ v: UInt32) -> Field { Field(name: n, value: String(v), raw: .int(v)) }
+        return [
+            Field(name: "HostKey", value: hostKey, raw: .str(hostKey)), i("Build", 9807), i("ClientVer", 444),
+            i("ClientBuild", 9807), Field(name: "ClientOsName", value: "macOS", raw: .str("macOS")), i("IsClient", 1),
+        ]
+    }
+
+    nonisolated static func serialize(hostKey: String) -> Data {
+        var out = Data()
+        func u32(_ v: UInt32) { withUnsafeBytes(of: v.bigEndian) { out.append(contentsOf: $0) } }
+        let all = fields(hostKey: hostKey)
+        u32(UInt32(all.count))
+        for f in all {
+            let name = Array(f.name.utf8)
+            u32(UInt32(name.count + 1)); out.append(contentsOf: name)
+            switch f.raw {
+            case .int(let n): u32(0); u32(1); u32(n)
+            case .str(let s): u32(2); u32(1); let b = Array(s.utf8); u32(UInt32(b.count)); out.append(contentsOf: b)
+            }
+        }
+        return out
     }
 }

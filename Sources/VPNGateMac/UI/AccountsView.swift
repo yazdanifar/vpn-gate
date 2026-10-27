@@ -1,5 +1,4 @@
 import SwiftUI
-import VPNGateCore
 
 final class AccountsViewState: ObservableObject {
     @Published var selectedAccountID: UUID?
