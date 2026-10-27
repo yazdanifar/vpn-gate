@@ -9,13 +9,9 @@ let package = Package(
     name: "VPNGateMac",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "VPNGateCore", targets: ["VPNGateCore"]),
-        .executable(name: "vpngate-helper", targets: ["vpngate-helper"]),
         .executable(name: "VPNGateMac", targets: ["VPNGateMac"]),
     ],
     targets: [
-        .target(name: "VPNGateCore", swiftSettings: swift5),
-        .executableTarget(name: "vpngate-helper", dependencies: ["VPNGateCore"], swiftSettings: swift5),
         .executableTarget(name: "VPNGateMac", swiftSettings: swift5),
     ]
 )

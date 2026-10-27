@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-// Used by both test binaries (scripts/test.sh): the engine/helper tests and the app tests.
+// Used by the app test binary (scripts/test.sh).
 
 func tempPath(_ name: String) -> String {
     let dir = NSTemporaryDirectory() + "vpngate-tests-\(getpid())"
