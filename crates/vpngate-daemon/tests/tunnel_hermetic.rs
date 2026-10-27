@@ -132,7 +132,14 @@ fn snapshot() -> Vec<String> {
                 && !is_neighbour_entry(l)
                 && !is_cloned_host_entry(l)
         })
-        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+        .map(|l| {
+            let mut words: Vec<&str> = l.split_whitespace().collect();
+            // The Expire column counts down on its own.
+            if words.len() > 4 && words.last().is_some_and(|w| w.bytes().all(|b| b.is_ascii_digit())) {
+                words.pop();
+            }
+            words.join(" ")
+        })
         .collect();
     lines.sort();
     lines
