@@ -127,11 +127,20 @@ fn snapshot() -> Vec<String> {
     );
     let mut lines: Vec<String> = all
         .lines()
-        .filter(|l| !["utun", "Expire", "Refs", "Use "].iter().any(|k| l.contains(k)) && !is_neighbour_entry(l))
+        .filter(|l| {
+            !["utun", "Expire", "Refs", "Use "].iter().any(|k| l.contains(k))
+                && !is_neighbour_entry(l)
+                && !is_cloned_host_entry(l)
+        })
         .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
         .collect();
     lines.sort();
     lines
+}
+
+/// The kernel adds `x.x.x.x/32 link#N UCS` entries for on-link hosts it talked to (e.g. the gateway) on its own.
+fn is_cloned_host_entry(l: &str) -> bool {
+    l.contains("/32") && l.contains("link#")
 }
 
 /// A neighbour-cache entry (a line with a MAC address): changes on its own and is not ours.
