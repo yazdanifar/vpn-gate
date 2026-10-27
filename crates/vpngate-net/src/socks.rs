@@ -233,10 +233,14 @@ fn reply(code: u8) -> [u8; 10] {
 
 async fn serve(mut client: TcpStream, connector: &dyn SocksConnector) {
     let negotiated = tokio::time::timeout(HANDSHAKE_TIMEOUT, negotiate(&mut client)).await;
-    let Ok(Some((host, port))) = negotiated else { return };
+    let Ok(Some((host, port))) = negotiated else {
+        close_after_reply(client).await;
+        return;
+    };
     match connector.connect(&host, port).await {
         Err(f) => {
             let _ = client.write_all(&reply(f as u8)).await;
+            close_after_reply(client).await;
         }
         Ok(mut out) => {
             if client.write_all(&reply(0)).await.is_err() {
@@ -246,6 +250,17 @@ async fn serve(mut client: TcpStream, connector: &dyn SocksConnector) {
             let _ = tokio::io::copy_bidirectional(&mut client, &mut out).await;
         }
     }
+}
+
+/// Ends a refused exchange so the client still reads our reply: closing with unread request bytes makes Windows (and
+/// some stacks) reset the connection and discard the reply. Send FIN, then read what the client has left, briefly.
+async fn close_after_reply(mut client: TcpStream) {
+    let _ = client.shutdown().await;
+    let mut sink = [0u8; 512];
+    let _ = tokio::time::timeout(Duration::from_secs(1), async {
+        while matches!(client.read(&mut sink).await, Ok(n) if n > 0) {}
+    })
+    .await;
 }
 
 /// Greeting + request. Returns the destination, or `None` after answering with the right failure.
