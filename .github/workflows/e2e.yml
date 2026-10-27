@@ -1,0 +1,40 @@
+name: Tunnel e2e (real relay)
+# Full-tunnel check on a throwaway macOS runner: connect to a real relay from the bundled list, capture the default route
+# and DNS, then stop with INT, TERM and KILL and check that routes/DNS are restored. Never gates a merge: relays come and go.
+on:
+  schedule:
+    - cron: "43 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      relay:
+        description: "Optional relay ip (default: first relay of the bundled list that answers a probe)"
+        required: false
+        default: ""
+
+jobs:
+  e2e:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Build the Rust daemon
+        run: scripts/build.sh helper
+      - name: Pick a relay that answers
+        id: relay
+        env:
+          RELAY: ${{ inputs.relay }}
+        run: |
+          if [ -z "$RELAY" ]; then
+            RELAY=$(scripts/probe-sample.sh 15 | awk '/ ok$/ {split($1,a,":"); print a[1]; exit}')
+          fi
+          [ -n "$RELAY" ] || { echo "no relay answered a probe"; exit 1; }
+          echo "ip=$RELAY" >> "$GITHUB_OUTPUT"
+      - name: e2e (hard timeout and a route restore, so a hang cannot cut the runner off)
+        run: |
+          trap 'sudo build/bin/vpngate-helper --daemon --uid 0 >/dev/null 2>&1 & sleep 2; kill $! 2>/dev/null; true' EXIT
+          sudo timeout 600 scripts/e2e-tunnel.sh "${{ steps.relay.outputs.ip }}" 2>&1 | tee e2e-report.txt
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with: { name: e2e-report, path: e2e-report.txt }

@@ -78,7 +78,7 @@ pub fn client_environment() -> ClientEnvironment {
     }
 }
 
-type MakeTransport = Arc<dyn Fn(&ConnectConfig, u16) -> Arc<dyn VpnTransport> + Send + Sync>;
+pub type MakeTransport = Arc<dyn Fn(&ConnectConfig, u16) -> Arc<dyn VpnTransport> + Send + Sync>;
 
 /// The real SoftEther transport with this OS's platform backend (a placeholder where none exists yet).
 /// `unique_id_path` is where the per-install id lives; `stale` is where the backend writes its undo list.
@@ -92,7 +92,7 @@ pub fn default_dependencies(unique_id_path: &Path, stale: Arc<StaleState>) -> Se
 }
 
 #[cfg(target_os = "macos")]
-fn platform_dependencies(make_transport: MakeTransport, stale: Arc<StaleState>) -> SessionDependencies {
+pub fn platform_dependencies(make_transport: MakeTransport, stale: Arc<StaleState>) -> SessionDependencies {
     use std::net::{Ipv4Addr, SocketAddrV4};
 
     use vpngate_net::dns_server::{DnsProxyServer, SocketDnsUpstream};
@@ -134,7 +134,7 @@ fn platform_dependencies(make_transport: MakeTransport, stale: Arc<StaleState>) 
 }
 
 #[cfg(not(target_os = "macos"))]
-fn platform_dependencies(make_transport: MakeTransport, _stale: Arc<StaleState>) -> SessionDependencies {
+pub fn platform_dependencies(make_transport: MakeTransport, _stale: Arc<StaleState>) -> SessionDependencies {
     SessionDependencies {
         make_transport,
         make_tun: Arc::new(|| Err::<Arc<dyn TunDevice>, _>(PlatformError::new(MISSING))),
