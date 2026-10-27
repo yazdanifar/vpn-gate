@@ -154,6 +154,8 @@ async fn only_the_documentation_prefix_goes_through_the_tunnel() {
         network: FakeNetworkServer::new(),
         on_frame: Mutex::new(None),
         echo_requests: Mutex::new(0),
+        seen: Mutex::default(),
+        delivered: Mutex::new(0),
     });
     relay.network.configure(|c| c.dns.clear()); // no resolver change
     let transport = relay.clone();
