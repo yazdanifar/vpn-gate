@@ -739,7 +739,10 @@ impl Session {
             }
         })));
         let wb = Arc::downgrade(&bridge);
+        // The tun reader is a plain OS thread; the bridge and connection spawn Tokio tasks, so enter the runtime.
+        let runtime = tokio::runtime::Handle::current();
         tun.set_on_packet(Box::new(move |p| {
+            let _entered = runtime.enter();
             if let Some(b) = wb.upgrade() {
                 b.from_host(&p);
             }
