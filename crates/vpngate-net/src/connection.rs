@@ -1,5 +1,5 @@
 //! A logged-in SoftEther session: cluster redirects, the TCP pool with its additional connections, keep-alives and the
-//! frame send queue (the data-services half of `SoftEtherClient.swift`). UDP acceleration is U10b.
+//! frame send queue and UDP acceleration (the data-services half of `SoftEtherClient.swift`).
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -18,6 +18,8 @@ use crate::softether_client::{
     CLIENT_STR, CLIENT_VER,
 };
 use crate::stream::StreamError;
+use crate::udp_accel::{UdpAccel, UdpAccelConfig};
+use vpngate_core::validation;
 
 const MAX_REDIRECTS: u32 = 5;
 /// Frames waiting for the TCP pool; beyond this they are dropped like a full interface queue (~13 MB of frames).
@@ -61,6 +63,8 @@ struct Inner {
     on_close: CloseFn,
     replenish_interval: Duration,
     direct: bool,
+    /// The negotiated UDP acceleration channel, if any.
+    udp: Option<UdpAccel>,
 }
 
 /// Handle to an established session. Dropping it closes the session.
@@ -88,7 +92,18 @@ impl SoftEtherClient {
                 let c = self.config();
                 (c.host.clone(), c.port, c.auth.clone())
             };
-            match self.connect_once(&host, port, &auth, log, None).await? {
+            // The socket is bound while the login pack is built so its port can be advertised; an attempt that does
+            // not end in a session (redirect, error) drops it, which closes it.
+            let mut temp_udp: Option<UdpAccel> = None;
+            let mut prepare = |key: &[u8]| match UdpAccel::bind(key) {
+                Ok(u) => {
+                    let port = u.local_port();
+                    temp_udp = Some(u);
+                    port
+                }
+                Err(_) => 0,
+            };
+            match self.connect_once(&host, port, &auth, log, Some(&mut prepare)).await? {
                 ConnectOutcome::Redirect(r) => {
                     redirects += 1;
                     log(&format!("Cluster redirect ({redirects}/{MAX_REDIRECTS}) to {}:{}", r.host, r.port));
@@ -105,7 +120,16 @@ impl SoftEtherClient {
                     ));
                     let direct = self.config().proxy.kind == vpngate_core::ipc::ProxyKind::None;
                     let remote = stream.remote_ipv4();
-                    return Ok(SoftEtherConnection::start(self, welcome, stream, remote, direct, events, options));
+                    let udp = temp_udp.and_then(|u| activate_udp(u, &welcome, &host, log));
+                    return Ok(SoftEtherConnection::start(
+                        self,
+                        welcome,
+                        stream,
+                        Route { remote_ipv4: remote, direct },
+                        udp,
+                        events,
+                        options,
+                    ));
                 }
             }
         }
@@ -113,16 +137,23 @@ impl SoftEtherClient {
     }
 }
 
+/// How the TCP side reached the server: the peer address, and whether it was a direct connection (no proxy).
+struct Route {
+    remote_ipv4: Option<String>,
+    direct: bool,
+}
+
 impl SoftEtherConnection {
     fn start(
         client: SoftEtherClient,
         welcome: Welcome,
         stream: Box<dyn crate::stream::ByteStream>,
-        remote_ipv4: Option<String>,
-        direct: bool,
+        route: Route,
+        udp: Option<UdpAccel>,
         events: ConnectionEvents,
         options: ConnectOptions,
     ) -> Self {
+        let Route { remote_ipv4, direct } = route;
         let half = client.config().half_connection;
         let ConnectionEvents { on_frame, on_close } = events;
 
@@ -141,6 +172,9 @@ impl SoftEtherConnection {
                 i.bytes_out.fetch_add(b_out as u64, Ordering::Relaxed);
             }
         });
+        if let Some(udp) = &udp {
+            udp.set_callbacks(on_frame.clone(), on_byte_count.clone());
+        }
         let callbacks = PoolCallbacks { on_frame, on_close: on_pool_close, on_byte_count };
         let pool = ConnectionPool::new(callbacks);
 
@@ -154,6 +188,7 @@ impl SoftEtherConnection {
             on_close,
             replenish_interval: options.replenish_interval,
             direct,
+            udp: udp.clone(),
         });
         *slot.lock().expect("slot") = Arc::downgrade(&inner);
 
@@ -162,6 +197,9 @@ impl SoftEtherConnection {
         let direction = if half { SocketDirection::ClientToServer } else { SocketDirection::Both };
         pool.add(stream, welcome.use_compress, welcome.timeout_ms as u64, direction);
         inner.start_services();
+        if let Some(udp) = udp {
+            udp.start();
+        }
         SoftEtherConnection { inner }
     }
 
@@ -198,20 +236,52 @@ impl SoftEtherConnection {
     }
 
     /// Hosts that must stay reachable outside a full tunnel: the host the session really ended up on (after cluster
-    /// redirects; none when a proxy carries the TCP traffic). The UDP acceleration endpoint joins in U10b.
+    /// redirects; none when a proxy carries the TCP traffic) and the UDP acceleration endpoint.
     pub fn bypass_hosts(&self) -> Vec<String> {
-        if !self.inner.direct {
-            return Vec::new();
+        let mut out = Vec::new();
+        if self.inner.direct {
+            let ip = self.inner.shared().connected_ipv4.clone();
+            out.push(ip.unwrap_or_else(|| self.inner.client.lock().expect("client").config().host.clone()));
         }
-        let ip = self.inner.shared().connected_ipv4.clone();
-        let host = ip.unwrap_or_else(|| self.inner.client.lock().expect("client").config().host.clone());
-        vec![host]
+        if self.inner.udp.is_some() {
+            if let Some(ip) = &self.inner.welcome.udp_server_ip {
+                if !out.contains(ip) {
+                    out.push(ip.clone());
+                }
+            }
+        }
+        out
+    }
+
+    /// Whether the server negotiated UDP acceleration at all (v2 key and cookies accepted), regardless of whether the
+    /// path has proven stable yet.
+    pub fn udp_accel_negotiated(&self) -> bool {
+        self.inner.udp.is_some()
+    }
+
+    /// Whether frames are eligible to go over UDP right now (about 10 s of stable receive).
+    pub fn udp_accel_usable(&self) -> bool {
+        self.inner.udp.as_ref().is_some_and(UdpAccel::is_usable)
+    }
+
+    /// The local port of the UDP acceleration socket, 0 when there is none or it is closed.
+    pub fn udp_local_port(&self) -> u16 {
+        self.inner.udp.as_ref().map_or(0, UdpAccel::local_port)
     }
 
     /// Queues an Ethernet frame for the pool. Frames beyond [`MAX_PENDING_FRAMES`] are dropped.
     pub fn send_frame(&self, frame: Vec<u8>) {
         if frame.len() > MAX_BLOCK {
             return;
+        }
+        if self.inner.is_closed() {
+            return;
+        }
+        // UDP acceleration first when it is usable; otherwise (or if the send fails) the TCP pool.
+        if let Some(udp) = &self.inner.udp {
+            if udp.is_usable() && udp.send_frame(&frame) {
+                return;
+            }
         }
         let spawn = {
             let mut sh = self.inner.shared();
@@ -282,9 +352,44 @@ impl Inner {
             std::mem::take(&mut sh.tasks)
         };
         tasks.iter().for_each(JoinHandle::abort);
+        if let Some(udp) = &self.udp {
+            udp.stop();
+        }
         self.pool.close(error.clone());
         (self.on_close)(error);
     }
+}
+
+/// Starts the UDP channel advertised in the login pack from the welcome. Only the v2 key path is implemented and both
+/// cookies must be nonzero (Protocol.c:6177-6270); anything else leaves UDP off and TCP carries on.
+fn activate_udp(udp: UdpAccel, w: &Welcome, host: &str, log: &mut (dyn FnMut(&str) + Send)) -> Option<UdpAccel> {
+    if !w.use_udp_acceleration {
+        return None;
+    }
+    let secondary =
+        (validation::is_ipv4_literal(host) && !validation::is_non_public_ipv4(host)).then(|| host.to_string());
+    let config = (|| {
+        let key = w.udp_server_key.clone().or_else(|| w.udp_plaintext.then(Vec::new))?;
+        let (server_cookie, client_cookie) =
+            (w.udp_server_cookie.filter(|c| *c != 0)?, w.udp_client_cookie.filter(|c| *c != 0)?);
+        (w.udp_accel_version == 2).then_some(())?;
+        Some(UdpAccelConfig {
+            server_ip: w.udp_server_ip.clone()?,
+            server_port: w.udp_server_port?,
+            my_cookie: client_cookie,
+            your_cookie: server_cookie,
+            your_key_v2: key,
+            fast_disconnect: w.udp_fast_disconnect,
+            use_compress: w.use_compress,
+            plaintext: w.udp_plaintext,
+            secondary_ip: secondary,
+        })
+    })();
+    if config.is_some_and(|c| udp.configure(c)) {
+        return Some(udp);
+    }
+    log("UDP acceleration offered but unusable; using TCP only");
+    None
 }
 
 async fn flush(weak: Weak<Inner>) {

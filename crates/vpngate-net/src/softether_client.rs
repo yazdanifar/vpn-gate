@@ -77,6 +77,8 @@ pub struct Welcome {
     pub udp_client_cookie: Option<u32>,
     pub udp_server_key: Option<Vec<u8>>,
     pub udp_fast_disconnect: bool,
+    /// Only when the server says so explicitly (upstream PlainTextMode = !udp_acceleration_use_encryption).
+    pub udp_plaintext: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -597,6 +599,7 @@ pub fn parse_welcome(w: &Pack, host: &str, client_max_connections: usize) -> Res
         udp_client_cookie: w.int("udp_acceleration_client_cookie"),
         udp_server_key: w.data("udp_acceleration_server_key_v2").map(<[u8]>::to_vec),
         udp_fast_disconnect: flag("udp_accel_fast_disconnect_detect"),
+        udp_plaintext: w.int("udp_acceleration_use_encryption").is_some_and(|n| n == 0),
     })
 }
 

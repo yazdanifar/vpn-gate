@@ -11,4 +11,5 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+socket2 = "0.6.5"
 vpngate-core.workspace = true

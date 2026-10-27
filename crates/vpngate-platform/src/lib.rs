@@ -4,6 +4,7 @@
 //! recording fakes in `vpngate-testkit`, which record structured operations instead of command lines.
 
 use std::fmt;
+use std::io;
 use std::net::Ipv6Addr;
 
 use vpngate_core::routing_rule::{RoutingAction, RoutingConfig};
@@ -96,4 +97,25 @@ pub trait NetConfiguring: Send + Sync {
         Ok(())
     }
     fn teardown(&self);
+}
+
+/// Creates the sockets that must follow the tunnel without touching the system routes (SOCKS mode, the VPN's own
+/// DNS upstream): each one is pinned to the tunnel interface (`IP_BOUND_IF`, `SO_BINDTODEVICE`, a source-address
+/// bind on Windows). The caller connects it and hands it to its async runtime.
+pub trait SocketBinder: Send + Sync {
+    fn tcp_socket(&self) -> io::Result<socket2::Socket>;
+    fn udp_socket(&self) -> io::Result<socket2::Socket>;
+}
+
+/// Sockets that are not pinned to any interface: for tests on loopback and for backends that route by other means.
+pub struct UnboundSocketBinder;
+
+impl SocketBinder for UnboundSocketBinder {
+    fn tcp_socket(&self) -> io::Result<socket2::Socket> {
+        socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, Some(socket2::Protocol::TCP))
+    }
+
+    fn udp_socket(&self) -> io::Result<socket2::Socket> {
+        socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))
+    }
 }

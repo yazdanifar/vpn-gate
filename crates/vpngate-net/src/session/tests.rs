@@ -122,6 +122,7 @@ impl VpnTransport for FakeTransport {
             udp_client_cookie: None,
             udp_server_key: None,
             udp_fast_disconnect: false,
+            udp_plaintext: false,
         })
     }
 
