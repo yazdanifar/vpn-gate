@@ -10,6 +10,7 @@ use vpngate_core::ipc::HELPER_VERSION;
 use vpngate_core::validation;
 use vpngate_daemon::args::{self, Mode};
 use vpngate_daemon::backend;
+#[cfg(unix)]
 use vpngate_daemon::engine::Engine;
 use vpngate_daemon::{daemon, probe};
 use vpngate_net::session::{Session, SessionTiming};

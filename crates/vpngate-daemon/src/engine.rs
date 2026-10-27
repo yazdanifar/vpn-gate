@@ -210,5 +210,5 @@ pub fn validate_account(r: &HelperRequest) -> Result<ValidateResult, String> {
     Ok(ValidateResult { valid: error.is_none(), error })
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests;
