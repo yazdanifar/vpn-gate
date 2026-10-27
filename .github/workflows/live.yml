@@ -18,12 +18,16 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      - name: Build
-        run: scripts/build.sh all
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Build the Rust daemon
+        run: scripts/build.sh helper
       - name: Live tests (relays chosen from the bundled signed list unless overridden)
         env:
           VPNGATE_LIVE_RELAYS: ${{ inputs.relays }}
-        run: scripts/test.sh --live live/ 2>&1 | tee live-report.txt
+        run: |
+          set -o pipefail
+          cargo test --locked -p vpngate-daemon --test live -- --ignored --nocapture 2>&1 | tee live-report.txt
       - name: Probe sample of relays from the bundled list
         run: |
           set -o pipefail

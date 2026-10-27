@@ -873,3 +873,40 @@ async fn golden_bridge_transcripts_replay() {
         assert!(vpngate_testkit::golden::json_eq(&result, &c["result"]), "{name}: result {result} vs {}", c["result"]);
     }
 }
+
+// MARK: Fuzz (port of `fuzz/bridge-survives-random-frames`)
+
+mod fuzz {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(300))]
+
+        #[test]
+        fn bridge_survives_random_frames(
+            frames in proptest::collection::vec(
+                (proptest::collection::vec(any::<u8>(), 0..120), 0usize..4, proptest::collection::vec(any::<u8>(), 0..80)),
+                1..40,
+            ),
+        ) {
+            let rt = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
+            rt.block_on(async {
+                let net = Arc::new(FakeNetworkServer::new());
+                let b = make_bridge(&net, 0.5, 1);
+                b.acquire_lease().await.unwrap();
+                b.set_deliver_ipv4(|_| {});
+                b.set_send_frame(|_| {});
+                for (mut f, kind, host) in frames {
+                    if kind < 3 && f.len() >= 14 {
+                        f[12] = [0x08, 0x08, 0x86][kind];
+                        f[13] = [0x00, 0x06, 0xDD][kind];
+                    }
+                    b.from_hub(&f);
+                    b.from_host(&host);
+                }
+            });
+        }
+    }
+}
