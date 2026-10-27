@@ -1,5 +1,4 @@
 import SwiftUI
-import VPNGateCore
 
 /// Past connections (kept locally in connection_history.json, newest first, at most 100).
 struct HistoryView: View {

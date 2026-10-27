@@ -1,7 +1,6 @@
 import CryptoKit
 import Foundation
 import Security
-import VPNGateCore
 
 // App-side behaviour: disclaimer gate, telemetry opt-in, account editing/storage, certificate import,
 // connection history, launch at login, IPC field validation. Everything is isolated: throwaway UserDefaults suites,
@@ -29,7 +28,7 @@ private struct LoginError: LocalizedError { var errorDescription: String? { "boo
 private func sockPath() -> String { tempPath("fix-\(UUID().uuidString.prefix(6)).sock") }
 
 private func server(ip: String = "5.6.7.8") -> VPNServer {
-    ServerList.parse("#h\nvpn1,\(ip),1,1,1,Japan,JP,1,1,1,1,2weeks,Op,msg,\(Data("proto tcp\nremote \(ip) 443\n".utf8).base64EncodedString())\n")[0]
+    parsedServer(ip: ip)
 }
 
 @MainActor private func makeModel(
@@ -43,11 +42,11 @@ private func server(ip: String = "5.6.7.8") -> VPNServer {
         connectionLog: ConnectionLogStore(fileURL: URL(fileURLWithPath: tempPath("hist-\(UUID().uuidString.prefix(6)).json"))))
 }
 
-private func startHelper(_ path: String) -> (IPCServer, FakeSession) {
-    let fake = FakeSession()
+private func startHelper(_ path: String) -> (FakeHelperServer, FakeHelperSession) {
+    let fake = FakeHelperSession()
     var snap = HelperEvent(state: .disconnected); snap.helperVersion = helperVersion
     fake.snapshot = snap
-    let srv = IPCServer(path: path, allowedUID: getuid(), session: fake)
+    let srv = FakeHelperServer(path: path, session: fake)
     try! srv.start()
     return (srv, fake)
 }
@@ -126,9 +125,8 @@ func registerAppFixTests() {
     }
     test("telemetry/settings-list-matches-the-real-payload") {
         let desc = VGStatistics.payloadDescription
-        let pack = VGStatistics.makeTelemetryPack(hostKey: "x")
         expectEqual(desc.count, 6)
-        expect(desc.contains("ClientOsName: \(pack.str("ClientOsName") ?? "?")"))
+        expect(desc.contains("ClientOsName: macOS"))
         expect(desc.contains("IsClient: 1"))
     }
 
@@ -346,9 +344,7 @@ func registerAppFixTests() {
         expectEqual(id8.privateKeyDer, pkcs1, "PKCS#8 must be unwrapped to PKCS#1")
         let raw = try CertImport.identity(certificateFile: id.certDer, keyFile: pkcs1)  // raw DER files
         expectEqual(raw, id)
-        // the helper signs with exactly this blob
-        let sig = try CertAuth.sign(Data(repeating: 7, count: 20), privateKeyDer: id.privateKeyDer)
-        expectEqual(sig.count, 256)
+        // the daemon signs with exactly this blob (its own tests cover the signature)
     }
     test("cert/bad-material-gives-clear-errors") {
         let cert = Data(CertFixtures.certPEM.utf8)
@@ -492,20 +488,5 @@ func registerAppFixTests() {
         await MainActor.run { m.launchAtLogin = false }
         let (still, notice) = await MainActor.run { (m.launchAtLogin, m.notice) }
         expect(still, "still registered, so the toggle must stay on"); expect(notice?.contains("boom") == true)
-    }
-
-    // MARK: IPC field validation
-    test("ipc/validate-caps-hub-and-user-names") {
-        func req(hub: String = "HUB", user: String = "u") -> HelperRequest {
-            var r = HelperRequest(cmd: "connect")
-            r.config = ConnectConfig(host: "1.2.3.4", hubName: hub, userName: user)
-            return r
-        }
-        expect(IPCServer.validate(req()) == nil)
-        expect(IPCServer.validate(req(hub: String(repeating: "h", count: 255))) == nil)
-        expect(IPCServer.validate(req(hub: String(repeating: "h", count: 256))) != nil, "hub over 255 bytes")
-        expect(IPCServer.validate(req(user: String(repeating: "é", count: 128))) != nil, "255-byte limit counts bytes, not characters")
-        expect(IPCServer.validate(req(user: "a\0b")) != nil, "NUL in the user name")
-        expect(IPCServer.validate(req(hub: "a\0b")) != nil, "NUL in the hub name")
     }
 }

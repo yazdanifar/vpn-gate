@@ -39,3 +39,11 @@ memory safety, the existing input validation and fuzz tests (U15).
   with its own minimal HTTP/1.0 client instead of `reqwest`: no new dependency, no chunked bodies, and `https://` goes through
   the existing rustls stack with system trust. The cache is `--cache` (default per OS, `backend::default_cache_path`), the
   shipped fallback is `--bundle`.
+- **U14, the Swift app mirrors the JSON instead of sharing code (2026-10-27).** `Sources/VPNGateMac/Model` carries its own
+  Codable copies of the daemon's types (copied from `VPNGateCore`, minus the matching/parsing logic) and does not import the
+  engine; golden-vector tests in `Tests/App/MirrorTests.swift` keep them honest. Rejected: keeping `VPNGateCore` linked into
+  the app (U15 deletes it) and generating the Swift types from the Rust ones (a codegen step for ~10 structs).
+- **U14, two Swift test binaries (2026-10-27).** The app tests compile `Model/` without `VPNGateCore`, because the mirrored
+  names would otherwise shadow the engine's; the engine/helper tests stay in the old binary until U15. The app tests talk to a
+  scripted `FakeHelperServer` that speaks the daemon's JSON, not to a real daemon.
+

@@ -6,8 +6,6 @@ setvbuf(stdout, nil, _IOLBF, 0)
 // Never touch the user's real app data: point file storage and the Keychain at throwaway locations.
 let testSupportDir = FileManager.default.temporaryDirectory.appendingPathComponent("vpngate-appdata-\(getpid())", isDirectory: true)
 let testKeychainService = "com.yazdanifar.VPNGateMac.tests"
-AppPaths.supportDirectory = testSupportDir
-Keychain.service = testKeychainService
 func cleanUpTestData() {
     try? FileManager.default.removeItem(at: testSupportDir)
     try? FileManager.default.removeItem(atPath: NSTemporaryDirectory() + "vpngate-tests-\(getpid())")  // Fakes.swift tmp dir
@@ -16,12 +14,12 @@ func cleanUpTestData() {
 }
 atexit { cleanUpTestData() }
 let allRegistrars: [() -> Void] = [
-    registerPackTests, registerPacketTests, registerServerListTests, registerVGDatTests, registerAccountTests, registerTelemetryTests, registerIPv6Tests,
+    registerPackTests, registerPacketTests, registerServerListTests, registerVGDatTests, registerAccountTests, registerIPv6Tests,
     registerDataPhaseTests,
     registerValidationTests, registerBridgeTests, registerBridgeIPv6Tests, registerHandshakeTests, registerProtocolFixTests, registerSessionTests,
     registerSocksTests,
-    registerNetConfigTests, registerIPCTests, registerDaemonTests, registerFuzzTests, registerSystemTests, registerPackagingTests, registerAppModelTests,
-    registerAppFixTests, registerLoginParityTests, registerTLSPinTests, registerParityTests, registerProbeTests, registerLiveTests,
+    registerNetConfigTests, registerIPCTests, registerDaemonTests, registerFuzzTests, registerSystemTests,
+    registerLoginParityTests, registerTLSPinTests, registerParityTests, registerProbeTests, registerLiveTests,
     registerRoutingRuleTests, registerDNSProxyTests, registerGoldenTests,
 ]
 allRegistrars.forEach { $0() }

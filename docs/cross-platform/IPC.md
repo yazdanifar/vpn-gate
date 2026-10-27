@@ -103,4 +103,4 @@ hello on `port`; `connectMs` is TCP+TLS, `helloMs` the whole test. Without `port
 - Secrets (`password`, `certDer`, `privateKeyDer`, `ticket`) live only in `connect`'s `config`; the daemon never logs them.
 
 Implementations: Rust `vpngate-ipc-client::IpcClient` (with the scriptable `vpngate_testkit::fake_daemon::FakeDaemon`);
-Swift `HelperClient` (gains the v9 calls in U14); C# and Kotlin clients follow in U17/U26.
+Swift `HelperClient` (U14); C# and Kotlin clients follow in U17/U26.

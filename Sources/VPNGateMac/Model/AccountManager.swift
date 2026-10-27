@@ -1,5 +1,4 @@
 import Foundation
-import VPNGateCore
 
 /// Manages persistence and secrets for custom SoftEther VPN Client Accounts.
 /// Reference: SoftEther VPN Client Manager account list and settings storage.

@@ -1,10 +1,11 @@
 import AppKit
 import Foundation
-import VPNGateCore
 
 enum HelperInstaller {
     static let label = "com.yazdanifar.vpngate.helper"
     static let installedPath = "/Library/PrivilegedHelperTools/vpngate-helper"
+    /// The shipped server list inside the installed app: the daemon's last fallback (`--bundle` in the LaunchDaemon plist).
+    static let bundledDatPath = "/Applications/VPN Gate.app/Contents/Resources/VPNGate.dat"
     static let plistPath = "/Library/LaunchDaemons/\(label).plist"
 
     /// The helper installer shipped inside the app (`scripts/build-pkg.sh`); nil when running a development build.

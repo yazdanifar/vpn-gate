@@ -1,6 +1,5 @@
 import Darwin
 import Foundation
-import VPNGateCore
 
 /// Talks to the privileged helper over its Unix socket.
 final class HelperClient {
@@ -11,6 +10,10 @@ final class HelperClient {
     private let lock = NSLock()
     var onEvent: ((HelperEvent) -> Void)?
     var onDisconnect: (() -> Void)?
+
+    /// Open v9 requests by id; failed all at once when the socket drops.
+    private var pending: [Int: CheckedContinuation<HelperReply, Error>] = [:]
+    private var nextID = 1
 
     var isConnected: Bool { lock.lock(); defer { lock.unlock() }; return fd >= 0 }
 
@@ -42,18 +45,83 @@ final class HelperClient {
             while let nl = buf.firstIndex(of: 10) {
                 let line = buf[buf.startIndex..<nl]
                 buf = Data(buf[buf.index(after: nl)...])
-                if let e = try? JSONDecoder().decode(HelperEvent.self, from: line) { onEvent?(e) }
+                // Replies have `reply`, events have `state`; a line is only ever one of them.
+                if let r = try? JSONDecoder().decode(HelperReply.self, from: line) {
+                    lock.lock(); let waiter = r.id.flatMap { pending.removeValue(forKey: $0) }; lock.unlock()
+                    waiter?.resume(returning: r)
+                } else if let e = try? JSONDecoder().decode(HelperEvent.self, from: line) {
+                    onEvent?(e)
+                }
             }
         }
-        lock.lock(); if fd == s { fd = -1 }; lock.unlock()
+        lock.lock()
+        if fd == s { fd = -1 }
+        let waiting = pending; pending = [:]
+        lock.unlock()
         Darwin.close(s)
+        for w in waiting.values { w.resume(throwing: HelperRequestError.disconnected) }
         onDisconnect?()
     }
 
-    func send(_ req: HelperRequest) {
-        guard connect(), var d = try? JSONEncoder().encode(req) else { return }
+    func send(_ req: HelperRequest) { _ = write(req) }
+
+    @discardableResult
+    private func write(_ req: HelperRequest) -> Bool {
+        guard connect(), var d = try? JSONEncoder().encode(req) else { return false }
         d.append(10)
         lock.lock(); let s = fd; lock.unlock()
-        _ = d.withUnsafeBytes { write(s, $0.baseAddress, d.count) }
+        return d.withUnsafeBytes { Darwin.write(s, $0.baseAddress, d.count) } == d.count
+    }
+
+    /// Sends a v9 request and waits for the reply with the same `id`. Throws `.failed` for `ok:false`, `.timeout` when the
+    /// daemon stays silent, `.disconnected` when the socket drops first.
+    func request(_ req: HelperRequest, timeout: TimeInterval = 90) async throws -> HelperReply {
+        var req = req
+        let id = takeID()
+        req.id = id
+        let reply: HelperReply = try await withCheckedThrowingContinuation { cont in
+            lock.lock(); pending[id] = cont; lock.unlock()
+            if !write(req) {
+                lock.lock(); let c = pending.removeValue(forKey: id); lock.unlock()
+                c?.resume(throwing: HelperRequestError.disconnected)
+                return
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [weak self] in
+                guard let self else { return }
+                self.lock.lock(); let c = self.pending.removeValue(forKey: id); self.lock.unlock()
+                c?.resume(throwing: HelperRequestError.timeout)
+            }
+        }
+        guard reply.ok else { throw HelperRequestError.failed(reply.error ?? "The helper refused the request") }
+        return reply
+    }
+
+    private func takeID() -> Int { lock.lock(); defer { lock.unlock() }; nextID += 1; return nextID - 1 }
+
+    func listServers() async throws -> ServerListResult {
+        try await request(HelperRequest(cmd: "listServers"), timeout: 30).decode(ServerListResult.self)
+    }
+
+    func refreshServers(proxy: ProxySettings, mirror: String?) async throws -> ServerListResult {
+        var r = HelperRequest(cmd: "refreshServers")
+        r.proxy = proxy
+        if let mirror, !mirror.isEmpty { r.mirror = mirror }
+        return try await request(r, timeout: 180).decode(ServerListResult.self)
+    }
+
+    func probe(_ targets: [ProbeTarget], proxy: ProxySettings, timeout: TimeInterval = 5) async throws -> [ProbeEntry] {
+        var r = HelperRequest(cmd: "probe")
+        r.targets = targets; r.proxy = proxy; r.timeout = timeout
+        // 8 relays at a time, so a full batch of 200 needs up to 25 rounds of the per-relay timeout.
+        let budget = Double((targets.count + 7) / 8) * timeout * 3 + 30
+        return try await request(r, timeout: budget).decode(ProbeResultList.self).results
+    }
+
+    func validateAccount(_ account: ClientAccount) async throws -> String? {
+        var r = HelperRequest(cmd: "validateAccount")
+        r.account = account
+        struct V: Decodable { var valid: Bool; var error: String? }
+        let v = try await request(r, timeout: 15).decode(V.self)
+        return v.valid ? nil : (v.error ?? "Invalid account")
     }
 }

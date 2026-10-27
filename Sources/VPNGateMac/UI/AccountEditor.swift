@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import VPNGateCore
 
 struct AccountEditor: View {
     @Environment(\.dismiss) private var dismiss
