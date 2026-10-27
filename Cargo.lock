@@ -1231,6 +1231,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "vpngate-core",
+ "vpngate-platform",
  "vpngate-testkit",
 ]
 
@@ -1247,6 +1248,8 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "serde_json",
+ "vpngate-core",
+ "vpngate-platform",
 ]
 
 [[package]]

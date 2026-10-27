@@ -10,6 +10,7 @@ pub mod ethernet_bridge;
 pub mod host_unique_id;
 pub mod probe;
 pub mod proxy;
+pub mod session;
 pub mod softether_client;
 pub mod stream;
 #[cfg(any(test, feature = "testing"))]
