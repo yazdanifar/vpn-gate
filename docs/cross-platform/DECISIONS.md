@@ -46,4 +46,6 @@ memory safety, the existing input validation and fuzz tests (U15).
 - **U14, two Swift test binaries (2026-10-27).** The app tests compile `Model/` without `VPNGateCore`, because the mirrored
   names would otherwise shadow the engine's; the engine/helper tests stay in the old binary until U15. The app tests talk to a
   scripted `FakeHelperServer` that speaks the daemon's JSON, not to a real daemon.
+- **U15b, golden vectors become frozen fixtures (2026-10-27).** With the Swift engine deleted nothing regenerates `Tests/Fixtures/golden`; they stay as the reference contract for Rust, the app mirrors, and the ports in U18-U28. Rejected: porting the exporter to Rust (it would test Rust against itself).
+- **U15b, release (2026-10-27).** `VERSION` is 2.0.0 and the changelog has the 2.0.0 section; the `v2.0.0` tag (which triggers the Release workflow) is left to the user.
 

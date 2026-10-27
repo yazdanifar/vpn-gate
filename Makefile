@@ -1,6 +1,6 @@
 # Thin wrapper over scripts/. The scripts are the source of truth.
 .DEFAULT_GOAL := help
-.PHONY: lint format help build app pkg test test-each test-tsan test-asan coverage clean rust-test rust-lint rust-coverage rust-live
+.PHONY: lint format help build app pkg test test-each test-tsan test-asan clean rust-test rust-lint rust-coverage rust-live
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -19,8 +19,6 @@ test-tsan: ## Suite under ThreadSanitizer
 	scripts/test.sh --tsan
 test-asan: ## Suite under AddressSanitizer
 	scripts/test.sh --asan
-coverage: ## llvm-cov report with thresholds
-	scripts/coverage.sh
 clean: ## Remove build output
 	rm -rf build .build
 

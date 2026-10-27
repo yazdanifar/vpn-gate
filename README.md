@@ -50,16 +50,18 @@ Foreground tunnel for debugging: `sudo build/bin/vpngate-helper --connect <ip> [
 
 ## Tests
 ```
-scripts/test.sh                  # 431 tests, no network or root, ~100 s
+cargo test --workspace           # engine + daemon (Rust): no network or root
+scripts/test.sh                  # macOS app tests (Swift), no network or root
 scripts/test.sh --each           # every test in its own process (crashes are reported per test)
-scripts/test.sh --tsan | --asan  # same suite under ThreadSanitizer / AddressSanitizer
-scripts/test.sh --live live/     # real VPN Gate servers: list download + handshake + DHCP
-scripts/coverage.sh              # llvm-cov report; fails below 90% (core) / 80% (key helper files)
+scripts/test.sh --tsan | --asan  # app tests under ThreadSanitizer / AddressSanitizer
+cargo test -p vpngate-daemon --test live -- --ignored   # real VPN Gate servers (network)
+scripts/coverage-rs.sh           # cargo-llvm-cov; fails below 90% (core) / 80% (engine files)
+sudo -E cargo test -p vpngate-daemon --test tunnel_hermetic -- --ignored   # real utun + routes vs a fake relay
 sudo scripts/e2e-tunnel.sh <ip>  # real tunnel: traffic, DNS, IPv6 block, SIGINT/SIGTERM/kill -9 cleanup
 ```
-The suite uses an in-memory SoftEther server (real wire format), a fake hub that answers DHCP/ARP, and
+The Rust suite uses an in-memory SoftEther server (real wire format), a fake hub that answers DHCP/ARP, and
 recording doubles for `route`/DNS/utun, so the session, bridge, network configuration and IPC are tested
-without privileges. Fuzz tests are seeded (`FUZZ_SEED`, `FUZZ_ITERATIONS`).
+without privileges. Fuzz tests are property tests (`PROPTEST_CASES`).
 
 ## Notes / Security
 - If the helper crashes, stale routes/DNS are cleaned on its next start (only routes it added).

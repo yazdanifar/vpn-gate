@@ -21,6 +21,7 @@ build_helper() {
   for arch in "${ARCHS[@]}"; do
     local triple; triple=$(rust_triple "$arch")
     rustup target add "$triple" >/dev/null 2>&1 || true
+    rustup target list --installed 2>/dev/null | grep -qx "$triple" || { echo "error: Rust target $triple is not installed (rustup target add $triple); for a host-only build run: ARCHS=$(uname -m | sed s/aarch64/arm64/) $0 $what" >&2; exit 1; }
     cargo build --release --locked -p vpngate-daemon --target "$triple"
     slices+=("target/$triple/release/vpngate-daemon")
   done

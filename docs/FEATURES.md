@@ -57,7 +57,7 @@
   drop), per-block zlib compression, cluster redirects, UDP acceleration v2 (opportunistic, TCP fallback if UDP is not
   stable for 10 s; honours the compress flag; no NAT traversal, so only servers given as an IPv4 address, host-name
   servers use TCP only).
-- Universal binary (arm64 + x86_64), privileged helper LaunchDaemon (`vpngate-helper`, IPC version 8), menu-bar extra.
+- Universal binary (arm64 + x86_64), privileged helper LaunchDaemon (`vpngate-helper`, the Rust daemon; IPC version 9), menu-bar extra.
 
 ### SOCKS5 proxy mode
 Settings → General → Mode lets you use the VPN as a **SOCKS5 proxy only** instead of a full tunnel. The system's default
@@ -105,7 +105,7 @@ in-memory fakes and loopback sockets: a fake SoftEther server (real wire format)
 doubles for `route`/DNS/utun, fake relay streams and a fake HTTP client for the list sync (the default HTTP client is
 exercised only against a loopback server), a fake helper behind the real IPC socket, and a loopback TLS server for
 certificate pinning. Whether the real list API answers a request without `X-Transaction`, and whether every relay
-accepts a client without the "knock" below, are therefore open. The opt-in live checks (`--live`, `--probe`,
+accepts a client without the "knock" below, are therefore open. The opt-in live checks (`make rust-live`, `--probe`,
 `scripts/e2e-tunnel.sh`) need network access and are not part of the normal test run. One earlier end-to-end log shows
 a connection to a build-9729 relay without the knock; that is one data point, not proof for all relays.
 

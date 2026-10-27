@@ -2,6 +2,17 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+
+## [2.0.0] - 2026-10-27
+The engine and the privileged daemon are now Rust; the macOS app is a thin Swift client that talks to the daemon over IPC v9.
+The macOS behaviour is unchanged (verified by `scripts/e2e-tunnel.sh`: traffic, DNS, IPv6 block, SIGINT/SIGTERM/kill -9 cleanup).
+### Removed
+- `Sources/VPNGateCore` and `Sources/vpngate-helper` (the Swift engine and daemon) and the Swift tests the Rust tests replace
+  (`Tests/Unit`, `Behaviour`, `Fuzz`, `Live`, `Golden`), `scripts/gen-golden.sh` and `scripts/coverage.sh`. The golden vectors in
+  `Tests/Fixtures/golden` stay as fixed reference data. `Package.swift` now has the app target only.
+### Changed
+- `scripts/test.sh` runs the app tests only; engine tests are `cargo test --workspace`, coverage is `scripts/coverage-rs.sh`.
+- `scripts/build.sh` fails with a clear message when a Rust target is missing instead of hiding the rustup error.
 ### Fixed
 - Rust daemon: the tun reader thread panicked ("no reactor running") on the first outgoing packet, so a connected tunnel carried no traffic. Packets are now handed to the engine inside the Tokio runtime.
 
