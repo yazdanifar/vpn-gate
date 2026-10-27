@@ -28,6 +28,9 @@ struct EchoRelay {
     network: FakeNetworkServer,
     on_frame: Mutex<Option<FrameFn>>,
     echo_requests: Mutex<usize>,
+    /// One line per frame the client sent: ethertype, and for IPv4 the protocol and destination.
+    seen: Mutex<Vec<String>>,
+    delivered: Mutex<usize>,
 }
 
 impl EchoRelay {
@@ -84,11 +87,19 @@ impl VpnTransport for EchoRelay {
         })
     }
     fn send_frame(&self, frame: Vec<u8>) {
+        let summary = match frame.get(12..14) {
+            Some([0x08, 0x00]) => ipv4_parse(&frame[14..])
+                .map_or("ipv4 unparsable".into(), |ip| format!("ipv4 proto {} dst {:08x}", ip.proto, ip.dst)),
+            Some(t) => format!("ethertype {:02x}{:02x}", t[0], t[1]),
+            None => "runt".into(),
+        };
+        self.seen.lock().unwrap().push(summary);
         let mut replies = self.network.handle(&frame);
         if let Some(r) = self.echo_reply(&frame) {
             *self.echo_requests.lock().unwrap() += 1;
             replies.push(r);
         }
+        *self.delivered.lock().unwrap() += replies.len();
         if let Some(f) = self.on_frame.lock().unwrap().clone() {
             replies.into_iter().for_each(|r| f(r));
         }
@@ -182,6 +193,10 @@ async fn only_the_documentation_prefix_goes_through_the_tunnel() {
 
     let ping = sh("ping", &["-c", "3", "-t", "6", "192.0.2.7"]);
     println!("{ping}");
+    println!("frames the relay saw: {:?}", relay.seen.lock().unwrap());
+    println!("frames the relay answered with: {}", relay.delivered.lock().unwrap());
+    println!("{}", sh("netstat", &["-I", &iface, "-b"]));
+    println!("{}", sh("ifconfig", &[&iface]));
     assert!(
         ping.contains("3 packets received")
             || ping.contains("2 packets received")
