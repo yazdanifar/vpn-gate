@@ -6,6 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
 - Rust daemon: the tun reader thread panicked ("no reactor running") on the first outgoing packet, so a connected tunnel carried no traffic. Packets are now handed to the engine inside the Tokio runtime.
 
 ### Added
+- U15a.2: `vpngate-daemon/tests/tunnel_hermetic.rs` drives the real macOS utun, routes and net config through the real `Session` against an in-process fake relay (only 192.0.2.0/24 is routed, no DNS or default-route change; needs root, `#[ignore]`); the macOS CI leg runs it with sudo. New `e2e.yml` workflow (weekly/manual, non-gating) runs `scripts/e2e-tunnel.sh` against a probed real relay on a runner.
 - U15a: Rust property tests (`proptest`, port of the Swift fuzz suite) for pack, data phase, packet parsers, server list,
   validation and the bridge; ignored live-relay tests (`cargo test -p vpngate-daemon --test live -- --ignored`);
   `scripts/coverage-rs.sh` (cargo-llvm-cov, same thresholds as the Swift script) and a `coverage` CI job. `live.yml` now runs
