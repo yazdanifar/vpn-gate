@@ -3,6 +3,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
 
 ## [Unreleased]
 ### Added
+- U15a: Rust property tests (`proptest`, port of the Swift fuzz suite) for pack, data phase, packet parsers, server list,
+  validation and the bridge; ignored live-relay tests (`cargo test -p vpngate-daemon --test live -- --ignored`);
+  `scripts/coverage-rs.sh` (cargo-llvm-cov, same thresholds as the Swift script) and a `coverage` CI job. `live.yml` now runs
+  the Rust live tests and `gen-watermark.sh` emits `crates/vpngate-net/src/watermark.rs`.
 - Golden vectors (`Tests/Fixtures/golden/*.json`, `scripts/gen-golden.sh`): Swift-exported input/output pairs for the pure
   codecs, which the cross-platform ports must reproduce byte for byte; a test fails when they go stale.
 - `Live relay checks` workflow (weekly + manual) and `scripts/probe-sample.sh`: real-relay handshake/DHCP/list-sync

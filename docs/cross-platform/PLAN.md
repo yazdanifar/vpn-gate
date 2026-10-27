@@ -197,7 +197,8 @@ Phase 1 units only depend on U02, so they can run in any order.
   - Adapt AppModelTests and PackagingTests.
   - `build.sh` runs `cargo build` for `{aarch64,x86_64}-apple-darwin`, then `lipo`. `build-pkg.sh` ships the result as
     `vpngate-helper`, so the plist and the pkg scripts stay unchanged.
-- **U15 macOS parity + Swift deletion.**
+- **U15a macOS parity: Rust tests + CI (offline).** Fuzz (proptest), live tests, `cargo-llvm-cov` thresholds, `live.yml`, `probe-sample.sh`, `gen-watermark.sh`.
+- **U15b Swift deletion + 2.0.0** (after the user ran the live commands below). Remaining items of the old U15:
   - Port the Fuzz tests (seeded proptest) and the Live tests.
   - Add `cargo-llvm-cov` thresholds equal to today's (≥90% core, ≥80% client, bridge, session, netconfig and ipc).
   - Point `live.yml` and `probe-sample.sh` at the Rust daemon, and make `gen-watermark.sh` emit Rust.
