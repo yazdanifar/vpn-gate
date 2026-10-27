@@ -2,6 +2,9 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+### Fixed
+- Rust daemon: the tun reader thread panicked ("no reactor running") on the first outgoing packet, so a connected tunnel carried no traffic. Packets are now handed to the engine inside the Tokio runtime.
+
 ### Added
 - U15a: Rust property tests (`proptest`, port of the Swift fuzz suite) for pack, data phase, packet parsers, server list,
   validation and the bridge; ignored live-relay tests (`cargo test -p vpngate-daemon --test live -- --ignored`);

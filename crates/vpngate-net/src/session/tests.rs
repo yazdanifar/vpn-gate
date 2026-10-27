@@ -802,6 +802,18 @@ session_test!(traffic_flows_both_ways_through_the_bridge, async {
     s.disconnect();
 });
 
+session_test!(packets_read_on_a_plain_os_thread_still_reach_the_hub, async {
+    // The real tun reader is a plain OS thread with no Tokio context (regression: "there is no reactor running").
+    let h = Harness::new();
+    let (s, r) = h.session();
+    s.connect(simple("1.2.3.4", None, false, true));
+    r.wait_connected().await;
+    let tun = h.tuns()[0].clone();
+    std::thread::spawn(move || tun.inject(host_packet(0x0808_0808))).join().unwrap();
+    assert!(eventually(5.0, || h.network.ipv4_packets().len() == 1).await, "packet not forwarded to the hub");
+    s.disconnect();
+});
+
 session_test!(socks_mode_starts_the_proxy_and_leaves_the_system_alone, async {
     let h = Harness::new();
     let (s, r) = h.session();
