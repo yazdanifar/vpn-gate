@@ -94,14 +94,19 @@ impl VpnTransport for EchoRelay {
             None => "runt".into(),
         };
         self.seen.lock().unwrap().push(summary);
-        let mut replies = self.network.handle(&frame);
-        if let Some(r) = self.echo_reply(&frame) {
+        let replies = self.network.handle(&frame);
+        let echo = self.echo_reply(&frame);
+        *self.delivered.lock().unwrap() += replies.len() + usize::from(echo.is_some());
+        let on_frame = self.on_frame.lock().unwrap().clone();
+        let Some(f) = on_frame else { return };
+        replies.into_iter().for_each(|r| f(r));
+        if let Some(r) = echo {
+            // A real relay answers from its own thread, never from inside the bridge's send path.
             *self.echo_requests.lock().unwrap() += 1;
-            replies.push(r);
-        }
-        *self.delivered.lock().unwrap() += replies.len();
-        if let Some(f) = self.on_frame.lock().unwrap().clone() {
-            replies.into_iter().for_each(|r| f(r));
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(20));
+                f(r);
+            });
         }
     }
     fn close(&self, _error: Option<StreamError>) {}
