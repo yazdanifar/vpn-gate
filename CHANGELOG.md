@@ -2,6 +2,8 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+### Fixed
+- `HelperClient` is marked `@unchecked Sendable` (its state is lock-guarded), which removes the Swift concurrency warning printed on every app build.
 
 ## [2.0.0] - 2026-10-27
 The engine and the privileged daemon are now Rust; the macOS app is a thin Swift client that talks to the daemon over IPC v9.

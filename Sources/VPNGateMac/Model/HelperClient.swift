@@ -1,8 +1,9 @@
 import Darwin
 import Foundation
 
-/// Talks to the privileged helper over its Unix socket.
-final class HelperClient {
+/// Talks to the privileged helper over its Unix socket. Mutable state (`fd`, `pending`, `nextID`) is guarded by `lock`;
+/// the two callbacks are set before `connect()` and only read afterwards.
+final class HelperClient: @unchecked Sendable {
     private var fd: Int32 = -1
     private let path: String
 
