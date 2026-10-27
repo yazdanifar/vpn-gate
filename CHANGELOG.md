@@ -18,6 +18,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
 - `vpngate-core`: Rust ports of ServerList (CSV parse, ports, list text), ServerFilter, RoutingRule/RoutingMatcher, ClientAccount and the IPC messages (serde, same JSON and missing-field defaults as the Swift Codable output), passing the golden vectors. No behaviour change.
 - `vpngate-net`: Rust `ByteStream` trait, `TlsStream` (rustls; accept-any, leaf pin and platform-verifier modes; SNI; remote IPv4), HTTP CONNECT and SOCKS5 client dialers, and `ServerProbe`, tested against a loopback rcgen TLS server. No behaviour change.
 - `vpngate-net`: Rust SoftEther handshake and login (`SoftEtherClient::connect_once`: watermark/plain signature, anonymous, password, certificate and ticket auth, welcome and redirect validation), `HostUniqueId`, certificate signing, an in-memory `FakeSoftEtherServer` (`testing` feature), replaying the 10 golden login transcripts byte for byte. No behaviour change.
+- `vpngate-net`: Rust `SoftEtherClient::connect` (up to 5 cluster redirects), `ConnectionPool` (least-loaded sends, half-connection directions, idle-read watchdog) and the session services: additional connections with replenish/backoff, keep-alives, capped send queue; `FakeSoftEtherServer` now speaks additional_connect and the data phase. UDP acceleration stays for U10b. No behaviour change.
 
 ### Fixed
 - CI: run on `macos-15` (Swift 6 toolchain; `macos-14` has 5.10, which rejects `swift-tools-version:6.0`), and split

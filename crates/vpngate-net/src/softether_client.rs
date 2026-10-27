@@ -1,8 +1,8 @@
 //! SoftEther SSL-VPN client handshake: signature upload, login (anonymous, password, certificate, ticket) and welcome
 //! validation. Protocol reference: SoftEtherVPN src/Cedar/Protocol.c.
 //!
-//! This is the connection-level half of `SoftEtherClient.swift`. Cluster-redirect following, the connection pool,
-//! keep-alives and UDP acceleration build on [`SoftEtherClient::connect_once`] in later units.
+//! This is the connection-level half of `SoftEtherClient.swift`: one attempt per [`SoftEtherClient::connect_once`].
+//! Redirect following, the connection pool and keep-alives are in `connection`; UDP acceleration comes in U10b.
 
 use std::sync::Arc;
 
@@ -19,9 +19,9 @@ use crate::watermark::soft_ether_watermark;
 
 pub const DEFAULT_HUB_NAME: &str = "VPNGATE";
 pub const DEFAULT_USER_NAME: &str = "vpn";
-const CLIENT_VER: u32 = 444;
-const CLIENT_BUILD: u32 = 9807;
-const CLIENT_STR: &str = "SoftEther VPN Client";
+pub(crate) const CLIENT_VER: u32 = 444;
+pub(crate) const CLIENT_BUILD: u32 = 9807;
+pub(crate) const CLIENT_STR: &str = "SoftEther VPN Client";
 const PLAIN_SIGNATURE: &[u8] = b"VPNCONNECT";
 
 /// Binds the UDP acceleration socket for the given v2 client key and returns its local port.
@@ -180,6 +180,17 @@ impl SoftEtherClient {
 
     pub fn config(&self) -> &ClientConfig {
         &self.config
+    }
+
+    pub(crate) fn make_stream(&self) -> StreamFactory {
+        self.make_stream.clone()
+    }
+
+    /// Follows a cluster redirect: later connections (and additional ones) go to the new target with the ticket.
+    pub(crate) fn retarget(&mut self, host: String, port: u16, auth: ClientAuth) {
+        self.config.host = host;
+        self.config.port = port;
+        self.config.auth = auth;
     }
 
     /// Whether the plain `VPNCONNECT` signature had to be used (additional connections must match).
