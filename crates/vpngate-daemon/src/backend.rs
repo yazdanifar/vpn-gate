@@ -111,3 +111,14 @@ pub fn default_state_path() -> &'static str {
         "/run/vpngate.state"
     }
 }
+
+/// Where the daemon keeps the newest verified server list.
+pub fn default_cache_path() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "/var/db/vpngate-mac.dat"
+    } else if cfg!(windows) {
+        "C:\\ProgramData\\VPNGate\\VPNGate.dat"
+    } else {
+        "/var/lib/vpngate/VPNGate.dat"
+    }
+}

@@ -29,4 +29,13 @@ memory safety, the existing input validation and fuzz tests (U15).
 
 ## Later decisions
 
-(none yet)
+- **U12, IPC v9 wire shape (2026-10-27).** New commands are request/reply: a request carries an `id`, and the answer is a
+  separate line `{"reply":"<cmd>","id":N,"ok":bool,"error"?,"result"?}`. Reply lines have no `state`, so a v8 client's
+  `HelperEvent` decoder fails on them and ignores them. `HELPER_VERSION` stays 8 (the Swift app compares it to decide
+  on a reinstall, and the golden constants pin it); the new `IPC_VERSION` is 9 and travels as `ipcVersion` in every snapshot
+  event, which is how a client detects a v9 daemon. Rejected: bumping `helperVersion` (forces a reinstall for nothing),
+  and answering as events (a v8 client would show them as state changes).
+- **U12, who fetches the list (2026-10-27).** The daemon does (`DatFetcher` in `vpngate-net`), including the CSV mirror,
+  with its own minimal HTTP/1.0 client instead of `reqwest`: no new dependency, no chunked bodies, and `https://` goes through
+  the existing rustls stack with system trust. The cache is `--cache` (default per OS, `backend::default_cache_path`), the
+  shipped fallback is `--bundle`.
