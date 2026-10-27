@@ -12,6 +12,7 @@ use vpngate_daemon::args::{self, Mode};
 use vpngate_daemon::backend;
 #[cfg(unix)]
 use vpngate_daemon::engine::Engine;
+use vpngate_daemon::stale::StaleState;
 use vpngate_daemon::{daemon, probe};
 use vpngate_net::session::{Session, SessionTiming};
 
@@ -60,7 +61,9 @@ async fn run(parsed: args::Args) -> u8 {
 }
 
 fn new_session() -> Arc<Session> {
-    let deps = backend::default_dependencies(std::path::Path::new(backend::default_unique_id_path()));
+    let stale = Arc::new(StaleState::new(backend::default_state_path()));
+    backend::cleanup_stale(&stale);
+    let deps = backend::default_dependencies(std::path::Path::new(backend::default_unique_id_path()), stale);
     Session::new(deps, SessionTiming::default())
 }
 

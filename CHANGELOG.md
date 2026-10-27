@@ -31,6 +31,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
 
 ### Changed
 - Repository restructured: feature documentation moved to `docs/`, reverse-engineering notes to `docs/research/`,
+- `vpngate-platform`/`vpngate-daemon`: macOS backend in Rust (utun via `PF_SYSTEM`, `/sbin/route` + `ifconfig` behind a `CommandRunner`, configd DNS with `OverridePrimary`, `IP_BOUND_IF` sockets, undo list recorded as changes are made and replayed at daemon start). The daemon is now a working tunnel on macOS; the Swift helper is still the shipped one. Live tunnel checks are left to the user.
   added CI workflow, Makefile and contributor/security documents.
 
 ## [1.0.0]
