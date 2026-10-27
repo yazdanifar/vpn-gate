@@ -11,6 +11,8 @@ use vpngate_core::ipc::{ConnectionState, ProxySettings};
 use vpngate_net::session::{simple_connect_config, EmitFn, SessionControlling};
 
 #[cfg(unix)]
+use crate::engine::Engine;
+#[cfg(unix)]
 use crate::ipc_server::{IpcServer, UidPeerAuth};
 
 /// Serves IPC clients until `shutdown` completes, then disconnects the session and removes the socket.
@@ -20,11 +22,15 @@ pub async fn run_daemon(
     uid: Option<u32>,
     console_uid: impl Fn() -> Option<u32> + Send + Sync + 'static,
     session: Arc<dyn SessionControlling>,
+    engine: Option<Arc<Engine>>,
     shutdown: impl Future<Output = ()>,
 ) -> io::Result<()> {
     // With a fixed uid the console is not consulted at all.
     let auth = if uid.is_some() { UidPeerAuth::new(uid, || None) } else { UidPeerAuth::new(None, console_uid) };
     let server = IpcServer::new(&socket, uid, Arc::new(auth), session.clone());
+    if let Some(engine) = engine {
+        server.set_engine(engine);
+    }
     server.start()?;
     println!("vpngate-daemon listening on {}", socket.display());
     shutdown.await;
@@ -109,7 +115,7 @@ mod tests {
         let path = PathBuf::from(format!("/tmp/vg-daemon-{}.sock", std::process::id()));
         let session = Arc::new(Fake::default());
         let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-        let task = tokio::spawn(run_daemon(path.clone(), None, || None, session.clone(), async {
+        let task = tokio::spawn(run_daemon(path.clone(), None, || None, session.clone(), None, async {
             let _ = rx.await;
         }));
         for _ in 0..100 {

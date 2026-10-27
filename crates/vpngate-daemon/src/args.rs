@@ -23,6 +23,10 @@ pub enum Mode {
     },
     Daemon {
         uid: Option<u32>,
+        /// `--bundle`: the VPNGate.dat shipped with the app, the last fallback of the server list.
+        bundle: Option<String>,
+        /// `--cache`: where the newest verified list is kept; the platform default when absent.
+        cache: Option<String>,
     },
     Usage,
 }
@@ -80,14 +84,18 @@ pub fn parse(args: &[String]) -> Args {
             allow_ipv6: has("--allow-ipv6"),
         }
     } else if has("--daemon") {
-        Mode::Daemon { uid: opt(args, "--uid").and_then(|u| u.parse().ok()) }
+        Mode::Daemon {
+            uid: opt(args, "--uid").and_then(|u| u.parse().ok()),
+            bundle: opt(args, "--bundle").map(str::to_string),
+            cache: opt(args, "--cache").map(str::to_string),
+        }
     } else {
         Mode::Usage
     };
     Args { mode, socket }
 }
 
-pub const USAGE: &str = "usage: vpngate-daemon --daemon [--uid <uid>] [--socket <path>] | --connect <host> [--port N] \
+pub const USAGE: &str = "usage: vpngate-daemon --daemon [--uid <uid>] [--socket <path>] [--bundle <VPNGate.dat>] [--cache <VPNGate.dat>] | --connect <host> [--port N] \
 [--allow-ipv6] | --probe <host> [--port N] [--watch-udp [N]] | --version";
 
 #[cfg(test)]
@@ -122,9 +130,13 @@ mod tests {
     fn modes() {
         assert_eq!(parse(&v(&["--version"])).mode, Mode::Version);
         assert_eq!(parse(&v(&[])).mode, Mode::Usage);
-        assert_eq!(parse(&v(&["--daemon"])).mode, Mode::Daemon { uid: None });
-        let a = parse(&v(&["--daemon", "--uid", "501", "--socket", "/tmp/s"]));
-        assert_eq!(a.mode, Mode::Daemon { uid: Some(501) });
+        assert_eq!(parse(&v(&["--daemon"])).mode, Mode::Daemon { uid: None, bundle: None, cache: None });
+        let a =
+            parse(&v(&["--daemon", "--uid", "501", "--socket", "/tmp/s", "--bundle", "/b.dat", "--cache", "/c.dat"]));
+        assert_eq!(
+            a.mode,
+            Mode::Daemon { uid: Some(501), bundle: Some("/b.dat".into()), cache: Some("/c.dat".into()) }
+        );
         assert_eq!(a.socket.as_deref(), Some("/tmp/s"));
         assert_eq!(
             parse(&v(&["--connect", "h", "--port", "992", "--allow-ipv6"])).mode,

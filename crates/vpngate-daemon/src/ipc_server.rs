@@ -14,9 +14,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{unix::OwnedReadHalf, unix::OwnedWriteHalf, UnixListener};
 use tokio::sync::{watch, Notify};
 use tokio::task::JoinHandle;
-use vpngate_core::ipc::{HelperEvent, HelperRequest, TunnelMode, DEFAULT_SOCKS_PORT};
+use vpngate_core::ipc::{HelperEvent, HelperReply, HelperRequest, TunnelMode, DEFAULT_SOCKS_PORT};
 use vpngate_net::session::{legacy_connect_config, EmitFn, SessionControlling};
 
+use crate::engine::{check_probe, check_proxy, validate_account, Engine};
 use crate::validate::validate;
 
 /// Events are state snapshots, so a client that falls this far behind loses the oldest ones.
@@ -134,9 +135,70 @@ struct Inner {
     session: Arc<dyn SessionControlling>,
     auth: Arc<dyn PeerAuth>,
     clients: Mutex<Vec<Arc<Client>>>,
+    engine: Mutex<Option<Arc<Engine>>>,
+}
+
+fn encode_reply(r: &HelperReply) -> Option<Vec<u8>> {
+    let mut d = serde_json::to_vec(r).ok()?;
+    d.push(b'\n');
+    Some(d)
 }
 
 impl Inner {
+    /// IPC v9 request/reply commands. They never touch the session, so a slow sync or probe only delays its own reply.
+    fn handle_v9(&self, cmd: &str, r: HelperRequest, client: &Arc<Client>) {
+        let id = r.id;
+        let reply = |c: &Arc<Client>, reply: HelperReply| {
+            if let Some(line) = encode_reply(&reply) {
+                c.send(line);
+            }
+        };
+        if cmd == "validateAccount" {
+            let out = validate_account(&r);
+            reply(
+                client,
+                match out {
+                    Ok(v) => HelperReply::success(cmd, id, &v),
+                    Err(e) => HelperReply::failure(cmd, id, e),
+                },
+            );
+            return;
+        }
+        let Some(engine) = lock(&self.engine).clone() else {
+            reply(client, HelperReply::failure(cmd, id, "This daemon has no server engine"));
+            return;
+        };
+        let cmd = cmd.to_string();
+        let client = client.clone();
+        // Checked here, before spawning, so a bad request is answered in order.
+        let prepared = match cmd.as_str() {
+            "probe" => check_probe(&r).map(|(t, p, to)| (Some(t), p, to)),
+            "listServers" => Ok((None, Default::default(), 0.0)),
+            _ => check_proxy(&r).map(|p| (None, p, 0.0)),
+        };
+        let (targets, proxy, timeout) = match prepared {
+            Ok(p) => p,
+            Err(e) => return reply(&client, HelperReply::failure(&cmd, id, e)),
+        };
+        let mirror = r.mirror;
+        tokio::spawn(async move {
+            let out = match cmd.as_str() {
+                "listServers" => engine.list_servers().map(|v| HelperReply::success(&cmd, id, &v)),
+                "refreshServers" => {
+                    engine.refresh_servers(&proxy, mirror.as_deref()).await.map(|v| HelperReply::success(&cmd, id, &v))
+                }
+                "syncDat" => {
+                    engine.sync_dat(&proxy, mirror.as_deref()).await.map(|v| HelperReply::success(&cmd, id, &v))
+                }
+                _ => engine
+                    .probe(targets.unwrap_or_default(), &proxy, timeout)
+                    .await
+                    .map(|v| HelperReply::success(&cmd, id, &v)),
+            };
+            reply(&client, out.unwrap_or_else(|e| HelperReply::failure(&cmd, id, e)));
+        });
+    }
+
     fn broadcast(&self, event: &HelperEvent) {
         let Some(line) = encode(event) else { return };
         let clients: Vec<_> = lock(&self.clients).clone();
@@ -145,7 +207,7 @@ impl Inner {
         }
     }
 
-    fn handle(&self, r: HelperRequest, client: &Client) {
+    fn handle(&self, r: HelperRequest, client: &Arc<Client>) {
         match r.cmd.as_str() {
             "connect" => {
                 if let Some(problem) = validate(&r) {
@@ -174,6 +236,10 @@ impl Inner {
                 self.session.connect(config);
             }
             "disconnect" => self.session.disconnect(),
+            "listServers" | "refreshServers" | "syncDat" | "probe" | "validateAccount" => {
+                let cmd = r.cmd.clone();
+                self.handle_v9(&cmd, r, client);
+            }
             _ => {
                 if let Some(line) = encode(&self.session.snapshot()) {
                     client.send(line);
@@ -205,7 +271,12 @@ impl IpcServer {
         auth: Arc<dyn PeerAuth>,
         session: Arc<dyn SessionControlling>,
     ) -> IpcServer {
-        let inner = Arc::new(Inner { session: session.clone(), auth, clients: Mutex::new(Vec::new()) });
+        let inner = Arc::new(Inner {
+            session: session.clone(),
+            auth,
+            clients: Mutex::new(Vec::new()),
+            engine: Mutex::new(None),
+        });
         let weak = Arc::downgrade(&inner);
         let emit: EmitFn = Arc::new(move |e| {
             if let Some(inner) = weak.upgrade() {
@@ -214,6 +285,11 @@ impl IpcServer {
         });
         session.set_emit(Some(emit));
         IpcServer { path: path.into(), allowed_uid, inner, accept: Mutex::new(None) }
+    }
+
+    /// Enables the IPC v9 commands that need the network (`listServers`, `refreshServers`, `syncDat`, `probe`).
+    pub fn set_engine(&self, engine: Arc<Engine>) {
+        *lock(&self.inner.engine) = Some(engine);
     }
 
     /// Binds the socket and starts accepting. Must run inside a Tokio runtime.

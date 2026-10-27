@@ -3,6 +3,7 @@
 pub mod cert_auth;
 pub mod connection;
 pub mod connection_pool;
+pub mod dat_fetcher;
 pub mod dns_message;
 pub mod dns_proxy;
 pub mod dns_server;

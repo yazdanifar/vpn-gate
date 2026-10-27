@@ -42,15 +42,8 @@ pub fn validate(r: &HelperRequest) -> Option<String> {
         }
     }
     let proxy = r.config.as_ref().map(|c| &c.proxy).or(r.proxy.as_ref());
-    if let Some(p) = proxy {
-        if p.kind != vpngate_core::ipc::ProxyKind::None {
-            if !validation::is_valid_host(&p.host) {
-                return Some("invalid proxy host".into());
-            }
-            if !validation::is_valid_port(Some(p.port)) {
-                return Some("invalid proxy port".into());
-            }
-        }
+    if let Some(problem) = proxy.and_then(validate_proxy) {
+        return Some(problem);
     }
     // Only SOCKS mode uses the port; a stale value saved in the app must not block full-tunnel connects.
     let socks_port = r.config.as_ref().map(|c| c.socks_port).or(r.socks_port);
@@ -62,6 +55,20 @@ pub fn validate(r: &HelperRequest) -> Option<String> {
         if let Some(problem) = validate_routing(routing) {
             return Some(problem);
         }
+    }
+    None
+}
+
+/// A proxy that is switched off is not looked at.
+pub fn validate_proxy(p: &vpngate_core::ipc::ProxySettings) -> Option<String> {
+    if p.kind == vpngate_core::ipc::ProxyKind::None {
+        return None;
+    }
+    if !validation::is_valid_host(&p.host) {
+        return Some("invalid proxy host".into());
+    }
+    if !validation::is_valid_port(Some(p.port)) {
+        return Some("invalid proxy port".into());
     }
     None
 }

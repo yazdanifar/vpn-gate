@@ -15,7 +15,7 @@ use tokio::task::JoinHandle;
 use vpngate_core::cert_pin::ServerCertPolicy;
 use vpngate_core::ipc::{
     ConnectConfig, ConnectionState, HelperEvent, ProxyKind, ProxySettings, TunnelMode, DEFAULT_SOCKS_PORT,
-    HELPER_VERSION,
+    HELPER_VERSION, IPC_VERSION,
 };
 use vpngate_core::packets::ip_string;
 use vpngate_core::routing_rule::{RoutingAction, RoutingConfig};
@@ -407,7 +407,8 @@ impl Session {
     pub fn new(deps: SessionDependencies, timing: SessionTiming) -> Arc<Session> {
         Arc::new_cyclic(|me| {
             let mut current = HelperEvent::new(ConnectionState::Disconnected);
-            current.helper_version = Some(HELPER_VERSION); // present in every snapshot, even before the first event
+            current.helper_version = Some(HELPER_VERSION);
+            current.ipc_version = Some(IPC_VERSION); // present in every snapshot, even before the first event
             Session {
                 deps,
                 timing,
@@ -481,6 +482,7 @@ impl Session {
         c.log = log;
         c.error = error;
         c.helper_version = Some(HELPER_VERSION);
+        c.ipc_version = Some(IPC_VERSION);
         let e = c.clone();
         drop(st);
         self.emit_event(e);

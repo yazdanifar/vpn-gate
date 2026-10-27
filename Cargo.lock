@@ -1211,10 +1211,12 @@ dependencies = [
 name = "vpngate-daemon"
 version = "0.0.0"
 dependencies = [
+ "async-trait",
  "serde",
  "serde_json",
  "tokio",
  "vpngate-core",
+ "vpngate-ipc-client",
  "vpngate-net",
  "vpngate-platform",
 ]
@@ -1223,7 +1225,11 @@ dependencies = [
 name = "vpngate-ipc-client"
 version = "0.0.0"
 dependencies = [
+ "serde",
+ "serde_json",
+ "tokio",
  "vpngate-core",
+ "vpngate-testkit",
 ]
 
 [[package]]
@@ -1262,6 +1268,7 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "serde_json",
+ "tokio",
  "vpngate-core",
  "vpngate-platform",
 ]

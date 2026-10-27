@@ -3,6 +3,7 @@
 pub mod args;
 pub mod backend;
 pub mod daemon;
+pub mod engine;
 #[cfg(unix)]
 pub mod ipc_server;
 pub mod probe;

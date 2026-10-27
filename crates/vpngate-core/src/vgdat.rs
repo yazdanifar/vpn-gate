@@ -1,7 +1,8 @@
 //! VPNGate.dat: header, RC4-encrypted outer Pack signed with the VPN Gate API certificate, optionally zlib-compressed
-//! inner Pack. Turning the inner Pack into `VPNServer`s is `server_list` (U06); this module stops at the Pack.
+//! inner Pack. `parse_inner_servers` turns the inner Pack into `VpnServer`s.
 
 use crate::pack::{Pack, PackValue};
+use crate::server_list::VpnServer;
 use crate::{rc4::Rc4, sha0};
 use base64::Engine;
 use rsa::pkcs1v15::{Signature, VerifyingKey};
@@ -236,6 +237,106 @@ pub fn parse(data: &[u8], now_ms: u64) -> Result<VgDatFile, VgDatError> {
     })
 }
 
+/// The server records of a verified list's inner Pack (`VGDat.parseInnerServers`). `NumHosts` is never trusted past the
+/// length of the `IP` array, and rows without an IP are skipped.
+pub fn parse_inner_servers(inner: &Pack) -> Vec<VpnServer> {
+    let Some(num_hosts) = inner.int("NumHosts") else { return Vec::new() };
+    let ips = inner.strs("IP");
+    let count = (num_hosts as usize).min(ips.len());
+    let fqdns = inner.strs("Fqdn");
+    let host_names = inner.strs("HostName");
+    let country_shorts = inner.strs("CountryShort");
+    let country_fulls = inner.strs("CountryFull");
+    let scores = inner.int64s("Score");
+    let pings = inner.ints("PingToJapan");
+    let speeds = inner.int64s("SpeedToJapan");
+    let num_clients = inner.ints("NumClients");
+    let uptimes = inner.int64s("Uptime");
+    let ssl_ports = inner.strs("SslPorts");
+    let udp_ports = inner.ints("UdpPort");
+    let openvpn_ports = inner.strs("OpenVpnUdpPorts");
+    let l2tps = inner.ints("L2TP");
+    let oss = inner.ints("Os");
+    let softs = inner.strs("Soft");
+    let builds = inner.ints("Build");
+    let owners = inner.strs("Owner");
+    let abuses = inner.strs("Abuse");
+    let messages = inner.strs("Message");
+    let num_logins = inner.int64s("NumLogin");
+    let logs = inner.ints("Log");
+    let log_permanents = inner.ints("LogPermanent");
+    let names = inner.strs("Name");
+    let pings_google = inner.ints("PingToGoogle");
+    let send_sizes = inner.int64s("SendSize");
+    let recv_sizes = inner.int64s("RecvSize");
+    let kernel_nats = inner.ints("IsKernelModeNAT");
+
+    let clamp = |v: u64| i64::try_from(v).unwrap_or(i64::MAX);
+    let ports_of = |s: &str| -> Vec<u16> { s.split(' ').filter_map(|p| p.parse().ok()).collect() };
+    let mut servers = Vec::with_capacity(count);
+    for (i, &ip) in ips.iter().enumerate().take(count) {
+        if ip.is_empty() {
+            continue;
+        }
+        let fqdn = fqdns.get(i).copied().unwrap_or_default();
+        let host_name = host_names.get(i).copied().filter(|h| !h.is_empty()).unwrap_or(fqdn);
+        let ssl = ports_of(ssl_ports.get(i).copied().unwrap_or_default());
+        let udp_port = udp_ports.get(i).filter(|&&p| p > 0).and_then(|&p| u16::try_from(p).ok());
+        let send_size = send_sizes.get(i).copied().unwrap_or(0);
+        let recv_size = recv_sizes.get(i).copied().unwrap_or(0);
+        let permanent = log_permanents.get(i).is_some_and(|&v| v != 0);
+        let two_weeks = logs.get(i).is_some_and(|&v| v != 0);
+        let first_port = VpnServer::port_priority(&ssl)
+            .first()
+            .map(|&p| i64::from(p))
+            .unwrap_or_else(|| udp_port.map_or(443, i64::from));
+        let owner = owners.get(i).map(|s| s.to_string());
+        let num_login = num_logins.get(i).map(|&v| clamp(v));
+        let mut s = VpnServer::new(host_name, ip);
+        s.score = scores.get(i).map_or(0, |&v| clamp(v));
+        s.ping = pings.get(i).map_or(0, |&v| i64::from(v));
+        s.speed = speeds.get(i).map_or(0, |&v| clamp(v));
+        s.country_long = country_fulls.get(i).copied().unwrap_or_default().to_string();
+        s.country_short = country_shorts.get(i).copied().unwrap_or_default().to_string();
+        s.sessions = num_clients.get(i).map_or(0, |&v| i64::from(v));
+        s.uptime_ms = uptimes.get(i).map_or(0, |&v| clamp(v));
+        s.total_users = num_login.unwrap_or(0);
+        s.total_traffic = clamp(send_size.saturating_add(recv_size));
+        s.log_type = if permanent {
+            "Permanent"
+        } else if two_weeks {
+            "2 Weeks"
+        } else {
+            "No Log"
+        }
+        .into();
+        s.operator_name = owner.clone().unwrap_or_default();
+        s.message = messages.get(i).copied().unwrap_or_default().to_string();
+        s.listed_port = first_port;
+        s.listed_proto = "tcp".into();
+        s.fqdn = fqdn.to_string();
+        s.ssl_ports = ssl;
+        s.udp_port = udp_port;
+        s.open_vpn_udp_ports = ports_of(openvpn_ports.get(i).copied().unwrap_or_default());
+        s.l2tp = l2tps.get(i).is_some_and(|&v| v != 0);
+        s.os = oss.get(i).map(|v| v.to_string());
+        s.soft = softs.get(i).map(|s| s.to_string());
+        s.build = builds.get(i).map(|&v| i64::from(v));
+        s.owner = owner;
+        s.abuse = abuses.get(i).map(|s| s.to_string());
+        s.num_login = num_login;
+        s.no_log = !permanent && !two_weeks;
+        s.log_permanent = permanent;
+        s.name = names.get(i).map(|s| s.to_string());
+        s.ping_to_google = pings_google.get(i).map_or(0, |&v| i64::from(v));
+        s.send_size = send_size;
+        s.recv_size = recv_size;
+        s.is_kernel_mode_nat = kernel_nats.get(i).is_some_and(|&v| v != 0);
+        servers.push(s);
+    }
+    servers
+}
+
 /// Inflates a zlib stream (2-byte header, raw deflate, big-endian Adler-32) to exactly `expected_size` bytes.
 /// A longer or shorter stream, a bad header or a bad Adler-32 is rejected.
 pub fn decompress(data: &[u8], expected_size: usize) -> Result<Vec<u8>, VgDatError> {
@@ -338,6 +439,11 @@ mod tests {
                     assert_eq!(names, want);
                     let hosts = (f.inner.int("NumHosts").unwrap() as usize).min(f.inner.strs("IP").len());
                     assert_eq!(hosts as u64, c["serverCount"].as_u64().unwrap());
+                    let got = serde_json::to_value(parse_inner_servers(&f.inner)).unwrap();
+                    assert_eq!(got.as_array().unwrap().len(), c["servers"].as_array().unwrap().len());
+                    for (g, w) in got.as_array().unwrap().iter().zip(c["servers"].as_array().unwrap()) {
+                        assert!(vpngate_testkit::golden::json_eq(g, w), "{g}\n{w}");
+                    }
                 }
                 n if n.starts_with("freshness") => {
                     let f = parse(&dat, c["nowMs"].as_u64().unwrap()).unwrap();

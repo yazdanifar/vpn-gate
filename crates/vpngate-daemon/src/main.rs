@@ -10,6 +10,8 @@ use vpngate_core::ipc::HELPER_VERSION;
 use vpngate_core::validation;
 use vpngate_daemon::args::{self, Mode};
 use vpngate_daemon::backend;
+#[cfg(unix)]
+use vpngate_daemon::engine::Engine;
 use vpngate_daemon::{daemon, probe};
 use vpngate_net::session::{Session, SessionTiming};
 
@@ -53,7 +55,7 @@ async fn run(parsed: args::Args) -> u8 {
             daemon::run_connect(session, &host, port, allow_ipv6, daemon::wait_for_signal()).await;
             0
         }
-        Mode::Daemon { uid } => run_daemon_mode(socket, uid).await,
+        Mode::Daemon { uid, bundle, cache } => run_daemon_mode(socket, uid, bundle, cache).await,
     }
 }
 
@@ -74,13 +76,18 @@ fn is_root() -> bool {
 }
 
 #[cfg(unix)]
-async fn run_daemon_mode(socket: String, uid: Option<u32>) -> u8 {
+async fn run_daemon_mode(socket: String, uid: Option<u32>, bundle: Option<String>, cache: Option<String>) -> u8 {
     let session = new_session();
+    let engine = Arc::new(Engine::production(
+        PathBuf::from(cache.unwrap_or_else(|| backend::default_cache_path().to_string())),
+        bundle.into_iter().map(PathBuf::from).collect(),
+    ));
     let result = daemon::run_daemon(
         PathBuf::from(socket),
         uid,
         vpngate_daemon::ipc_server::current_console_uid,
         session,
+        Some(engine),
         daemon::wait_for_signal(),
     )
     .await;
@@ -94,7 +101,7 @@ async fn run_daemon_mode(socket: String, uid: Option<u32>) -> u8 {
 }
 
 #[cfg(not(unix))]
-async fn run_daemon_mode(_socket: String, _uid: Option<u32>) -> u8 {
+async fn run_daemon_mode(_socket: String, _uid: Option<u32>, _bundle: Option<String>, _cache: Option<String>) -> u8 {
     println!("the Windows service entry point arrives with U17");
     2
 }
