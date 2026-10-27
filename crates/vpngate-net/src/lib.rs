@@ -3,7 +3,10 @@
 pub mod cert_auth;
 pub mod connection;
 pub mod connection_pool;
+pub mod dns_message;
+pub mod dns_proxy;
 pub mod entropy;
+pub mod ethernet_bridge;
 pub mod host_unique_id;
 pub mod probe;
 pub mod proxy;
