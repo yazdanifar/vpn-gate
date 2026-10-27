@@ -25,7 +25,7 @@ pub(crate) const CLIENT_STR: &str = "SoftEther VPN Client";
 const PLAIN_SIGNATURE: &[u8] = b"VPNCONNECT";
 
 /// Binds the UDP acceleration socket for the given v2 client key and returns its local port.
-pub type UdpPrepare<'a> = dyn FnMut(&[u8]) -> u16 + 'a;
+pub type UdpPrepare<'a> = dyn FnMut(&[u8]) -> u16 + Send + 'a;
 
 pub type SignFn = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, StreamError> + Send + Sync>;
 
@@ -205,7 +205,7 @@ impl SoftEtherClient {
         host: &str,
         port: u16,
         auth: &ClientAuth,
-        log: &mut dyn FnMut(&str),
+        log: &mut (dyn FnMut(&str) + Send),
         udp_prepare: Option<&mut UdpPrepare<'_>>,
     ) -> Result<ConnectOutcome, StreamError> {
         let mut stream = (self.make_stream)(host, port, &self.config.proxy);
@@ -229,7 +229,7 @@ impl SoftEtherClient {
         host: &str,
         port: u16,
         auth: &ClientAuth,
-        log: &mut dyn FnMut(&str),
+        log: &mut (dyn FnMut(&str) + Send),
         udp_prepare: Option<&mut UdpPrepare<'_>>,
     ) -> Result<Welcome, HandshakeEnd> {
         stream.start().await?;

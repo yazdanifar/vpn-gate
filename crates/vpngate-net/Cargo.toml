@@ -24,6 +24,7 @@ socket2 = "0.6.5"
 tokio = { version = "1.54.1", features = ["net", "io-util", "time", "rt", "macros", "sync"] }
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
 vpngate-core.workspace = true
+vpngate-platform.workspace = true
 
 [features]
 # Test doubles (fake SoftEther server, replaying entropy) for other crates' tests.

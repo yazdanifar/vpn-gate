@@ -78,7 +78,7 @@ impl SoftEtherClient {
     /// Connects, following up to 5 cluster redirects, then starts the keep-alive and pool services.
     pub async fn connect(
         mut self,
-        log: &mut dyn FnMut(&str),
+        log: &mut (dyn FnMut(&str) + Send),
         events: ConnectionEvents,
         options: ConnectOptions,
     ) -> Result<SoftEtherConnection, StreamError> {

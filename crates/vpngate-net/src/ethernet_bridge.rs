@@ -16,16 +16,7 @@ use vpngate_core::packets::*;
 use crate::entropy::{Entropy, SystemEntropy};
 use crate::stream::StreamError;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Lease {
-    pub ip: u32,
-    pub mask: u32,
-    pub router: u32,
-    pub dns: Vec<u32>,
-    pub seconds: u32,
-    pub server_id: u32,
-    pub mtu: Option<u16>,
-}
+pub use vpngate_platform::Lease;
 
 /// All durations are in seconds.
 #[derive(Debug, Clone)]
