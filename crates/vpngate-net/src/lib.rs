@@ -1,6 +1,8 @@
 //! Network engine without OS calls: TLS, SoftEther client, bridge, DNS, session.
 
 pub mod cert_auth;
+pub mod connection;
+pub mod connection_pool;
 pub mod entropy;
 pub mod host_unique_id;
 pub mod probe;

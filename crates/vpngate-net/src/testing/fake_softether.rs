@@ -1,11 +1,13 @@
-//! Scripted in-memory SoftEther server speaking the real wire format for the handshake (HTTP + PACK). Everything the
-//! client sends after the welcome is swallowed; the data phase is added by the units that need it.
+//! Scripted in-memory SoftEther server speaking the real wire format: the handshake (HTTP + PACK), additional
+//! connections and the data phase (frames and keep-alives the client sends are decoded and recorded).
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use async_trait::async_trait;
+use tokio::sync::Notify;
 use vpngate_core::byte_buffer::ByteBuffer;
+use vpngate_core::data_phase::{DataPhaseDecoder, DataPhaseItem};
 use vpngate_core::http_head::HttpHead;
 use vpngate_core::ipc::ProxySettings;
 use vpngate_core::pack::Pack;
@@ -46,6 +48,11 @@ pub struct FakeConfig {
     pub trailing_after_welcome: Vec<u8>,
     /// If set, server→client bytes are delivered in chunks of this size.
     pub chunk_size: Option<usize>,
+    /// The next N additional_connect requests are answered with an error.
+    pub fail_additional_connects: u32,
+    /// `direction` values (0 both, 1 server→client, 2 client→server) handed out to successive additional_connect
+    /// requests, in order; once empty, replies carry no `direction` (plain "both").
+    pub additional_connect_directions: Vec<u32>,
 }
 
 impl Default for FakeConfig {
@@ -70,6 +77,8 @@ impl Default for FakeConfig {
             remote_ipv4: None,
             trailing_after_welcome: Vec::new(),
             chunk_size: None,
+            fail_additional_connects: 0,
+            additional_connect_directions: Vec::new(),
         }
     }
 }
@@ -79,6 +88,9 @@ struct State {
     config: FakeConfig,
     requests: Vec<Request>,
     logins: Vec<Pack>,
+    additional_connects: Vec<Pack>,
+    frames: Vec<Vec<u8>>,
+    keep_alives: usize,
     streams: Vec<Arc<Mutex<StreamState>>>,
 }
 
@@ -86,6 +98,57 @@ struct State {
 struct StreamState {
     cancelled: bool,
     incoming: VecDeque<Vec<u8>>,
+    /// Once set, the next `read_chunk` fails with it (the server dropped the connection).
+    failure: Option<StreamError>,
+    /// After the welcome / additional_connect reply: reads wait for data instead of failing on an empty queue.
+    data_mode: bool,
+    assigned_direction: Option<u32>,
+    bytes_from_client: usize,
+    notify: Arc<Notify>,
+}
+
+/// Test-side view of one stream the client created.
+#[derive(Clone)]
+pub struct StreamHandle {
+    server: FakeSoftEtherServer,
+    st: Arc<Mutex<StreamState>>,
+}
+
+impl StreamHandle {
+    /// Server→client bytes, as if the server had sent them.
+    pub fn deliver(&self, bytes: &[u8]) {
+        deliver_to(&self.server, &self.st, bytes.to_vec());
+    }
+
+    /// The connection breaks: the client's next read fails with `e`.
+    pub fn fail_from_server(&self, e: StreamError) {
+        let mut st = self.st.lock().expect("stream state");
+        st.failure = Some(e);
+        st.notify.notify_one();
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.st.lock().expect("stream state").cancelled
+    }
+
+    /// The `direction` the additional_connect reply assigned (`None` for the primary and for plain replies).
+    pub fn assigned_direction(&self) -> Option<u32> {
+        self.st.lock().expect("stream state").assigned_direction
+    }
+
+    pub fn bytes_received_from_client(&self) -> usize {
+        self.st.lock().expect("stream state").bytes_from_client
+    }
+}
+
+fn deliver_to(server: &FakeSoftEtherServer, st: &Arc<Mutex<StreamState>>, bytes: Vec<u8>) {
+    let chunk = server.lock().config.chunk_size;
+    let mut st = st.lock().expect("stream state");
+    match chunk {
+        Some(n) if n > 0 => bytes.chunks(n).for_each(|c| st.incoming.push_back(c.to_vec())),
+        _ => st.incoming.push_back(bytes),
+    }
+    st.notify.notify_one();
 }
 
 #[derive(Clone, Default)]
@@ -115,6 +178,25 @@ impl FakeSoftEtherServer {
         self.lock().logins.clone()
     }
 
+    /// The `additional_connect` packs received, in order.
+    pub fn additional_connects(&self) -> Vec<Pack> {
+        self.lock().additional_connects.clone()
+    }
+
+    /// Every Ethernet frame the client sent in the data phase.
+    pub fn frames_received(&self) -> Vec<Vec<u8>> {
+        self.lock().frames.clone()
+    }
+
+    pub fn keep_alives_received(&self) -> usize {
+        self.lock().keep_alives
+    }
+
+    /// Stream `i` in creation order (0 is the primary connection, 1+ the additional ones).
+    pub fn stream(&self, i: usize) -> StreamHandle {
+        StreamHandle { server: self.clone(), st: self.lock().streams[i].clone() }
+    }
+
     pub fn streams_created(&self) -> usize {
         self.lock().streams.len()
     }
@@ -134,7 +216,7 @@ impl FakeSoftEtherServer {
                 st,
                 buffer: ByteBuffer::new(),
                 rx: Vec::new(),
-                data_mode: false,
+                decoder: None,
             }) as Box<dyn ByteStream>
         })
     }
@@ -197,17 +279,18 @@ pub struct FakeStream {
     st: Arc<Mutex<StreamState>>,
     buffer: ByteBuffer,
     rx: Vec<u8>,
-    data_mode: bool,
+    /// Set in the data phase; decodes what the client sends.
+    decoder: Option<DataPhaseDecoder>,
 }
 
 impl FakeStream {
     fn deliver(&self, bytes: Vec<u8>) {
-        let chunk = self.server.lock().config.chunk_size;
-        let mut st = self.st.lock().expect("stream state");
-        match chunk {
-            Some(n) if n > 0 => bytes.chunks(n).for_each(|c| st.incoming.push_back(c.to_vec())),
-            _ => st.incoming.push_back(bytes),
-        }
+        deliver_to(&self.server, &self.st, bytes);
+    }
+
+    fn enter_data_mode(&mut self, use_compress: bool) {
+        self.decoder = Some(DataPhaseDecoder::new(use_compress));
+        self.st.lock().expect("stream state").data_mode = true;
     }
 
     fn respond(&mut self, path: &str, content_type: &str, body: Vec<u8>) {
@@ -227,7 +310,6 @@ impl FakeStream {
             "/vpnsvc/vpn.cgi" => match Pack::parse(&body) {
                 Err(_) => error_reply(4),
                 Ok(p) => {
-                    state.logins.push(p.clone());
                     // Real servers reject packs with duplicate (case-insensitive) element names.
                     let mut names: Vec<String> = p.elements().iter().map(|e| e.name.to_lowercase()).collect();
                     let total = names.len();
@@ -235,11 +317,37 @@ impl FakeStream {
                     names.dedup();
                     if names.len() != total {
                         error_reply(3)
+                    } else if p.str("method") == Some("additional_connect") {
+                        state.additional_connects.push(p);
+                        if state.config.fail_additional_connects > 0 {
+                            state.config.fail_additional_connects -= 1;
+                            error_reply(5)
+                        } else {
+                            let mut reply = Pack::new();
+                            reply.add_int("error", 0);
+                            if !state.config.additional_connect_directions.is_empty() {
+                                let d = state.config.additional_connect_directions.remove(0);
+                                reply.add_int("direction", d);
+                                self.st.lock().expect("stream state").assigned_direction = Some(d);
+                            }
+                            let use_compress = state.config.use_compress;
+                            drop(state);
+                            self.enter_data_mode(use_compress);
+                            self.deliver(FakeSoftEtherServer::http(200, &reply.serialize()));
+                            return;
+                        }
                     } else {
+                        state.logins.push(p);
                         let c = &state.config;
                         let mut r = FakeSoftEtherServer::http(200, &FakeSoftEtherServer::welcome_pack(c).serialize());
                         r.extend_from_slice(&c.trailing_after_welcome);
-                        self.data_mode = c.login_error == 0 && !c.redirect;
+                        if c.login_error == 0 && !c.redirect {
+                            let use_compress = c.use_compress;
+                            drop(state);
+                            self.enter_data_mode(use_compress);
+                            self.deliver(r);
+                            return;
+                        }
                         r
                     }
                 }
@@ -278,8 +386,19 @@ impl ByteStream for FakeStream {
         if self.st.lock().expect("stream state").cancelled {
             return Err(StreamError::Closed);
         }
-        if self.data_mode {
-            return Ok(()); // the data phase is not interpreted
+        if let Some(decoder) = &mut self.decoder {
+            let mut st = self.st.lock().expect("stream state");
+            st.bytes_from_client += data.len();
+            drop(st);
+            let items = decoder.feed(data).map_err(|e| StreamError::Protocol(e.to_string()))?;
+            let mut state = self.server.lock();
+            for item in items {
+                match item {
+                    DataPhaseItem::Frame(f) => state.frames.push(f),
+                    DataPhaseItem::KeepAlive => state.keep_alives += 1,
+                }
+            }
+            return Ok(());
         }
         self.rx.extend_from_slice(data);
         while let Some(end) = find_header_end(&self.rx) {
@@ -298,16 +417,33 @@ impl ByteStream for FakeStream {
     }
 
     async fn read_chunk(&mut self) -> Result<Vec<u8>, StreamError> {
-        let mut st = self.st.lock().expect("stream state");
-        if st.cancelled {
-            return Err(StreamError::Closed);
+        loop {
+            let notify = {
+                let mut st = self.st.lock().expect("stream state");
+                if st.cancelled {
+                    return Err(StreamError::Closed);
+                }
+                if let Some(e) = st.failure.take() {
+                    return Err(e);
+                }
+                if let Some(chunk) = st.incoming.pop_front() {
+                    return Ok(chunk);
+                }
+                // In the handshake every reply is queued synchronously by `send`, so an empty queue means the server
+                // has nothing more to say; in the data phase the client waits for the next delivery.
+                if !st.data_mode {
+                    return Err(StreamError::Closed);
+                }
+                st.notify.clone()
+            };
+            notify.notified().await;
         }
-        // Every reply is queued synchronously by `send`, so an empty queue means the server has nothing more to say.
-        st.incoming.pop_front().ok_or(StreamError::Closed)
     }
 
     fn cancel(&mut self) {
-        self.st.lock().expect("stream state").cancelled = true;
+        let mut st = self.st.lock().expect("stream state");
+        st.cancelled = true;
+        st.notify.notify_one();
     }
 
     fn remote_ipv4(&self) -> Option<String> {
