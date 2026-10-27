@@ -119,3 +119,58 @@ impl SocketBinder for UnboundSocketBinder {
         socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))
     }
 }
+
+/// One change a backend made to the machine, in a form that can be undone later by a process that never saw it (the
+/// next daemon start after a crash). `kind` and `args` are the backend's own vocabulary.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct UndoOp {
+    pub kind: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+}
+
+impl UndoOp {
+    pub fn new(kind: impl Into<String>, args: &[&str]) -> Self {
+        UndoOp { kind: kind.into(), args: args.iter().map(|a| a.to_string()).collect() }
+    }
+}
+
+/// Reverts one recorded change. Failures are the backend's to ignore: the thing may be gone already.
+pub trait Undoer {
+    fn undo(&self, op: &UndoOp);
+}
+
+/// Where a backend writes its undo list as it goes (the daemon persists it).
+pub trait UndoLog: Send + Sync {
+    fn record(&self, op: UndoOp);
+    fn clear(&self);
+}
+
+/// Runs an external program (`/sbin/route`, `/sbin/ifconfig`), returning its exit status and combined output.
+/// Backends build argv-level commands behind this so tests can record them instead of running them.
+pub trait CommandRunner: Send + Sync {
+    fn run(&self, program: &str, args: &[&str]) -> CommandOutput;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandOutput {
+    pub status: i32,
+    pub output: String,
+}
+
+pub struct SystemRunner;
+
+impl CommandRunner for SystemRunner {
+    fn run(&self, program: &str, args: &[&str]) -> CommandOutput {
+        match std::process::Command::new(program).args(args).output() {
+            Ok(out) => {
+                let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+                text.push_str(&String::from_utf8_lossy(&out.stderr));
+                CommandOutput { status: out.status.code().unwrap_or(-1), output: text }
+            }
+            Err(e) => CommandOutput { status: -1, output: e.to_string() },
+        }
+    }
+}
+
+pub mod macos;

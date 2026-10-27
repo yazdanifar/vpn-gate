@@ -9,18 +9,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct UndoOp {
-    pub kind: String,
-    #[serde(default)]
-    pub args: Vec<String>,
-}
-
-impl UndoOp {
-    pub fn new(kind: impl Into<String>, args: &[&str]) -> Self {
-        UndoOp { kind: kind.into(), args: args.iter().map(|a| a.to_string()).collect() }
-    }
-}
+pub use vpngate_platform::UndoOp;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct StateFile {
@@ -28,13 +17,22 @@ struct StateFile {
     undo: Vec<UndoOp>,
 }
 
-/// Reverts one recorded change. Failures are the backend's to ignore: the thing may be gone already.
-pub trait Undoer {
-    fn undo(&self, op: &UndoOp);
-}
+pub use vpngate_platform::Undoer;
 
 pub struct StaleState {
     path: PathBuf,
+}
+
+impl vpngate_platform::UndoLog for StaleState {
+    fn record(&self, op: UndoOp) {
+        if let Err(e) = StaleState::record(self, op) {
+            println!("[state] cannot persist the undo list: {e}");
+        }
+    }
+
+    fn clear(&self) {
+        StaleState::clear(self);
+    }
 }
 
 impl StaleState {
