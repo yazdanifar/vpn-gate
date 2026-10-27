@@ -14,3 +14,10 @@ workspace = true
 vpngate-core.workspace = true
 vpngate-net.workspace = true
 vpngate-platform.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "io-util", "time", "macros", "sync", "signal"] }
+
+[dev-dependencies]
+vpngate-core.workspace = true
+tokio = { version = "1.54.1", features = ["test-util"] }
