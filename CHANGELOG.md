@@ -22,6 +22,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
 - `vpngate-net`: Rust `EthernetBridge` (DHCP acquire/renew, ARP resolve/queue, IPv4 framing, IPv6 neighbour discovery and SLAAC with Router Solicitation backoff), `DnsMessage` and the `DnsProxy` routing decision behind `DnsUpstream`/`DynamicRuleSink` traits, plus an in-memory `FakeNetworkServer` (DHCP/ARP hub, `testing` feature); replays the 5 bridge and 6 DNS proxy golden transcripts byte for byte. No behaviour change.
 - `vpngate-net`: Rust `Session` (generation-guarded connect/disconnect, port fallback, 8-attempt reconnect with per-account override, bridge/tun wiring, DNS proxy and SOCKS lifecycle, bypass routes, SLAAC address, lease renewal, 1 s counters) built on the new `vpngate-platform` traits (`TunDevice`, `NetConfiguring`, `DnsConfigurator`), with structured recording fakes in `vpngate-testkit`; ports all of `SessionTests`. No behaviour change.
 
+- Rust UDP acceleration (`vpngate-net::udp_accel`), wired into `SoftEtherClient::connect` (UDP first once ~10 s stable, TCP
+  otherwise, endpoint added to the bypass hosts), the SOCKS5 server and `TunnelConnector`, the DNS UDP client and loopback
+  listener (`DnsProxyServer`), and the `SocketBinder` platform trait. Not used by the shipping Swift app yet.
 ### Fixed
 - CI: run on `macos-15` (Swift 6 toolchain; `macos-14` has 5.10, which rejects `swift-tools-version:6.0`), and split
   `ARPPacket.encode` so it type-checks quickly on any compiler.

@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
+use tokio::net::UdpSocket;
 use vpngate_core::byte_buffer::ByteBuffer;
 use vpngate_core::data_phase;
 use vpngate_core::ipc::ProxySettings;
@@ -459,5 +460,181 @@ async fn proxy_hides_the_remote_address() {
     let conn = connect_with(s.factory(), cfg, &Sink::default()).await.unwrap();
     assert_eq!(conn.remote_ipv4(), None);
     assert!(conn.bypass_hosts().is_empty());
+    conn.close(None);
+}
+
+// MARK: - UDP acceleration
+
+const UDP_SERVER_KEY: [u8; 32] = [0x5a; 32];
+
+struct UdpWelcome {
+    ip: Option<&'static str>,
+    ip_int: Option<u32>,
+    port: u32,
+    version: u32,
+    server_cookie: u32,
+    client_cookie: u32,
+    key: Vec<u8>,
+    encryption: Option<bool>,
+}
+
+impl UdpWelcome {
+    fn new(port: u32) -> Self {
+        UdpWelcome {
+            ip: Some("127.0.0.1"),
+            ip_int: None,
+            port,
+            version: 2,
+            server_cookie: 0x1111,
+            client_cookie: 0x2222,
+            key: UDP_SERVER_KEY.to_vec(),
+            encryption: None,
+        }
+    }
+
+    fn pack(&self) -> Pack {
+        let mut p = Pack::new();
+        p.add_str("session_name", "SID-UDP");
+        p.add_str("connection_name", "CID-1");
+        p.add_data("session_key", &[3u8; 20]);
+        p.add_int("max_connection", 1);
+        p.add_bool("use_udp_acceleration", true);
+        p.add_int("udp_acceleration_version", self.version);
+        if let Some(e) = self.encryption {
+            p.add_bool("udp_acceleration_use_encryption", e);
+        }
+        if let Some(ip) = self.ip {
+            p.add_str("udp_acceleration_server_ip", ip);
+        }
+        if let Some(n) = self.ip_int {
+            p.add_int("udp_acceleration_server_ip", n);
+        }
+        p.add_int("udp_acceleration_server_port", self.port);
+        p.add_int("udp_acceleration_server_cookie", self.server_cookie);
+        p.add_int("udp_acceleration_client_cookie", self.client_cookie);
+        p.add_data("udp_acceleration_server_key_v2", &self.key);
+        p
+    }
+}
+
+fn udp_config() -> ClientConfig {
+    let mut cfg = ClientConfig::new("127.0.0.1", 443, ProxySettings::default());
+    cfg.use_udp_accel = true;
+    cfg
+}
+
+async fn connect_udp(s: &FakeSoftEtherServer, w: &UdpWelcome, sink: &Sink) -> SoftEtherConnection {
+    s.configure(|c| c.welcome_override = Some(w.pack()));
+    connect_with(s.factory(), udp_config(), sink).await.expect("connect")
+}
+
+#[tokio::test]
+async fn hostile_udp_fields_disable_udp_but_keep_tcp() {
+    for port in [0u32, 65536, 70000, u32::MAX] {
+        let s = FakeSoftEtherServer::new();
+        let conn = connect_udp(&s, &UdpWelcome::new(port), &Sink::default()).await;
+        assert_eq!(conn.welcome().session_name, "SID-UDP");
+        assert_eq!(conn.welcome().udp_server_port, None, "port {port} must not become a u16");
+        assert!(!conn.udp_accel_negotiated(), "port {port}");
+        assert_eq!(conn.udp_local_port(), 0);
+        conn.close(None);
+    }
+    let s = FakeSoftEtherServer::new();
+    let w = UdpWelcome { ip: None, ip_int: Some(0xFFFF_FFFF), ..UdpWelcome::new(70000) };
+    let conn = connect_udp(&s, &w, &Sink::default()).await;
+    assert!(!conn.udp_accel_negotiated());
+    conn.close(None);
+}
+
+#[tokio::test]
+async fn advertised_udp_port_is_the_port_that_stays_bound() {
+    let s = FakeSoftEtherServer::new();
+    let w = UdpWelcome { ip: Some("10.0.0.1"), ..UdpWelcome::new(4433) }; // private: falls back to the TCP peer
+    let conn = connect_udp(&s, &w, &Sink::default()).await;
+    assert_eq!(conn.welcome().udp_server_ip.as_deref(), Some("127.0.0.1"));
+    let advertised = s.logins()[0].int("udp_acceleration_client_port").unwrap_or(0);
+    assert!(advertised > 0, "login must advertise a bound port");
+    assert_eq!(u32::from(conn.udp_local_port()), advertised, "the advertised socket is the one in use");
+    assert_eq!(conn.bypass_hosts(), vec!["127.0.0.1".to_string()]);
+    conn.close(None);
+    assert_eq!(conn.udp_local_port(), 0, "socket must be closed on close()");
+}
+
+#[tokio::test]
+async fn udp_endpoint_gets_its_own_bypass_host() {
+    let s = FakeSoftEtherServer::new();
+    let w = UdpWelcome { ip: Some("9.9.9.9"), ..UdpWelcome::new(4433) };
+    let conn = connect_udp(&s, &w, &Sink::default()).await;
+    assert_eq!(conn.bypass_hosts(), vec!["127.0.0.1".to_string(), "9.9.9.9".to_string()]);
+    conn.close(None);
+}
+
+#[tokio::test]
+async fn welcome_gating_version_cookies_encryption() {
+    let lb = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let port = u32::from(lb.local_addr().unwrap().port());
+    let cases: Vec<(UdpWelcome, bool, &str)> = vec![
+        (UdpWelcome::new(port), true, "baseline: v2 with cookies uses UDP"),
+        (UdpWelcome { encryption: Some(true), ..UdpWelcome::new(port) }, true, "explicit encryption"),
+        (UdpWelcome { version: 1, ..UdpWelcome::new(port) }, false, "v1 key path is not implemented"),
+        (UdpWelcome { version: 0, ..UdpWelcome::new(port) }, false, "version 0 means v1"),
+        (UdpWelcome { server_cookie: 0, ..UdpWelcome::new(port) }, false, "zero server cookie"),
+        (UdpWelcome { client_cookie: 0, ..UdpWelcome::new(port) }, false, "zero client cookie"),
+        (UdpWelcome { key: vec![], encryption: Some(false), ..UdpWelcome::new(port) }, true, "plaintext needs no key"),
+        (UdpWelcome { key: vec![], encryption: Some(true), ..UdpWelcome::new(port) }, false, "encrypted needs the key"),
+        (UdpWelcome { key: vec![1, 2, 3], ..UdpWelcome::new(port) }, false, "short key"),
+    ];
+    for (w, want, why) in cases {
+        let s = FakeSoftEtherServer::new();
+        let conn = connect_udp(&s, &w, &Sink::default()).await;
+        assert_eq!(conn.udp_local_port() != 0, want, "{why}");
+        assert_eq!(conn.udp_accel_negotiated(), want, "{why}");
+        conn.close(None);
+    }
+}
+
+#[tokio::test]
+async fn udp_off_in_config_advertises_no_socket() {
+    let s = FakeSoftEtherServer::new();
+    s.configure(|c| c.welcome_override = Some(UdpWelcome::new(4433).pack()));
+    let conn = connect_with(s.factory(), config(1), &Sink::default()).await.unwrap();
+    assert_eq!(s.logins()[0].int("udp_acceleration_client_port"), None);
+    assert!(!conn.udp_accel_negotiated());
+    conn.close(None);
+}
+
+#[tokio::test]
+async fn frames_from_the_server_over_udp_reach_the_session_and_the_counters() {
+    use vpngate_core::udp_accel::{self as packet, UdpAccelFields};
+    let sink = Sink::default();
+    let s = FakeSoftEtherServer::new();
+    let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let w = UdpWelcome::new(u32::from(server.local_addr().unwrap().port()));
+    let conn = connect_udp(&s, &w, &sink).await;
+    let fields = UdpAccelFields {
+        cookie: 0x2222, // the client cookie the server assigned
+        my_tick: 1000,
+        your_tick: 1,
+        compressed: false,
+        payload: &[0xAB; 60],
+        padding: 0,
+    };
+    let (wire, _) = packet::encode(&UDP_SERVER_KEY, &[1; 12], &fields, false).unwrap();
+    server.send_to(&wire, ("127.0.0.1", conn.udp_local_port())).await.unwrap();
+    assert!(eventually(3, || !sink.frames.lock().unwrap().is_empty()).await, "no frame from UDP");
+    assert_eq!(sink.frames.lock().unwrap()[0], vec![0xAB; 60]);
+    assert_eq!(conn.bytes_in(), 60);
+    conn.close(None);
+}
+
+#[tokio::test]
+async fn frames_go_over_tcp_until_udp_has_proven_stable() {
+    let s = FakeSoftEtherServer::new();
+    let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let conn =
+        connect_udp(&s, &UdpWelcome::new(u32::from(server.local_addr().unwrap().port())), &Sink::default()).await;
+    assert!(conn.udp_accel_negotiated() && !conn.udp_accel_usable());
+    conn.send_frame(vec![7; 64]);
+    assert!(eventually(3, || s.frames_received().contains(&vec![7; 64])).await, "frame must fall back to TCP");
     conn.close(None);
 }

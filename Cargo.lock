@@ -1239,6 +1239,7 @@ dependencies = [
 name = "vpngate-platform"
 version = "0.0.0"
 dependencies = [
+ "socket2",
  "vpngate-core",
 ]
 
