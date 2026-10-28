@@ -9,7 +9,9 @@
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="VPN Gate" />
+      <Directory Id="INSTALLFOLDER" Name="VPN Gate">
+        <Files Include="$(AppDir)\**" />
+      </Directory>
     </StandardDirectory>
     <StandardDirectory Id="CommonAppDataFolder">
       <Directory Id="DATADIR" Name="VPNGate" />
@@ -37,9 +39,7 @@
     </ComponentGroup>
 
     <!-- The WinUI app (self-contained publish output). -->
-    <DirectoryRef Id="INSTALLFOLDER">
-      <Files Include="$(AppDir)\**" />
-    </DirectoryRef>
+
 
     <!-- State: %ProgramData%\VPNGate holds the server cache and host id. Created here, locked to SYSTEM and Administrators
          below, removed on uninstall. -->
@@ -64,7 +64,6 @@
 
     <Feature Id="Main" Title="VPN Gate" Level="1">
       <ComponentGroupRef Id="ServiceFiles" />
-      <ComponentGroupRef Id="AppFiles" />
       <ComponentGroupRef Id="StateFiles" />
       <ComponentGroupRef Id="Shortcuts" />
     </Feature>
