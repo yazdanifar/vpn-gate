@@ -1,0 +1,21 @@
+[package]
+name = "vpngate-gtk"
+description = "VPN Gate for Linux: GTK4 and libadwaita front end for the vpngate daemon"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+vpngate-core = { path = "../../../crates/vpngate-core" }
+vpngate-ipc-client = { path = "../../../crates/vpngate-ipc-client" }
+vpngate-app-model = { path = "../../../crates/vpngate-app-model" }
+gtk = { package = "gtk4", version = "0.10", features = ["v4_10"] }
+adw = { package = "libadwaita", version = "0.8", features = ["v1_5"] }
+async-channel = "2"
+ksni = "0.3"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "time", "sync"] }

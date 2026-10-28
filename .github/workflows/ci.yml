@@ -59,6 +59,27 @@ jobs:
           cargo test --locked -p vpngate-daemon --test tunnel_hermetic --no-run
           BIN=$(ls -t target/debug/deps/tunnel_hermetic-* | grep -v '\.d$' | head -1)
           sudo "$BIN" --ignored --nocapture
+  gtk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: GTK4 and libadwaita development files
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            apps/linux/target
+          key: gtk-${{ hashFiles('apps/linux/Cargo.lock', 'rust-toolchain.toml') }}
+      - name: GTK app (apps/linux has its own workspace)
+        working-directory: apps/linux
+        run: |
+          cargo fmt --all --check
+          cargo clippy --all-targets --locked -- -D warnings
+          cargo test --locked
+          cargo build --locked
   dotnet:
     runs-on: windows-latest
     steps:

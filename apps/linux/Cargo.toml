@@ -1,0 +1,19 @@
+# Its own workspace: the GTK libraries are only installed on the Linux CI leg and on developer machines that want the
+# app, so the root workspace (which builds on macOS and Windows too) does not contain it.
+[workspace]
+resolver = "2"
+members = ["vpngate-gtk"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+publish = false
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
