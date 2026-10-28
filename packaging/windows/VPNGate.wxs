@@ -16,7 +16,7 @@
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder" />
 
-    <!-- The service: privileged daemon (`vpngate-daemon --service`), started at boot, restarted when it crashes. -->
+    <!-- The service: privileged daemon (vpngate-daemon with the service argument), started at boot, restarted when it crashes. -->
     <ComponentGroup Id="ServiceFiles" Directory="INSTALLFOLDER">
       <Component Id="DaemonExe" Bitness="always64">
         <File Id="DaemonExeFile" Source="$(DaemonExe)" Name="vpngate-daemon.exe" KeyPath="yes" />
