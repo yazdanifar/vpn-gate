@@ -5,6 +5,7 @@
 //! never stall the VPN session or other clients: `broadcast` only pushes to queues and never waits.
 
 use std::collections::VecDeque;
+#[cfg(unix)]
 use std::io;
 #[cfg(unix)]
 use std::path::PathBuf;
@@ -16,6 +17,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 #[cfg(unix)]
 use tokio::net::UnixListener;
 use tokio::sync::{watch, Notify};
+#[cfg(unix)]
 use tokio::task::JoinHandle;
 use vpngate_core::ipc::{HelperEvent, HelperReply, HelperRequest, TunnelMode, DEFAULT_SOCKS_PORT};
 use vpngate_net::session::{legacy_connect_config, EmitFn, SessionControlling};
