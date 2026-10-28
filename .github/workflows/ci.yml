@@ -60,6 +60,21 @@ jobs:
         run: dotnet test apps/windows/VPNGate.Tests --configuration Release
       - name: WinUI app builds (unpackaged, self-contained)
         run: dotnet build apps/windows/VPNGate.App --configuration Release -p:Platform=x64
+  msi:
+    runs-on: windows-latest
+    needs: [rust, dotnet]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+      - run: dotnet tool install --global wix --version 4.0.5
+      - name: Build the MSI (service, wintun.dll, WinUI app)
+        run: scripts/build-msi.ps1
+        shell: pwsh
+      - uses: actions/upload-artifact@v5
+        with: { name: vpn-gate-msi, path: build/VPN-Gate.msi }
   coverage:
     runs-on: ubuntu-latest
     steps:
