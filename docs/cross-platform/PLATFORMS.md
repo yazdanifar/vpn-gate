@@ -4,6 +4,10 @@ Manual checks that need a real machine. The agent cannot run these; the user doe
 
 ## Windows (U20) — clean Windows 10/11 x64 VM, administrator account
 
+**Automated in CI** (`scripts/test-msi.ps1`, the `msi` job on a Windows runner): steps 1-4, the IPC status check, the crash
+recovery of step 7 (service restart; the route cleanup part is not covered) and the uninstall part of step 10. Only the
+rest below needs a human: UI look (5), a real connection (6), SOCKS mode, login/tray/Credential Manager, upgrade.
+
 Get `vpn-gate-msi` from the latest green `msi` CI job (unsigned: SmartScreen "More info" > "Run anyway").
 
 1. **Install.** `msiexec /i VPN-Gate.msi /l*v install.log`. Expect no errors; Start menu has "VPN Gate".

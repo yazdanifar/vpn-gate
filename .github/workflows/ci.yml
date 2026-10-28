@@ -73,6 +73,13 @@ jobs:
       - name: Build the MSI (service, wintun.dll, WinUI app)
         run: scripts/build-msi.ps1
         shell: pwsh
+      - name: Install, check service, ACL, IPC and crash restart, uninstall (runner is a disposable admin machine)
+        run: scripts/test-msi.ps1
+        shell: pwsh
+      - name: Installer logs
+        if: always()
+        uses: actions/upload-artifact@v5
+        with: { name: msi-logs, path: "*.log", if-no-files-found: ignore }
       - uses: actions/upload-artifact@v5
         with: { name: vpn-gate-msi, path: build/VPN-Gate.msi }
   coverage:
