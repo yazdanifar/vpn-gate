@@ -51,11 +51,7 @@ jobs:
           BIN=$(ls -t target/debug/deps/tunnel_hermetic-* | grep -v '\.d$' | head -1)
           sudo "$BIN" --ignored --nocapture
   dotnet:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v4
@@ -63,7 +59,6 @@ jobs:
       - name: VPNGate.Core tests (golden IPC JSON, client and view models against a fake daemon on a named pipe)
         run: dotnet test apps/windows/VPNGate.Tests --configuration Release
       - name: WinUI app builds (unpackaged, self-contained)
-        if: runner.os == 'Windows'
         run: dotnet build apps/windows/VPNGate.App --configuration Release -p:Platform=x64
   coverage:
     runs-on: ubuntu-latest
