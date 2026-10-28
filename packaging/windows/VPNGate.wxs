@@ -48,7 +48,10 @@
         <util:RemoveFolderEx On="uninstall" Property="DATADIR_PATH" />
       </Component>
     </ComponentGroup>
-    <SetProperty Id="DATADIR_PATH" Value="[CommonAppDataFolder]VPNGate" After="CostFinalize" Sequence="both" />
+    <!-- RemoveFolderEx runs early on uninstall, so its path comes from the registry value the install wrote (AppSearch). -->
+    <Property Id="DATADIR_PATH">
+      <RegistrySearch Id="DataDirSearch" Root="HKLM" Key="Software\VPNGate" Name="DataDir" Type="raw" Bitness="always64" />
+    </Property>
 
     <CustomAction Id="LockDataDir" Directory="SystemFolder" Execute="deferred" Impersonate="no" Return="check"
                   ExeCommand="&quot;[SystemFolder]icacls.exe&quot; &quot;[DATADIR]&#92;&quot; /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F" />
