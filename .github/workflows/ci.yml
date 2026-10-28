@@ -44,6 +44,15 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
+      - name: Tunnel tests with the real Wintun adapter, routes and DNS against a fake relay (runner is a disposable admin machine)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo test --locked -p vpngate-daemon --test tunnel_windows --no-run
+          $exe = Get-ChildItem target/debug/deps/tunnel_windows-*.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          scripts/get-wintun.ps1 -Dest $exe.DirectoryName
+          & $exe.FullName --ignored --nocapture --test-threads=1
+          if ($LASTEXITCODE) { throw "tunnel_windows failed ($LASTEXITCODE)" }
       - name: Tunnel test with the real utun and routes against a fake relay (macOS runner has passwordless sudo)
         if: runner.os == 'macOS'
         run: |
@@ -76,6 +85,11 @@ jobs:
       - name: Install, check service, ACL, IPC and crash restart, uninstall (runner is a disposable admin machine)
         run: scripts/test-msi.ps1
         shell: pwsh
+      - name: Upgrade from this MSI to a newer one, refuse a downgrade, uninstall
+        shell: pwsh
+        run: |
+          scripts/build-msi.ps1 -Reuse -Version 99.0.0 -Output build/VPN-Gate-next.msi
+          scripts/test-msi-upgrade.ps1 -Old build/VPN-Gate.msi -New build/VPN-Gate-next.msi -NewVersion 99.0.0
       - name: Installer logs
         if: always()
         uses: actions/upload-artifact@v5

@@ -3,7 +3,9 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Package Name="VPN Gate" Manufacturer="yazdanifar" Version="$(Version)" Scope="perMachine"
            UpgradeCode="55DC82C8-90E6-4C99-8636-A9BEDAC85D7E" Compressed="yes">
-    <MajorUpgrade DowngradeErrorMessage="A newer version of VPN Gate is already installed." />
+    <!-- afterInstallExecute: the new files go in before the old product is removed, so components both versions share (and
+         the data folder with them) are not uninstalled during an upgrade. -->
+    <MajorUpgrade Schedule="afterInstallExecute" DowngradeErrorMessage="A newer version of VPN Gate is already installed." />
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="AppIcon.ico" SourceFile="$(IconFile)" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />

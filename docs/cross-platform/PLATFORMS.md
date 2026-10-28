@@ -4,9 +4,16 @@ Manual checks that need a real machine. The agent cannot run these; the user doe
 
 ## Windows (U20) — clean Windows 10/11 x64 VM, administrator account
 
-**Automated in CI** (`scripts/test-msi.ps1`, the `msi` job on a Windows runner): steps 1-4, the IPC status check, the crash
-recovery of step 7 (service restart; the route cleanup part is not covered) and the uninstall part of step 10. Only the
-rest below needs a human: UI look (5), a real connection (6), SOCKS mode, login/tray/Credential Manager, upgrade.
+**Automated in CI** (the `rust (windows-latest)` and `msi` jobs on disposable admin runners):
+- `scripts/test-msi.ps1`: steps 1-4, the IPC status check, service restart after a kill, uninstall.
+- `scripts/test-msi-upgrade.ps1`: upgrade over an older MSI (data kept, new service process), downgrade refused, uninstall.
+- `crates/vpngate-daemon/tests/tunnel_windows.rs`: a real Wintun adapter, routes and DNS through the real `Session` against a
+  fake relay (ping through the tunnel, only 192.0.2.0/24 captured, relay bypass, IPv6 block, restore on disconnect), SOCKS5-only
+  mode (proxy answers, no system route change), and a killed process whose stale routes the next start removes.
+- `VPNGate.Tests/WindowsIntegrationTests.cs`: real Credential Manager (incl. chunking) and the run-at-login registry value.
+
+Only the rest needs a human: the look of the UI (5), a connection to a real relay with full-tunnel capture of the default
+route (6), a real TCP flow through SOCKS5, tray, upgrade of a running app window.
 
 Get `vpn-gate-msi` from the latest green `msi` CI job (unsigned: SmartScreen "More info" > "Run anyway").
 
