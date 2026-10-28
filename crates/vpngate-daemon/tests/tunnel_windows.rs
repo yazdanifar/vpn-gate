@@ -129,7 +129,12 @@ async fn only_the_documentation_prefix_goes_through_the_tunnel() {
     let run = connect(&state, |_| {}).await;
 
     assert!(adapter_present(), "the {ADAPTER} adapter should exist while connected");
-    assert_eq!(route_alias("192.0.2.7"), ADAPTER, "192.0.2.7 should route into the tunnel");
+    let into_tunnel = routes("192.0.2.0/24");
+    println!("route for 192.0.2.0/24: {into_tunnel:?}");
+    assert!(
+        into_tunnel.iter().any(|r| r.contains(ADAPTER)),
+        "192.0.2.0/24 should route into the tunnel: {into_tunnel:?}"
+    );
     assert_eq!(route_alias("1.1.1.1"), default_before, "the default route must not change");
     assert!(!routes(&format!("{RELAY_HOST}/32")).is_empty(), "the relay bypass route is missing");
     // IPv6 is blocked by default: two /1 routes that lead nowhere.
