@@ -265,6 +265,16 @@ pub fn cleanup_stale(stale: &StaleState) {
             println!("[state] undid {n} leftover change(s) from a previous run");
         }
     }
+    #[cfg(target_os = "linux")]
+    {
+        use vpngate_platform::linux::{LinuxDns, LinuxUndoer};
+        let runner = Arc::new(vpngate_platform::SystemRunner);
+        let undoer = LinuxUndoer::new(runner.clone(), Arc::new(LinuxDns::new(runner)));
+        let n = stale.cleanup_stale(&undoer);
+        if n > 0 {
+            println!("[state] undid {n} leftover change(s) from a previous run");
+        }
+    }
     #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     let _ = stale;
 }
