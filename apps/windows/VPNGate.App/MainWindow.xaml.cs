@@ -1,0 +1,218 @@
+using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using VPNGate.Core;
+using Windows.Graphics;
+
+namespace VPNGate.App;
+
+public sealed partial class MainWindow : Window
+{
+    private readonly DispatcherQueueTimer _tick;
+    private LogWindow? _log;
+    private bool _dialogOpen;
+    private bool _suppressFilter = true;
+    private int _tickCount;
+
+    public MainViewModel Vm { get; }
+
+    public MainWindow()
+    {
+        var queue = DispatcherQueue.GetForCurrentThread();
+        Vm = new MainViewModel(IpcClient.ForNamedPipe(), new JsonFileSettings(JsonFileSettings.DefaultPath), a => queue.TryEnqueue(() => a()));
+        InitializeComponent();
+        AppWindow.Resize(new SizeInt32(1100, 720));
+
+        Vm.QuitRequested += () => Application.Current.Exit();
+        Vm.PropertyChanged += OnVmChanged;
+        Closed += (_, _) => Tray.Dispose();
+
+        // One tick a second: traffic text every time, a status poll every second one (UI-SPEC 11: the service is polled every 2 s).
+        _tick = queue.CreateTimer();
+        _tick.Interval = TimeSpan.FromSeconds(1);
+        _tick.Tick += async (_, _) =>
+        {
+            Vm.RefreshTraffic();
+            if (++_tickCount % 2 == 0) await Vm.PollAsync();
+        };
+
+        Root.Loaded += async (_, _) =>
+        {
+            Tray.ForceCreate();
+            UpdateTray();
+            if (Vm.ShowDisclaimer) await ShowDisclaimerAsync();
+            _tick.Start();
+            await Vm.StartAsync();
+            FillCountries();
+            _suppressFilter = false;
+        };
+    }
+
+    private void OnVmChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(MainViewModel.ShowDisclaimer) when Vm.ShowDisclaimer:
+                _ = ShowDisclaimerAsync();
+                break;
+            case nameof(MainViewModel.Countries):
+                FillCountries();
+                break;
+            case nameof(MainViewModel.State):
+            case nameof(MainViewModel.ServerName):
+                UpdateTray();
+                break;
+        }
+    }
+
+    // MARK: disclaimer (UI-SPEC 1): cannot be dismissed otherwise
+
+    private async Task ShowDisclaimerAsync()
+    {
+        if (_dialogOpen) return;
+        _dialogOpen = true;
+        try
+        {
+            var dialog = new ContentDialog
+            {
+                XamlRoot = Root.XamlRoot,
+                Title = "VPN Gate Academic Experiment Service",
+                Content = new StackPanel
+                {
+                    Spacing = 12,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            TextWrapping = TextWrapping.Wrap,
+                            Text = "VPN Gate is an academic research project of the Graduate School of University of Tsukuba, Japan.\n\n" +
+                                   "Public VPN relay servers are hosted by volunteers around the world. Anyone can connect through these servers to " +
+                                   "achieve anonymity and bypass censorship.\n\n" +
+                                   "By clicking “Agree and Continue”, you confirm that you will use this service in compliance with local laws.",
+                        },
+                        new TextBlock
+                        {
+                            TextWrapping = TextWrapping.Wrap,
+                            Opacity = 0.7,
+                            Text = "Optional diagnostics upload is off and can be turned on in Settings → Advanced.",
+                        },
+                    },
+                },
+                PrimaryButtonText = "Agree and Continue",
+                CloseButtonText = "Disagree & Quit",
+                DefaultButton = ContentDialogButton.Primary,
+            };
+            var result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary) Vm.Agree();
+            else Vm.Disagree();
+        }
+        finally
+        {
+            _dialogOpen = false;
+        }
+    }
+
+    // MARK: toolbar
+
+    private void FillCountries()
+    {
+        _suppressFilter = true;
+        var keep = Vm.Filter.Country;
+        CountryBox.Items.Clear();
+        CountryBox.Items.Add("All countries");
+        foreach (var c in Vm.Countries) CountryBox.Items.Add(c);
+        CountryBox.SelectedIndex = Math.Max(0, Vm.Countries.ToList().IndexOf(keep) + 1);
+        _suppressFilter = false;
+    }
+
+    private void OnSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_suppressFilter) return;
+        Vm.Filter.Search = SearchBox.Text.Trim();
+        Vm.Rebuild();
+    }
+
+    private void OnCountryChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressFilter) return;
+        Vm.Filter.Country = CountryBox.SelectedIndex <= 0 ? ServerFilter.AllCountries : (string)CountryBox.SelectedItem;
+        Vm.Rebuild();
+    }
+
+    private void OnLoggingChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressFilter) return;
+        var weeks = int.Parse((string)((ComboBoxItem)LoggingBox.SelectedItem).Tag);
+        Vm.Filter.MaxLogWeeks = weeks < 0 ? null : weeks;
+        Vm.Rebuild();
+    }
+
+    private void OnFavoritesToggled(object sender, RoutedEventArgs e)
+    {
+        Vm.Filter.FavoritesOnly = FavoritesToggle.IsChecked == true;
+        Vm.Rebuild();
+    }
+
+    private void OnClearFilters(object sender, RoutedEventArgs e)
+    {
+        _suppressFilter = true;
+        SearchBox.Text = "";
+        CountryBox.SelectedIndex = 0;
+        LoggingBox.SelectedIndex = 0;
+        FavoritesToggle.IsChecked = false;
+        _suppressFilter = false;
+        Vm.ClearFilters();
+    }
+
+    private async void OnRefresh(object sender, RoutedEventArgs e) => await Vm.RefreshAsync();
+
+    private void OnShowLog(object sender, RoutedEventArgs e)
+    {
+        if (_log is null)
+        {
+            _log = new LogWindow(Vm);
+            _log.Closed += (_, _) => _log = null;
+        }
+        _log.Activate();
+    }
+
+    private void OnSort(object sender, RoutedEventArgs e) =>
+        Vm.Sort(Enum.Parse<SortKey>((string)((FrameworkElement)sender).Tag));
+
+    // MARK: rows and connect button
+
+    private void OnRowDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        if (Vm.State == ConnectionState.Disconnected && Vm.Selected is not null) Vm.Connect();
+    }
+
+    private void OnRowConnect(object sender, RoutedEventArgs e)
+    {
+        if (Vm.State == ConnectionState.Disconnected && ((FrameworkElement)sender).Tag is VpnServer s) Vm.Connect(s);
+    }
+
+    private void OnRowFavorite(object sender, RoutedEventArgs e)
+    {
+        if (((FrameworkElement)sender).Tag is VpnServer s) Vm.ToggleFavorite(s);
+    }
+
+    private void OnPrimaryAction(object sender, RoutedEventArgs e) => Vm.PrimaryAction();
+
+    // MARK: tray (UI-SPEC 2)
+
+    private void UpdateTray()
+    {
+        Tray.ToolTipText = $"VPN Gate: {Fmt.Title(Vm.State)}";
+        TrayState.Text = Fmt.Title(Vm.State);
+        TrayServer.Text = Vm.ServerName ?? "";
+        TrayServer.Visibility = string.IsNullOrEmpty(Vm.ServerName) ? Visibility.Collapsed : Visibility.Visible;
+        TrayDisconnect.Visibility = Vm.State == ConnectionState.Disconnected ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void OnTrayDisconnect(object sender, RoutedEventArgs e) => Vm.Disconnect();
+
+    private void OnTrayShow(object sender, RoutedEventArgs e) => Activate();
+
+    private void OnTrayQuit(object sender, RoutedEventArgs e) => Application.Current.Exit();
+}

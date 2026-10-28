@@ -48,4 +48,6 @@ memory safety, the existing input validation and fuzz tests (U15).
   scripted `FakeHelperServer` that speaks the daemon's JSON, not to a real daemon.
 - **U15b, golden vectors become frozen fixtures (2026-10-27).** With the Swift engine deleted nothing regenerates `Tests/Fixtures/golden`; they stay as the reference contract for Rust, the app mirrors, and the ports in U18-U28. Rejected: porting the exporter to Rust (it would test Rust against itself).
 - **U15b, release (2026-10-27).** `VERSION` is 2.0.0 and the changelog has the 2.0.0 section; the `v2.0.0` tag (which triggers the Release workflow) is left to the user.
-
+- **U18, view models live in `VPNGate.Core` (2026-10-28).** `MainViewModel` and the IPC client are in a plain `net8.0` library with no WinUI types, so `dotnet test` runs them on any OS (CI: Windows and Linux) against a fake daemon on a real named pipe. The WinUI project is only XAML, a dispatcher hook and the tray. Rejected: tests inside the WinUI project (need a Windows runner with a UI test host).
+- **U18, the tray icon is a generated glyph (2026-10-28).** H.NotifyIcon `GeneratedIconSource` (a "V" on blue) instead of a `.ico` file, until U19 turns `assets/AppIcon-256.png` into the app and tray icons.
+- **U18, package versions (2026-10-28).** WindowsAppSDK 1.6.250228001, Microsoft.Windows.SDK.BuildTools 10.0.26100.1742, H.NotifyIcon.WinUI 2.3.0, CommunityToolkit.Mvvm 8.3.2, xunit 2.9.3. The x64 build only for now (ARM64 comes with the MSI in U20).
