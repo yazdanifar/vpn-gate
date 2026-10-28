@@ -13,7 +13,9 @@ use vpngate_net::session::{simple_connect_config, EmitFn, SessionControlling};
 #[cfg(unix)]
 use crate::engine::Engine;
 #[cfg(unix)]
-use crate::ipc_server::{IpcServer, UidPeerAuth};
+use crate::group_auth::{GroupPeerAuth, SystemDirectory, GROUP_NAME};
+#[cfg(unix)]
+use crate::ipc_server::{IpcServer, PeerAuth, UidPeerAuth};
 
 /// Serves IPC clients until `shutdown` completes, then disconnects the session and removes the socket.
 #[cfg(unix)]
@@ -26,8 +28,15 @@ pub async fn run_daemon(
     shutdown: impl Future<Output = ()>,
 ) -> io::Result<()> {
     // With a fixed uid the console is not consulted at all.
-    let auth = if uid.is_some() { UidPeerAuth::new(uid, || None) } else { UidPeerAuth::new(None, console_uid) };
-    let server = IpcServer::new(&socket, uid, Arc::new(auth), session.clone());
+    let auth: Arc<dyn PeerAuth> = if uid.is_some() {
+        Arc::new(UidPeerAuth::new(uid, || None))
+    } else if cfg!(target_os = "linux") {
+        // No console owner on a Linux server or over SSH: root and the `vpngate` group decide.
+        Arc::new(GroupPeerAuth::new(GROUP_NAME, Arc::new(SystemDirectory)))
+    } else {
+        Arc::new(UidPeerAuth::new(None, console_uid))
+    };
+    let server = IpcServer::new(&socket, uid, auth, session.clone());
     if let Some(engine) = engine {
         server.set_engine(engine);
     }

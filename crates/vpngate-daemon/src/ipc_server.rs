@@ -41,6 +41,7 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Peer {
     pub uid: u32,
+    pub gid: u32,
 }
 
 /// Decides whether a connecting peer may talk to the daemon.
@@ -406,7 +407,7 @@ async fn accept_loop(listener: UnixListener, auth: Arc<dyn PeerAuth>, core: Arc<
                 continue;
             }
         };
-        let allowed = stream.peer_cred().is_ok_and(|c| auth.is_allowed(&Peer { uid: c.uid() }));
+        let allowed = stream.peer_cred().is_ok_and(|c| auth.is_allowed(&Peer { uid: c.uid(), gid: c.gid() }));
         if !allowed {
             continue; // dropping the stream closes it without a byte sent
         }

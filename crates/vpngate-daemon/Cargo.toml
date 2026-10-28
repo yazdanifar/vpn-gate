@@ -25,6 +25,9 @@ vpngate-core.workspace = true
 vpngate-ipc-client.workspace = true
 tokio = { version = "1.54.1", features = ["test-util"] }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.191"
+
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8"
 windows-sys = { version = "0.60", features = [

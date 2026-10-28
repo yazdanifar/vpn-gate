@@ -1,4 +1,4 @@
-//! Where the platform backends plug in. macOS (U13) and Windows (U16/U17) have theirs; until U21 lands, Linux gets the
+//! Where the platform backends plug in: macOS (U13), Windows (U16/U17) and Linux (U21) have theirs. Any other OS gets the
 //! engine with a tunnel that cannot be created: a `connect` handshakes with the relay and then reports "no platform backend" as the session error.
 
 use std::path::Path;
@@ -15,13 +15,13 @@ use vpngate_platform::{NetApply, NetConfiguring, PlatformError, TunDevice};
 
 use crate::stale::StaleState;
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 const MISSING: &str = "No platform backend for this OS yet";
 
 struct Unsupported(String);
 
 impl Unsupported {
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     fn missing() -> Self {
         Unsupported(MISSING.to_string())
     }
@@ -178,6 +178,47 @@ pub fn platform_dependencies(make_transport: MakeTransport, stale: Arc<StaleStat
     }
 }
 
+#[cfg(target_os = "linux")]
+pub fn platform_dependencies(make_transport: MakeTransport, stale: Arc<StaleState>) -> SessionDependencies {
+    use std::net::{Ipv4Addr, SocketAddrV4};
+
+    use vpngate_net::dns_server::{DnsProxyServer, SocketDnsUpstream};
+    use vpngate_net::session::{NetRuleSink, DNS_PROXY_LISTEN_ADDRESS};
+    use vpngate_net::socks::{SocksServer, TunnelConnector};
+    use vpngate_platform::linux::socket_binder::LinuxSocketBinder;
+    use vpngate_platform::linux::tun::LinuxTun;
+    use vpngate_platform::linux::{LinuxDns, LinuxNetConfig};
+    use vpngate_platform::{SocketBinder, SystemRunner, UnboundSocketBinder};
+
+    let listen = SocketAddrV4::new(DNS_PROXY_LISTEN_ADDRESS.parse().unwrap_or(Ipv4Addr::LOCALHOST), 53);
+    SessionDependencies {
+        make_transport,
+        make_tun: Arc::new(|| LinuxTun::create().map(|t| Arc::new(t) as Arc<dyn TunDevice>)),
+        make_net: Arc::new(move || {
+            let dns = Arc::new(LinuxDns::new(Arc::new(SystemRunner)));
+            Arc::new(LinuxNetConfig::new(Arc::new(SystemRunner), dns, stale.clone())) as Arc<dyn NetConfiguring>
+        }),
+        // The proxy's queries follow the routing table: the tunnel's resolver goes through the capture routes, a
+        // `direct` domain's through the bypass routes `apply` added for the physical DNS.
+        make_dns_proxy: Arc::new(move |net: Arc<dyn NetConfiguring>, routing: RoutingConfig| {
+            let upstream = Arc::new(SocketDnsUpstream::new(Arc::new(UnboundSocketBinder)));
+            Ok(Arc::new(DnsProxyServer::new(Arc::new(NetRuleSink(net)), upstream, routing, listen))
+                as Arc<dyn DnsProxyService>)
+        }),
+        make_socks: Arc::new(|port, iface: &str, dns: Vec<String>| match LinuxSocketBinder::for_interface(iface) {
+            Ok(binder) => {
+                let binder: Arc<dyn SocketBinder> = Arc::new(binder);
+                let upstream = Arc::new(SocketDnsUpstream::new(binder.clone()));
+                Arc::new(SocksServer::new(port, Arc::new(TunnelConnector::new(binder, dns, upstream))))
+                    as Arc<dyn SocksService>
+            }
+            Err(e) => {
+                Arc::new(Unsupported(format!("SOCKS proxy cannot bind to {iface}: {e}"))) as Arc<dyn SocksService>
+            }
+        }),
+    }
+}
+
 /// `wintun.dll` ships next to the service executable.
 #[cfg(windows)]
 fn wintun_dll_path() -> String {
@@ -187,7 +228,7 @@ fn wintun_dll_path() -> String {
         .map_or_else(|| "wintun.dll".to_string(), |p| p.to_string_lossy().into_owned())
 }
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 pub fn platform_dependencies(make_transport: MakeTransport, _stale: Arc<StaleState>) -> SessionDependencies {
     SessionDependencies {
         make_transport,
@@ -224,7 +265,17 @@ pub fn cleanup_stale(stale: &StaleState) {
             println!("[state] undid {n} leftover change(s) from a previous run");
         }
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    {
+        use vpngate_platform::linux::{LinuxDns, LinuxUndoer};
+        let runner = Arc::new(vpngate_platform::SystemRunner);
+        let undoer = LinuxUndoer::new(runner.clone(), Arc::new(LinuxDns::new(runner)));
+        let n = stale.cleanup_stale(&undoer);
+        if n > 0 {
+            println!("[state] undid {n} leftover change(s) from a previous run");
+        }
+    }
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     let _ = stale;
 }
 
