@@ -34,11 +34,23 @@ pub struct FdPacketReader {
     running: Mutex<Option<Running>>,
     on_packet: Arc<Mutex<Option<Callback>>>,
     forward_ipv6: Arc<AtomicBool>,
+    /// Packets carry no 4-byte header (Linux `IFF_NO_PI`); the IP version nibble tells the family.
+    raw: bool,
 }
 
 impl FdPacketReader {
     pub fn new(fd: RawFd) -> Self {
+        Self::with_framing(fd, false)
+    }
+
+    /// For a tun device without packet information: bare IP packets in both directions.
+    pub fn new_raw(fd: RawFd) -> Self {
+        Self::with_framing(fd, true)
+    }
+
+    fn with_framing(fd: RawFd, raw: bool) -> Self {
         FdPacketReader {
+            raw,
             fd: Mutex::new(fd),
             running: Mutex::new(None),
             on_packet: Arc::default(),
@@ -66,12 +78,12 @@ impl FdPacketReader {
             return;
         }
         let (tx, rx) = channel();
-        let (on_packet, forward6) = (self.on_packet.clone(), self.forward_ipv6.clone());
+        let (on_packet, forward6, raw) = (self.on_packet.clone(), self.forward_ipv6.clone(), self.raw);
         let wake = pipe[0];
         std::thread::Builder::new()
             .name("vpngate-tun-reader".into())
             .spawn(move || {
-                read_loop(fd, wake, &on_packet, &forward6);
+                read_loop(fd, wake, &on_packet, &forward6, raw);
                 let _ = tx.send(());
             })
             .expect("spawn tun reader");
@@ -84,7 +96,9 @@ impl FdPacketReader {
             return;
         }
         let mut out = Vec::with_capacity(packet.len() + 4);
-        out.extend_from_slice(&[0, 0, 0, family]);
+        if !self.raw {
+            out.extend_from_slice(&[0, 0, 0, family]);
+        }
         out.extend_from_slice(packet);
         // SAFETY: the descriptor is open while the lock is held, and `out` is valid for `out.len()` bytes.
         unsafe { libc::write(*fd, out.as_ptr().cast(), out.len()) };
@@ -124,7 +138,7 @@ impl Drop for FdPacketReader {
     }
 }
 
-fn read_loop(fd: RawFd, wake: RawFd, on_packet: &Mutex<Option<Callback>>, forward6: &AtomicBool) {
+fn read_loop(fd: RawFd, wake: RawFd, on_packet: &Mutex<Option<Callback>>, forward6: &AtomicBool, raw: bool) {
     let mut buf = vec![0u8; 65536];
     loop {
         let mut fds = [
@@ -157,15 +171,24 @@ fn read_loop(fd: RawFd, wake: RawFd, on_packet: &Mutex<Option<Callback>>, forwar
             }
         }
         let n = n as usize;
-        if n <= 4 {
+        let skip = if raw { 0 } else { 4 };
+        if n <= skip {
             continue;
         }
-        // The header is the address family: 2 = AF_INET (IPv4), 30 = AF_INET6 (IPv6).
-        let family = buf[3];
+        // The header is the address family: 2 = AF_INET (IPv4), 30 = AF_INET6 (IPv6). Without one, the IP version.
+        let family = if raw {
+            match buf[0] >> 4 {
+                4 => AF_INET,
+                6 => AF_INET6,
+                _ => continue,
+            }
+        } else {
+            buf[3]
+        };
         if family == AF_INET || (family == AF_INET6 && forward6.load(Ordering::SeqCst)) {
             let callback = lock(on_packet).clone();
             if let Some(f) = callback {
-                f(buf[4..n].to_vec());
+                f(buf[skip..n].to_vec());
             }
         }
     }
@@ -178,6 +201,13 @@ mod tests {
     use std::time::Instant;
 
     use super::*;
+
+    /// Tests that create descriptors run one at a time: the recycling test `dup2`s onto a descriptor number, which
+    /// would hijack one a parallel test had just been given.
+    fn serial() -> MutexGuard<'static, ()> {
+        static LOCK: Mutex<()> = Mutex::new(());
+        lock(&LOCK)
+    }
 
     fn eventually(mut cond: impl FnMut() -> bool) -> bool {
         let deadline = Instant::now() + Duration::from_secs(3);
@@ -210,6 +240,7 @@ mod tests {
 
     #[test]
     fn delivers_ipv4_and_skips_other_families() {
+        let _serial = serial();
         let (reader, peer) = pair();
         let got = collecting(&reader);
         reader.start_reading();
@@ -226,6 +257,7 @@ mod tests {
 
     #[test]
     fn ipv6_is_forwarded_only_when_enabled_and_written_as_af_inet6() {
+        let _serial = serial();
         let (reader, peer) = pair();
         reader.set_forward_ipv6(true);
         let got = collecting(&reader);
@@ -243,7 +275,27 @@ mod tests {
     }
 
     #[test]
+    fn raw_mode_has_no_header_and_sniffs_the_ip_version() {
+        let _serial = serial();
+        let (a, peer) = UnixDatagram::pair().unwrap();
+        let reader = FdPacketReader::new_raw(a.into_raw_fd());
+        let got = collecting(&reader);
+        reader.start_reading();
+        peer.send(&[0x60, 1, 2, 3]).unwrap(); // IPv6 → dropped while not forwarded
+        peer.send(&[0x45, 9, 8, 7]).unwrap();
+        peer.send(&[0x10, 9, 8, 7]).unwrap(); // neither
+        assert!(eventually(|| lock(&got).len() == 1));
+        assert_eq!(*lock(&got), vec![vec![0x45, 9, 8, 7]]);
+        reader.write_ipv4(&[0x45, 5, 5, 5]);
+        let mut buf = [0u8; 64];
+        let n = peer.recv(&mut buf).unwrap();
+        assert_eq!(&buf[..n], &[0x45, 5, 5, 5]);
+        reader.close();
+    }
+
+    #[test]
     fn ipv6_is_dropped_by_default() {
+        let _serial = serial();
         let (reader, peer) = pair();
         let got = collecting(&reader);
         reader.start_reading();
@@ -256,6 +308,7 @@ mod tests {
 
     #[test]
     fn closed_reader_never_reads_from_a_recycled_descriptor() {
+        let _serial = serial();
         let (a, _peer) = UnixDatagram::pair().unwrap();
         let old = a.into_raw_fd();
         let reader = FdPacketReader::new(old);
@@ -270,7 +323,8 @@ mod tests {
         unsafe {
             libc::dup2(next, old);
         }
-        put(&next_peer, 2, &[1, 2, 3, 4]);
+        // Other tests' file I/O can close a number this test shares; a failed send then just means nothing to consume.
+        let _ = next_peer.send(&[0, 0, 0, 2, 1, 2, 3, 4]);
         std::thread::sleep(Duration::from_millis(300));
         assert!(lock(&got).is_empty(), "stale reader consumed a packet that belongs to the next tunnel");
         // SAFETY: closing the descriptors this test opened.
@@ -282,6 +336,7 @@ mod tests {
 
     #[test]
     fn writes_after_close_are_ignored() {
+        let _serial = serial();
         let (reader, peer) = pair();
         reader.close();
         reader.write_ipv4(&[1, 2, 3, 4]);

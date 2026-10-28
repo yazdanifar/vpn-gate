@@ -265,11 +265,11 @@ fn console_uid_matches_the_console_device() {
 #[test]
 fn root_is_always_allowed_and_nobody_else_by_default() {
     let a = UidPeerAuth::new(None, || None);
-    assert!(a.is_allowed(&Peer { uid: 0 }));
-    assert!(!a.is_allowed(&Peer { uid: 501 }));
+    assert!(a.is_allowed(&Peer { uid: 0, gid: 0 }));
+    assert!(!a.is_allowed(&Peer { uid: 501, gid: 501 }));
     // a console owner of root never grants anything extra
     let b = UidPeerAuth::new(None, || Some(0));
-    assert!(!b.is_allowed(&Peer { uid: 501 }));
+    assert!(!b.is_allowed(&Peer { uid: 501, gid: 501 }));
 }
 
 #[tokio::test]

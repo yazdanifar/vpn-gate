@@ -4,6 +4,8 @@ pub mod args;
 pub mod backend;
 pub mod daemon;
 pub mod engine;
+#[cfg(unix)]
+pub mod group_auth;
 pub mod ipc_server;
 #[cfg(windows)]
 pub mod pipe_server;

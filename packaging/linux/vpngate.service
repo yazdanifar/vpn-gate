@@ -1,0 +1,24 @@
+[Unit]
+Description=VPN Gate daemon
+Documentation=https://github.com/yazdanifar/vpn-gate
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/vpngate-daemon --daemon --socket /run/vpngate.sock --bundle /usr/share/vpngate/VPNGate.dat
+Restart=always
+RestartSec=2
+# Runs as root: the daemon asks for CAP_NET_ADMIN (tun, routes, rules) and CAP_NET_RAW (SO_BINDTODEVICE), and the
+# IPC socket admits root and the `vpngate` group only. The state directory holds the cached list, the install id and
+# the resolv.conf backup; /run/vpngate.state (undo list for a crash) is under RuntimeDirectory's /run.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_CHOWN CAP_DAC_OVERRIDE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+StateDirectory=vpngate
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
