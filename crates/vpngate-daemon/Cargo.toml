@@ -24,3 +24,13 @@ async-trait = "0.1.92"
 vpngate-core.workspace = true
 vpngate-ipc-client.workspace = true
 tokio = { version = "1.54.1", features = ["test-util"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-service = "0.8"
+windows-sys = { version = "0.60", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }

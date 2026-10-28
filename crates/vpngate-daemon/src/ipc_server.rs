@@ -1,17 +1,20 @@
-//! Newline-delimited JSON over a Unix socket, restricted by peer uid (`IPCServer.swift`).
+//! Newline-delimited JSON over a local stream (`IPCServer.swift`): a Unix socket restricted by peer uid, or (Windows) a
+//! named pipe whose listener lives in `pipe_server`. Both feed accepted streams to the same [`Inner`].
 //!
 //! Writes go through a bounded outbox per client, drained by that client's own task, so a client that stops reading can
 //! never stall the VPN session or other clients: `broadcast` only pushes to queues and never waits.
 
 use std::collections::VecDeque;
 use std::io;
+#[cfg(unix)]
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{unix::OwnedReadHalf, unix::OwnedWriteHalf, UnixListener};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+#[cfg(unix)]
+use tokio::net::UnixListener;
 use tokio::sync::{watch, Notify};
 use tokio::task::JoinHandle;
 use vpngate_core::ipc::{HelperEvent, HelperReply, HelperRequest, TunnelMode, DEFAULT_SOCKS_PORT};
@@ -31,30 +34,35 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// Who is on the other end of a connection. Unix only has a uid; the Windows backend (U17) brings its own server.
+/// Who is on the other end of a Unix socket connection.
+#[cfg(unix)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Peer {
     pub uid: u32,
 }
 
 /// Decides whether a connecting peer may talk to the daemon.
+#[cfg(unix)]
 pub trait PeerAuth: Send + Sync {
     fn is_allowed(&self, peer: &Peer) -> bool;
 }
 
 /// root, the explicitly configured user, or whoever is logged in at the console.
+#[cfg(unix)]
 pub struct UidPeerAuth {
     allowed_uid: Option<u32>,
     /// Owner of the login session, looked up per connection so fast user switching works.
     console_uid: Box<dyn Fn() -> Option<u32> + Send + Sync>,
 }
 
+#[cfg(unix)]
 impl UidPeerAuth {
     pub fn new(allowed_uid: Option<u32>, console_uid: impl Fn() -> Option<u32> + Send + Sync + 'static) -> Self {
         UidPeerAuth { allowed_uid, console_uid: Box::new(console_uid) }
     }
 }
 
+#[cfg(unix)]
 impl PeerAuth for UidPeerAuth {
     fn is_allowed(&self, peer: &Peer) -> bool {
         peer.uid == 0
@@ -64,6 +72,7 @@ impl PeerAuth for UidPeerAuth {
 }
 
 /// uid of the user logged in at the machine's console (owner of `/dev/console`); `None` when nobody is.
+#[cfg(unix)]
 pub fn current_console_uid() -> Option<u32> {
     use std::os::unix::fs::MetadataExt;
     let uid = std::fs::metadata("/dev/console").ok()?.uid();
@@ -133,7 +142,6 @@ impl Client {
 
 struct Inner {
     session: Arc<dyn SessionControlling>,
-    auth: Arc<dyn PeerAuth>,
     clients: Mutex<Vec<Arc<Client>>>,
     engine: Mutex<Option<Arc<Engine>>>,
 }
@@ -255,13 +263,73 @@ fn encode(e: &HelperEvent) -> Option<Vec<u8>> {
     Some(d)
 }
 
+/// The connection-handling half of the server, independent of how streams arrive.
+pub struct IpcCore {
+    inner: Arc<Inner>,
+}
+
+impl IpcCore {
+    /// Wires the session's events to the clients.
+    pub fn new(session: Arc<dyn SessionControlling>) -> IpcCore {
+        let inner =
+            Arc::new(Inner { session: session.clone(), clients: Mutex::new(Vec::new()), engine: Mutex::new(None) });
+        let weak = Arc::downgrade(&inner);
+        let emit: EmitFn = Arc::new(move |e| {
+            if let Some(inner) = weak.upgrade() {
+                inner.broadcast(&e);
+            }
+        });
+        session.set_emit(Some(emit));
+        IpcCore { inner }
+    }
+
+    /// Enables the IPC v9 commands that need the network (`listServers`, `refreshServers`, `syncDat`, `probe`).
+    pub fn set_engine(&self, engine: Arc<Engine>) {
+        *lock(&self.inner.engine) = Some(engine);
+    }
+
+    /// Serves one already-authenticated connection. Must run inside a Tokio runtime.
+    pub fn attach<S>(&self, stream: S)
+    where
+        S: AsyncRead + AsyncWrite + Send + 'static,
+    {
+        let client = Client::new();
+        lock(&self.inner.clients).push(client.clone());
+        let (rd, wr) = tokio::io::split(stream);
+        tokio::spawn(write_loop(wr, client.clone()));
+        tokio::spawn(serve(rd, client, self.inner.clone()));
+    }
+
+    /// Drops every client.
+    pub fn close_clients(&self) {
+        let clients = std::mem::take(&mut *lock(&self.inner.clients));
+        for c in clients {
+            c.close();
+        }
+    }
+
+    pub fn client_count(&self) -> usize {
+        lock(&self.inner.clients).len()
+    }
+}
+
+impl Drop for IpcCore {
+    fn drop(&mut self) {
+        self.close_clients();
+        self.inner.session.set_emit(None);
+    }
+}
+
+#[cfg(unix)]
 pub struct IpcServer {
     path: PathBuf,
     allowed_uid: Option<u32>,
-    inner: Arc<Inner>,
+    auth: Arc<dyn PeerAuth>,
+    core: Arc<IpcCore>,
     accept: Mutex<Option<JoinHandle<()>>>,
 }
 
+#[cfg(unix)]
 impl IpcServer {
     /// Wires the session's events to the clients. `allowed_uid` only decides the socket's mode (0600 and owned by
     /// that user, or 0666 and left to `auth`).
@@ -271,25 +339,17 @@ impl IpcServer {
         auth: Arc<dyn PeerAuth>,
         session: Arc<dyn SessionControlling>,
     ) -> IpcServer {
-        let inner = Arc::new(Inner {
-            session: session.clone(),
+        IpcServer {
+            path: path.into(),
+            allowed_uid,
             auth,
-            clients: Mutex::new(Vec::new()),
-            engine: Mutex::new(None),
-        });
-        let weak = Arc::downgrade(&inner);
-        let emit: EmitFn = Arc::new(move |e| {
-            if let Some(inner) = weak.upgrade() {
-                inner.broadcast(&e);
-            }
-        });
-        session.set_emit(Some(emit));
-        IpcServer { path: path.into(), allowed_uid, inner, accept: Mutex::new(None) }
+            core: Arc::new(IpcCore::new(session)),
+            accept: Mutex::new(None),
+        }
     }
 
-    /// Enables the IPC v9 commands that need the network (`listServers`, `refreshServers`, `syncDat`, `probe`).
     pub fn set_engine(&self, engine: Arc<Engine>) {
-        *lock(&self.inner.engine) = Some(engine);
+        self.core.set_engine(engine);
     }
 
     /// Binds the socket and starts accepting. Must run inside a Tokio runtime.
@@ -307,8 +367,7 @@ impl IpcServer {
         if let Some(uid) = self.allowed_uid {
             std::os::unix::fs::chown(&self.path, Some(uid), None)?;
         }
-        let inner = self.inner.clone();
-        *lock(&self.accept) = Some(tokio::spawn(accept_loop(listener, inner)));
+        *lock(&self.accept) = Some(tokio::spawn(accept_loop(listener, self.auth.clone(), self.core.clone())));
         Ok(())
     }
 
@@ -317,26 +376,24 @@ impl IpcServer {
         if let Some(t) = lock(&self.accept).take() {
             t.abort();
         }
-        let clients = std::mem::take(&mut *lock(&self.inner.clients));
-        for c in clients {
-            c.close();
-        }
+        self.core.close_clients();
         let _ = std::fs::remove_file(&self.path);
     }
 
     pub fn client_count(&self) -> usize {
-        lock(&self.inner.clients).len()
+        self.core.client_count()
     }
 }
 
+#[cfg(unix)]
 impl Drop for IpcServer {
     fn drop(&mut self) {
         self.stop();
-        self.inner.session.set_emit(None);
     }
 }
 
-async fn accept_loop(listener: UnixListener, inner: Arc<Inner>) {
+#[cfg(unix)]
+async fn accept_loop(listener: UnixListener, auth: Arc<dyn PeerAuth>, core: Arc<IpcCore>) {
     loop {
         let stream = match listener.accept().await {
             Ok((s, _)) => s,
@@ -347,20 +404,16 @@ async fn accept_loop(listener: UnixListener, inner: Arc<Inner>) {
                 continue;
             }
         };
-        let allowed = stream.peer_cred().is_ok_and(|c| inner.auth.is_allowed(&Peer { uid: c.uid() }));
+        let allowed = stream.peer_cred().is_ok_and(|c| auth.is_allowed(&Peer { uid: c.uid() }));
         if !allowed {
             continue; // dropping the stream closes it without a byte sent
         }
-        let client = Client::new();
-        lock(&inner.clients).push(client.clone());
-        let (rd, wr) = stream.into_split();
-        tokio::spawn(write_loop(wr, client.clone()));
-        tokio::spawn(serve(rd, client, inner.clone()));
+        core.attach(stream);
     }
 }
 
 /// Drains the client's outbox; a write that makes no progress for `STALL_TIMEOUT` closes the client.
-async fn write_loop(mut wr: OwnedWriteHalf, client: Arc<Client>) {
+async fn write_loop<W: AsyncWrite + Unpin>(mut wr: W, client: Arc<Client>) {
     loop {
         let Some(line) = client.next() else {
             tokio::select! {
@@ -379,7 +432,7 @@ async fn write_loop(mut wr: OwnedWriteHalf, client: Arc<Client>) {
     let _ = wr.shutdown().await;
 }
 
-async fn serve(mut rd: OwnedReadHalf, client: Arc<Client>, inner: Arc<Inner>) {
+async fn serve<R: AsyncRead + Unpin>(mut rd: R, client: Arc<Client>, inner: Arc<Inner>) {
     if let Some(line) = encode(&inner.session.snapshot()) {
         client.send(line);
     }
@@ -411,5 +464,5 @@ async fn serve(mut rd: OwnedReadHalf, client: Arc<Client>, inner: Arc<Inner>) {
     client.close();
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests;

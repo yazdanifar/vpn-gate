@@ -374,7 +374,7 @@ async fn stop_closes_clients_and_removes_the_socket() {
     assert!(!f.path.exists());
     assert_eq!(c.read(2000).await.as_deref(), Some(""));
     // the same path can be bound again right away
-    let again = IpcServer::new(&f.path, f.server.allowed_uid, f.server.inner.auth.clone(), f.session.clone());
+    let again = IpcServer::new(&f.path, f.server.allowed_uid, f.server.auth.clone(), f.session.clone());
     again.start().unwrap();
     assert!(f.path.exists());
 }

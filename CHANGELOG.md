@@ -4,6 +4,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
 ## [Unreleased]
 ### Added
 - U16: Windows backend, tunnel and routes, in `vpngate-platform::windows`: a Wintun adapter (`wintun.dll` loaded at run time), address/MTU/routes through the IP Helper API, and `WinNetConfig` (split default route, relay bypass, IPv6 capture, routing rules, undo list). Route logic is tested against a recording fake on every OS; the Windows syscall layer is compile-checked only until the U20 VM checklist.
+- U17: Windows backend, DNS, IPC and service. `WinDns` (`SetInterfaceDnsSettings` + a pinned interface metric, behind a `DnsApi` trait), `WinSocketBinder` (`IP_UNICAST_IF`), a named-pipe IPC listener (`\\.\pipe\VPNGate`, ACL for SYSTEM, Administrators and Interactive, remote clients rejected, client token SIDs checked) and a `windows-service` host (`vpngate-daemon --service`; `--daemon` runs the same server on a console). The IPC server is split into a transport-independent `IpcCore` plus the Unix listener. The daemon wires the Windows backend and undoes stale routes at start.
 ### Fixed
 - `HelperClient` is marked `@unchecked Sendable` (its state is lock-guarded), which removes the Swift concurrency warning printed on every app build.
 
