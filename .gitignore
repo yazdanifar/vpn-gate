@@ -58,3 +58,7 @@ docs/research/*.java
 
 # Rust
 target/
+
+# .NET
+bin/
+obj/

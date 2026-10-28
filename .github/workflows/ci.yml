@@ -50,6 +50,21 @@ jobs:
           cargo test --locked -p vpngate-daemon --test tunnel_hermetic --no-run
           BIN=$(ls -t target/debug/deps/tunnel_hermetic-* | grep -v '\.d$' | head -1)
           sudo "$BIN" --ignored --nocapture
+  dotnet:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+      - name: VPNGate.Core tests (golden IPC JSON, client and view models against a fake daemon on a named pipe)
+        run: dotnet test apps/windows/VPNGate.Tests --configuration Release
+      - name: WinUI app builds (unpackaged, self-contained)
+        if: runner.os == 'Windows'
+        run: dotnet build apps/windows/VPNGate.App --configuration Release -p:Platform=x64
   coverage:
     runs-on: ubuntu-latest
     steps:
