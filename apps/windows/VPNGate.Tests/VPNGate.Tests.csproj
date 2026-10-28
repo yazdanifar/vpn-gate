@@ -5,11 +5,20 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>CA1416</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.0.2" />
+  </ItemGroup>
+  <!-- Real Credential Manager / registry tests: the two App sources they exercise are compiled in, on Windows only. -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <Compile Include="..\VPNGate.App\CredentialStore.cs" Link="Windows\CredentialStore.cs" />
+    <Compile Include="..\VPNGate.App\StartupRegistration.cs" Link="Windows\StartupRegistration.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+    <Compile Remove="WindowsIntegrationTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\VPNGate.Core\VPNGate.Core.csproj" />
