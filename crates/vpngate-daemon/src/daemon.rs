@@ -39,6 +39,47 @@ pub async fn run_daemon(
     Ok(())
 }
 
+/// The Windows twin of [`run_daemon`]: serves the named pipe until `shutdown` completes. Creates the data directory and
+/// undoes a crashed run's leftovers first, so the service and `--daemon` on a console behave alike.
+#[cfg(windows)]
+pub async fn run_pipe_daemon(
+    pipe: String,
+    cache: Option<String>,
+    bundle: Option<String>,
+    shutdown: impl Future<Output = ()>,
+) -> std::io::Result<()> {
+    use std::path::PathBuf;
+
+    use crate::engine::Engine;
+    use crate::ipc_server::IpcCore;
+    use crate::pipe_server::PipeServer;
+
+    std::fs::create_dir_all(crate::backend::WINDOWS_DATA_DIR)?;
+    let session = new_session();
+    let core = Arc::new(IpcCore::new(session.clone()));
+    core.set_engine(Arc::new(Engine::production(
+        PathBuf::from(cache.unwrap_or_else(|| crate::backend::default_cache_path().to_string())),
+        bundle.into_iter().map(PathBuf::from).collect(),
+    )));
+    let server = PipeServer::new(pipe.clone(), core);
+    server.start()?;
+    println!("vpngate-daemon listening on {pipe}");
+    shutdown.await;
+    session.disconnect();
+    server.stop();
+    Ok(())
+}
+
+/// A session with this OS's backend, after undoing what a daemon that died without tearing down left behind.
+pub fn new_session() -> Arc<vpngate_net::session::Session> {
+    use crate::backend;
+    use crate::stale::StaleState;
+    let stale = Arc::new(StaleState::new(backend::default_state_path()));
+    backend::cleanup_stale(&stale);
+    let deps = backend::default_dependencies(std::path::Path::new(backend::default_unique_id_path()), stale);
+    vpngate_net::session::Session::new(deps, vpngate_net::session::SessionTiming::default())
+}
+
 /// Connects once and prints the session's log until `shutdown` completes (`--connect`, debugging).
 pub async fn run_connect(
     session: Arc<dyn SessionControlling>,

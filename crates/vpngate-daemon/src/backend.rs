@@ -1,5 +1,5 @@
-//! Where the platform backends plug in. macOS has its backend (U13); until U16/U21 land, the other OSes get the engine
-//! with a tunnel that cannot be created: a `connect` handshakes with the relay and then reports "no platform backend" as the session error.
+//! Where the platform backends plug in. macOS (U13) and Windows (U16/U17) have theirs; until U21 lands, Linux gets the
+//! engine with a tunnel that cannot be created: a `connect` handshakes with the relay and then reports "no platform backend" as the session error.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -15,13 +15,13 @@ use vpngate_platform::{NetApply, NetConfiguring, PlatformError, TunDevice};
 
 use crate::stale::StaleState;
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 const MISSING: &str = "No platform backend for this OS yet";
 
 struct Unsupported(String);
 
 impl Unsupported {
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     fn missing() -> Self {
         Unsupported(MISSING.to_string())
     }
@@ -133,7 +133,61 @@ pub fn platform_dependencies(make_transport: MakeTransport, stale: Arc<StaleStat
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+pub fn platform_dependencies(make_transport: MakeTransport, stale: Arc<StaleState>) -> SessionDependencies {
+    use std::net::{Ipv4Addr, SocketAddrV4};
+
+    use vpngate_net::dns_server::{DnsProxyServer, SocketDnsUpstream};
+    use vpngate_net::session::{NetRuleSink, DNS_PROXY_LISTEN_ADDRESS};
+    use vpngate_net::socks::{SocksServer, TunnelConnector};
+    use vpngate_platform::windows::dns::WinDns;
+    use vpngate_platform::windows::ip_helper::IpHelper;
+    use vpngate_platform::windows::socket_binder::WinSocketBinder;
+    use vpngate_platform::windows::sys::{SystemDnsApi, SystemIpHelper};
+    use vpngate_platform::windows::wintun::WintunDevice;
+    use vpngate_platform::windows::WinNetConfig;
+    use vpngate_platform::{SocketBinder, UnboundSocketBinder};
+
+    let listen = SocketAddrV4::new(DNS_PROXY_LISTEN_ADDRESS.parse().unwrap_or(Ipv4Addr::LOCALHOST), 53);
+    SessionDependencies {
+        make_transport,
+        make_tun: Arc::new(|| WintunDevice::create(&wintun_dll_path()).map(|t| Arc::new(t) as Arc<dyn TunDevice>)),
+        make_net: Arc::new(move || {
+            let dns = Arc::new(WinDns::new(Arc::new(SystemIpHelper), Arc::new(SystemDnsApi)));
+            Arc::new(WinNetConfig::new(Arc::new(SystemIpHelper), dns, stale.clone())) as Arc<dyn NetConfiguring>
+        }),
+        make_dns_proxy: Arc::new(move |net: Arc<dyn NetConfiguring>, routing: RoutingConfig| {
+            let upstream = Arc::new(SocketDnsUpstream::new(Arc::new(UnboundSocketBinder)));
+            Ok(Arc::new(DnsProxyServer::new(Arc::new(NetRuleSink(net)), upstream, routing, listen))
+                as Arc<dyn DnsProxyService>)
+        }),
+        make_socks: Arc::new(|port, iface: &str, dns: Vec<String>| {
+            let ip: &dyn IpHelper = &SystemIpHelper;
+            match WinSocketBinder::for_interface(iface, ip) {
+                Ok(binder) => {
+                    let binder: Arc<dyn SocketBinder> = Arc::new(binder);
+                    let upstream = Arc::new(SocketDnsUpstream::new(binder.clone()));
+                    Arc::new(SocksServer::new(port, Arc::new(TunnelConnector::new(binder, dns, upstream))))
+                        as Arc<dyn SocksService>
+                }
+                Err(e) => {
+                    Arc::new(Unsupported(format!("SOCKS proxy cannot bind to {iface}: {e}"))) as Arc<dyn SocksService>
+                }
+            }
+        }),
+    }
+}
+
+/// `wintun.dll` ships next to the service executable.
+#[cfg(windows)]
+fn wintun_dll_path() -> String {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("wintun.dll")))
+        .map_or_else(|| "wintun.dll".to_string(), |p| p.to_string_lossy().into_owned())
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn platform_dependencies(make_transport: MakeTransport, _stale: Arc<StaleState>) -> SessionDependencies {
     SessionDependencies {
         make_transport,
@@ -158,7 +212,19 @@ pub fn cleanup_stale(stale: &StaleState) {
             println!("[state] undid {n} leftover change(s) from a previous run");
         }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    {
+        use vpngate_platform::windows::dns::WinDns;
+        use vpngate_platform::windows::sys::{SystemDnsApi, SystemIpHelper};
+        use vpngate_platform::windows::WinUndoer;
+        let dns = Arc::new(WinDns::new(Arc::new(SystemIpHelper), Arc::new(SystemDnsApi)));
+        let undoer = WinUndoer::new(Arc::new(SystemIpHelper), dns);
+        let n = stale.cleanup_stale(&undoer);
+        if n > 0 {
+            println!("[state] undid {n} leftover change(s) from a previous run");
+        }
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     let _ = stale;
 }
 
@@ -173,9 +239,17 @@ pub fn default_unique_id_path() -> &'static str {
     }
 }
 
+/// The named pipe the Windows service listens on and the WinUI app connects to.
+pub const WINDOWS_PIPE_NAME: &str = r"\\.\pipe\VPNGate";
+
+/// Where the Windows service keeps its data.
+pub const WINDOWS_DATA_DIR: &str = "C:\\ProgramData\\VPNGate";
+
 pub fn default_socket_path() -> &'static str {
     if cfg!(target_os = "macos") {
         vpngate_core::ipc::HELPER_SOCKET_PATH
+    } else if cfg!(windows) {
+        WINDOWS_PIPE_NAME
     } else {
         "/run/vpngate.sock"
     }
@@ -184,6 +258,8 @@ pub fn default_socket_path() -> &'static str {
 pub fn default_state_path() -> &'static str {
     if cfg!(target_os = "macos") {
         "/var/run/vpngate-mac.state"
+    } else if cfg!(windows) {
+        "C:\\ProgramData\\VPNGate\\state.json"
     } else {
         "/run/vpngate.state"
     }

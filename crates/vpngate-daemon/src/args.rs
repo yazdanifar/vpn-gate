@@ -28,6 +28,8 @@ pub enum Mode {
         /// `--cache`: where the newest verified list is kept; the platform default when absent.
         cache: Option<String>,
     },
+    /// Run under the Windows service control manager.
+    Service,
     Usage,
 }
 
@@ -83,6 +85,8 @@ pub fn parse(args: &[String]) -> Args {
             port: opt(args, "--port").and_then(|p| p.parse().ok()),
             allow_ipv6: has("--allow-ipv6"),
         }
+    } else if has("--service") {
+        Mode::Service
     } else if has("--daemon") {
         Mode::Daemon {
             uid: opt(args, "--uid").and_then(|u| u.parse().ok()),
@@ -96,7 +100,7 @@ pub fn parse(args: &[String]) -> Args {
 }
 
 pub const USAGE: &str = "usage: vpngate-daemon --daemon [--uid <uid>] [--socket <path>] [--bundle <VPNGate.dat>] [--cache <VPNGate.dat>] | --connect <host> [--port N] \
-[--allow-ipv6] | --probe <host> [--port N] [--watch-udp [N]] | --version";
+[--allow-ipv6] | --probe <host> [--port N] [--watch-udp [N]] | --service | --version";
 
 #[cfg(test)]
 mod tests {
@@ -130,6 +134,7 @@ mod tests {
     fn modes() {
         assert_eq!(parse(&v(&["--version"])).mode, Mode::Version);
         assert_eq!(parse(&v(&[])).mode, Mode::Usage);
+        assert_eq!(parse(&v(&["--service"])).mode, Mode::Service);
         assert_eq!(parse(&v(&["--daemon"])).mode, Mode::Daemon { uid: None, bundle: None, cache: None });
         let a =
             parse(&v(&["--daemon", "--uid", "501", "--socket", "/tmp/s", "--bundle", "/b.dat", "--cache", "/c.dat"]));

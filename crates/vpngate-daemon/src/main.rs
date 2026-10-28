@@ -4,6 +4,7 @@ use std::io::Write;
 #[cfg(unix)]
 use std::path::PathBuf;
 use std::process::ExitCode;
+#[cfg(unix)]
 use std::sync::Arc;
 
 use vpngate_core::ipc::HELPER_VERSION;
@@ -12,13 +13,15 @@ use vpngate_daemon::args::{self, Mode};
 use vpngate_daemon::backend;
 #[cfg(unix)]
 use vpngate_daemon::engine::Engine;
-use vpngate_daemon::stale::StaleState;
 use vpngate_daemon::{daemon, probe};
-use vpngate_net::session::{Session, SessionTiming};
 
 fn main() -> ExitCode {
     let argv: Vec<String> = std::env::args().skip(1).collect();
     let parsed = args::parse(&argv);
+    if parsed.mode == Mode::Service {
+        // The service dispatcher builds its own runtime, so it must not start inside one.
+        return ExitCode::from(run_service());
+    }
     let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
         Ok(r) => r,
         Err(e) => {
@@ -52,19 +55,13 @@ async fn run(parsed: args::Args) -> u8 {
                 println!("invalid host");
                 return 2;
             }
-            let session = new_session();
+            let session = daemon::new_session();
             daemon::run_connect(session, &host, port, allow_ipv6, daemon::wait_for_signal()).await;
             0
         }
         Mode::Daemon { uid, bundle, cache } => run_daemon_mode(socket, uid, bundle, cache).await,
+        Mode::Service => 2, // handled in `main`
     }
-}
-
-fn new_session() -> Arc<Session> {
-    let stale = Arc::new(StaleState::new(backend::default_state_path()));
-    backend::cleanup_stale(&stale);
-    let deps = backend::default_dependencies(std::path::Path::new(backend::default_unique_id_path()), stale);
-    Session::new(deps, SessionTiming::default())
 }
 
 #[cfg(unix)]
@@ -80,7 +77,7 @@ fn is_root() -> bool {
 
 #[cfg(unix)]
 async fn run_daemon_mode(socket: String, uid: Option<u32>, bundle: Option<String>, cache: Option<String>) -> u8 {
-    let session = new_session();
+    let session = daemon::new_session();
     let engine = Arc::new(Engine::production(
         PathBuf::from(cache.unwrap_or_else(|| backend::default_cache_path().to_string())),
         bundle.into_iter().map(PathBuf::from).collect(),
@@ -103,8 +100,37 @@ async fn run_daemon_mode(socket: String, uid: Option<u32>, bundle: Option<String
     }
 }
 
-#[cfg(not(unix))]
+/// `--daemon` on a console: the same pipe server the service runs, stopped with Ctrl-C.
+#[cfg(windows)]
+async fn run_daemon_mode(socket: String, _uid: Option<u32>, bundle: Option<String>, cache: Option<String>) -> u8 {
+    match daemon::run_pipe_daemon(socket, cache, bundle, daemon::wait_for_signal()).await {
+        Ok(()) => 0,
+        Err(e) => {
+            println!("IPC: {e}");
+            1
+        }
+    }
+}
+
+#[cfg(windows)]
+fn run_service() -> u8 {
+    match vpngate_daemon::service::run() {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("cannot start as a service: {e}");
+            1
+        }
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
 async fn run_daemon_mode(_socket: String, _uid: Option<u32>, _bundle: Option<String>, _cache: Option<String>) -> u8 {
-    println!("the Windows service entry point arrives with U17");
+    println!("no platform backend for this OS yet");
+    2
+}
+
+#[cfg(not(windows))]
+fn run_service() -> u8 {
+    println!("--service is only available on Windows");
     2
 }

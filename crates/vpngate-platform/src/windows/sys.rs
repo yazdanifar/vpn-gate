@@ -13,6 +13,7 @@ use windows_sys::Win32::NetworkManagement::IpHelper::{
 use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
 use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6, SOCKADDR_INET};
 
+use super::dns::DnsApi;
 use super::ip_helper::{BestRoute, IpHelper, Route};
 
 pub struct SystemIpHelper;
@@ -134,5 +135,102 @@ impl IpHelper for SystemIpHelper {
         let next_hop = (hop.sin_family == AF_INET && unsafe { hop.sin_addr.S_un.S_addr } != 0)
             .then(|| Ipv4Addr::from(unsafe { hop.sin_addr.S_un.S_addr }.to_ne_bytes()));
         Some(BestRoute { if_index: row.InterfaceIndex, next_hop })
+    }
+}
+
+/// [`DnsApi`] over `SetInterfaceDnsSettings`, `SetIpInterfaceEntry` and `GetAdaptersAddresses`.
+pub struct SystemDnsApi;
+
+fn guid_of(if_index: u32) -> Result<windows_sys::core::GUID, String> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::ConvertInterfaceLuidToGuid;
+    let luid = luid_of(if_index).ok_or_else(|| format!("no interface {if_index}"))?;
+    // SAFETY: plain out-parameter call.
+    let mut guid: windows_sys::core::GUID = unsafe { mem::zeroed() };
+    check("ConvertInterfaceLuidToGuid", unsafe { ConvertInterfaceLuidToGuid(&luid, &mut guid) })?;
+    Ok(guid)
+}
+
+impl DnsApi for SystemDnsApi {
+    fn set_servers(&self, if_index: u32, servers: &[Ipv4Addr]) -> Result<(), String> {
+        use windows_sys::Win32::NetworkManagement::IpHelper::{
+            SetInterfaceDnsSettings, DNS_INTERFACE_SETTINGS, DNS_INTERFACE_SETTINGS_VERSION1, DNS_SETTING_NAMESERVER,
+        };
+        let guid = guid_of(if_index)?;
+        let list: Vec<String> = servers.iter().map(Ipv4Addr::to_string).collect();
+        let mut wide: Vec<u16> = list.join(",").encode_utf16().chain(Some(0)).collect();
+        // SAFETY: plain data; `wide` outlives the call and is NUL-terminated.
+        let mut settings: DNS_INTERFACE_SETTINGS = unsafe { mem::zeroed() };
+        settings.Version = DNS_INTERFACE_SETTINGS_VERSION1;
+        settings.Flags = u64::from(DNS_SETTING_NAMESERVER);
+        settings.NameServer = wide.as_mut_ptr();
+        // SAFETY: `settings` is fully initialised for the flags it sets.
+        check("SetInterfaceDnsSettings", unsafe { SetInterfaceDnsSettings(guid, &settings) })
+    }
+
+    fn set_metric(&self, if_index: u32, metric: u32) -> Result<(), String> {
+        self.update_metric(if_index, Some(metric))
+    }
+
+    fn use_automatic_metric(&self, if_index: u32) -> Result<(), String> {
+        self.update_metric(if_index, None)
+    }
+
+    fn servers(&self, if_index: u32) -> Vec<Ipv4Addr> {
+        use windows_sys::Win32::NetworkManagement::IpHelper::{GetAdaptersAddresses, IP_ADAPTER_ADDRESSES_LH};
+        let mut len = 16 * 1024u32;
+        // 8-byte aligned storage for the adapter list the API writes into.
+        let mut buf: Vec<u64> = Vec::new();
+        for _ in 0..3 {
+            buf.resize(len as usize / 8 + 1, 0);
+            // SAFETY: `buf` is at least `len` bytes; the API reports the size it needs when it is too small.
+            let code = unsafe {
+                GetAdaptersAddresses(
+                    u32::from(AF_INET),
+                    0,
+                    std::ptr::null(),
+                    buf.as_mut_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>(),
+                    &mut len,
+                )
+            };
+            if code == NO_ERROR {
+                let mut out = Vec::new();
+                let mut adapter = buf.as_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>();
+                // SAFETY: the list is a chain of structs inside `buf`, ended by a null `Next`.
+                while let Some(a) = unsafe { adapter.as_ref() } {
+                    if unsafe { a.Anonymous1.Anonymous.IfIndex } == if_index {
+                        let mut dns = a.FirstDnsServerAddress;
+                        while let Some(d) = unsafe { dns.as_ref() } {
+                            let sa = d.Address.lpSockaddr;
+                            if !sa.is_null() && unsafe { (*sa).sa_family } == AF_INET {
+                                let v4 = unsafe { &*sa.cast::<windows_sys::Win32::Networking::WinSock::SOCKADDR_IN>() };
+                                out.push(Ipv4Addr::from(unsafe { v4.sin_addr.S_un.S_addr }.to_ne_bytes()));
+                            }
+                            dns = d.Next;
+                        }
+                    }
+                    adapter = a.Next;
+                }
+                return out;
+            }
+            if code != windows_sys::Win32::Foundation::ERROR_BUFFER_OVERFLOW {
+                break;
+            }
+        }
+        Vec::new()
+    }
+}
+
+impl SystemDnsApi {
+    /// `Some(metric)` pins it; `None` goes back to the automatic metric.
+    fn update_metric(&self, if_index: u32, metric: Option<u32>) -> Result<(), String> {
+        // SAFETY: plain data; Family and InterfaceIndex select the row to read back.
+        let mut row: MIB_IPINTERFACE_ROW = unsafe { mem::zeroed() };
+        row.Family = AF_INET;
+        row.InterfaceIndex = if_index;
+        check("GetIpInterfaceEntry", unsafe { GetIpInterfaceEntry(&mut row) })?;
+        row.UseAutomaticMetric = metric.is_none();
+        row.Metric = metric.unwrap_or(0);
+        row.SitePrefixLength = 0;
+        check("SetIpInterfaceEntry", unsafe { SetIpInterfaceEntry(&mut row) })
     }
 }
