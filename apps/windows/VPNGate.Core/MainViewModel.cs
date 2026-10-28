@@ -22,6 +22,11 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly TimeSpan _reconnectDelay;
     private readonly TimeSpan _answerTimeout;
     private readonly Func<DateTimeOffset> _clock;
+    private readonly ISecretStore _secrets;
+    private readonly ConnectionHistoryStore? _history;
+    private Guid? _historyEntry;
+    private (ulong In, ulong Out) _historyBytes;
+    private int _connectSeq;
     private Action? _parked;
     private List<VpnServer> _all = new();
     private VpnServer? _wanted;
@@ -30,10 +35,14 @@ public sealed partial class MainViewModel : ObservableObject
     private int _loading;
 
     public MainViewModel(IpcClient ipc, ISettingsStore settings, Action<Action>? post = null,
-        TimeSpan? reconnectDelay = null, TimeSpan? answerTimeout = null, Func<DateTimeOffset>? clock = null)
+        TimeSpan? reconnectDelay = null, TimeSpan? answerTimeout = null, Func<DateTimeOffset>? clock = null,
+        AccountStore? accounts = null, ISecretStore? secrets = null, ConnectionHistoryStore? history = null)
     {
         _ipc = ipc;
         _settings = settings;
+        Accounts = accounts;
+        _secrets = secrets ?? new MemorySecretStore();
+        _history = history;
         _post = post ?? (a => a());
         _reconnectDelay = reconnectDelay ?? DefaultReconnectDelay;
         _answerTimeout = answerTimeout ?? DefaultAnswerTimeout;
@@ -47,6 +56,11 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     public ServerFilter Filter { get; } = new();
+    public AccountStore? Accounts { get; }
+    public ISettingsStore Settings => _settings;
+    public ConnectionHistoryStore? History => _history;
+    /// <summary>The connection setting (not a list server) the current session was started from.</summary>
+    public ClientAccount? ActiveAccount { get; private set; }
 
     [ObservableProperty] private ConnectionState _state = ConnectionState.Disconnected;
     [ObservableProperty] private string? _server;
@@ -114,6 +128,30 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnBytesInChanged(ulong value) => OnPropertyChanged(nameof(TrafficText));
     partial void OnBytesOutChanged(ulong value) => OnPropertyChanged(nameof(TrafficText));
 
+    public const string ProxySecretKey = "proxy";
+
+    /// <summary>The proxy for list downloads and list connections; credentials travel only when a username is set.</summary>
+    public ProxySettings CurrentProxy()
+    {
+        var p = new ProxySettings { Kind = _settings.ProxyKind, Host = _settings.ProxyHost, Port = _settings.ProxyPort };
+        if (p.Kind != ProxyKind.None && _settings.ProxyUsername.Length > 0)
+        {
+            p.Username = _settings.ProxyUsername;
+            p.Password = _secrets.Get(ProxySecretKey) ?? "";
+        }
+        return p;
+    }
+
+    public string? ProxyPassword
+    {
+        get => _secrets.Get(ProxySecretKey);
+        set
+        {
+            if (string.IsNullOrEmpty(value)) _secrets.Delete(ProxySecretKey);
+            else _secrets.Set(ProxySecretKey, value);
+        }
+    }
+
     // MARK: disclaimer
 
     /// <summary>True when the caller may proceed; otherwise the action is parked and the disclaimer shown.</summary>
@@ -163,6 +201,7 @@ public sealed partial class MainViewModel : ObservableObject
         ServiceRunning = false;
         if (_reconnect is null) State = ConnectionState.Disconnected;
         ConnectedAt = null;
+        EndHistory(null);
     }
 
     public void ApplyEvent(HelperEvent e)
@@ -186,6 +225,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
         BytesIn = e.BytesIn;
         BytesOut = e.BytesOut;
+        TrackHistory(e);
         if (e.State == ConnectionState.Connected)
         {
             ConnectedAt ??= _clock();
@@ -198,6 +238,32 @@ public sealed partial class MainViewModel : ObservableObject
             ConsiderReconnect(e);
         }
         OnPropertyChanged(nameof(TrafficText));
+    }
+
+    /// <summary>One history entry per connected period: started at <c>connected</c>, ended by the next event in any other state.</summary>
+    private void TrackHistory(HelperEvent e)
+    {
+        if (_history is null) return;
+        if (e.State == ConnectionState.Connected)
+        {
+            _historyBytes = (e.BytesIn, e.BytesOut);
+            _historyEntry ??= _history.RecordStart(HistoryName(e), e.Server ?? "");
+        }
+        else EndHistory(e.Error);
+    }
+
+    private void EndHistory(string? error)
+    {
+        if (_historyEntry is not { } id) return;
+        _historyEntry = null;
+        _history?.RecordEnd(id, _historyBytes.In, _historyBytes.Out, error);
+        _historyBytes = (0, 0);
+    }
+
+    private string HistoryName(HelperEvent e)
+    {
+        if (ActiveAccount is { } a && a.Host == e.Server) return a.Name;
+        return _all.FirstOrDefault(s => s.Ip == e.Server)?.HostName ?? e.Server ?? "unknown";
     }
 
     public void RefreshTraffic() => OnPropertyChanged(nameof(TrafficText));
@@ -218,7 +284,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void ConsiderReconnect(HelperEvent e)
     {
-        if (_wanted is not { } server || _reconnect is not null) return;
+        if (_wanted is not { } server || _reconnect is not null || !_settings.AutoReconnect) return;
         _reconnectAttempts++;
         AppendLog($"Reconnecting to {server.HostName} in {(int)Math.Ceiling(_reconnectDelay.TotalSeconds)} s (attempt {_reconnectAttempts})");
         State = ConnectionState.Reconnecting;
@@ -269,6 +335,7 @@ public sealed partial class MainViewModel : ObservableObject
         Notice = null;
         CancelReconnect();
         _wanted = _lastServer = server;
+        ActiveAccount = null;
         _reconnectAttempts = 0;
         _ = SendConnectAsync(server);
     }
@@ -280,19 +347,54 @@ public sealed partial class MainViewModel : ObservableObject
         r.Port = s.ConnectPort;
         if (s.SslPorts.Count > 0) r.Ports = s.PrioritizedSslPorts.Select(p => (int)p).ToList();
         // Retrying is done here (ConsiderReconnect), so the daemon makes a single attempt.
-        r.Proxy = new ProxySettings();
+        r.Proxy = CurrentProxy();
         r.AutoReconnect = false;
-        r.BlockIPv6 = true;
-        r.TunnelMode = TunnelMode.FullTunnel;
-        r.SocksPort = Ipc.DefaultSocksPort;
+        r.BlockIPv6 = _settings.BlockIPv6;
+        if (!_settings.Routing.IsEmpty) r.Routing = _settings.Routing;
+        r.TunnelMode = _settings.TunnelMode;
+        r.SocksPort = _settings.SocksPort;
+        await Dispatch(r, s.Ip, () => _wanted?.Id == s.Id, () => _wanted = null);
+    }
+
+    /// <summary>
+    /// Connects with one of the user's own connection settings (UI-SPEC 5). Unlike list servers the daemon retries these itself,
+    /// with the account's interval and count.
+    /// </summary>
+    public void Connect(ClientAccount account)
+    {
+        if (!RequireAgreement(() => Connect(account))) return;
+        Notice = null;
+        CancelReconnect();
+        _wanted = null;
+        var cert = Accounts?.Certificate(account);
+        var key = Accounts?.PrivateKey(account);
+        if (account.AuthType == AuthTypes.Certificate && (cert is null || key is null))
+        {
+            Notice = $"“{account.Name}” needs a certificate and RSA private key. Open its properties and import them.";
+            return;
+        }
+        var acc = account.Clone();
+        if (acc.Proxy.Kind != ProxyKind.None && acc.Proxy.Password is null) acc.Proxy.Password = Accounts?.ProxyPassword(account);
+        var cfg = acc.ToConnectConfig(Accounts?.Password(account), cert, key, _settings.BlockIPv6,
+            _settings.Routing.IsEmpty ? null : _settings.Routing, _settings.TunnelMode, _settings.SocksPort);
+        var r = HelperRequest.Of("connect");
+        r.Config = cfg;
+        ActiveAccount = account;
+        _lastServer = null;
+        _ = Dispatch(r, account.Host, () => ActiveAccount?.Id == account.Id, () => ActiveAccount = null);
+    }
+
+    private async Task Dispatch(HelperRequest r, string serverKey, Func<bool> stillWanted, Action forget)
+    {
+        var seq = ++_connectSeq;
         var sentAt = _clock();
         // Optimistic: the daemon's events may arrive before SendAsync returns, and must not be overwritten afterwards.
         State = ConnectionState.Connecting;
-        Server = s.Ip;
+        Server = serverKey;
         if (!await _ipc.SendAsync(r))
         {
             ServiceRunning = false;
-            _wanted = null;
+            forget();
             State = ConnectionState.Disconnected;
             Notice = "The VPN Gate service is not running. Reinstall VPN Gate or start the “VPN Gate” service.";
             AppendLog("Cannot reach the VPN Gate service");
@@ -300,10 +402,10 @@ public sealed partial class MainViewModel : ObservableObject
         }
         // A daemon that accepts the pipe but never answers must not leave the UI on "Connecting…" forever.
         try { await Task.Delay(_answerTimeout); } catch (OperationCanceledException) { return; }
-        if (_lastEventAt < sentAt && State == ConnectionState.Connecting && _wanted?.Id == s.Id)
+        if (_lastEventAt < sentAt && State == ConnectionState.Connecting && seq == _connectSeq && stillWanted())
         {
             State = ConnectionState.Disconnected;
-            _wanted = null;
+            forget();
             Notice = "The VPN Gate service is not responding. Restart the “VPN Gate” service.";
             AppendLog($"No answer from the service within {(int)_answerTimeout.TotalSeconds} s");
         }
@@ -312,6 +414,7 @@ public sealed partial class MainViewModel : ObservableObject
     public void Disconnect()
     {
         _wanted = null;
+        ActiveAccount = null;
         CancelReconnect();
         if (State == ConnectionState.Reconnecting) State = ConnectionState.Disconnected;
         _ = _ipc.SendAsync(HelperRequest.Of("disconnect"));
@@ -330,6 +433,7 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     private VpnServer? _lastServer;
+    public VpnServer? LastServer => _lastServer;
 
     // MARK: list
 
@@ -361,7 +465,7 @@ public sealed partial class MainViewModel : ObservableObject
         UpdateListStatus();
         try
         {
-            ApplyList(await _ipc.RefreshServersAsync(new ProxySettings(), null));
+            ApplyList(await _ipc.RefreshServersAsync(CurrentProxy(), _settings.MirrorUrl.Trim() is { Length: > 0 } m ? m : null));
         }
         catch (HelperRequestException e)
         {
