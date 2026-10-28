@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- WiX v4. Built by scripts/build-msi.ps1, which passes Version, AppDir, DaemonExe, WintunDll, DatFile and IconFile. -->
+<!-- WiX v4. Built by scripts/build-msi.ps1, which passes Version, AppFragment, DaemonExe, WintunDll, DatFile and IconFile. -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Package Name="VPN Gate" Manufacturer="yazdanifar" Version="$(Version)" Scope="perMachine"
            UpgradeCode="55DC82C8-90E6-4C99-8636-A9BEDAC85D7E" Compressed="yes">
@@ -9,9 +9,7 @@
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="VPN Gate">
-        <Files Include="$(AppDir)\**" />
-      </Directory>
+      <Directory Id="INSTALLFOLDER" Name="VPN Gate" />
     </StandardDirectory>
     <StandardDirectory Id="CommonAppDataFolder">
       <Directory Id="DATADIR" Name="VPNGate" />
@@ -38,7 +36,7 @@
       </Component>
     </ComponentGroup>
 
-    <!-- The WinUI app (self-contained publish output). -->
+    <!-- The WinUI app (self-contained publish output): ComponentGroup AppFiles is generated into $(AppFragment) by the script. -->
 
 
     <!-- State: %ProgramData%\VPNGate holds the server cache and host id. Created here, locked to SYSTEM and Administrators
@@ -64,6 +62,7 @@
 
     <Feature Id="Main" Title="VPN Gate" Level="1">
       <ComponentGroupRef Id="ServiceFiles" />
+      <ComponentGroupRef Id="AppFiles" />
       <ComponentGroupRef Id="StateFiles" />
       <ComponentGroupRef Id="Shortcuts" />
     </Feature>
