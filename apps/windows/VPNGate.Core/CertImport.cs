@@ -93,7 +93,12 @@ public static class CertImport
             if (!cert.HasPrivateKey) throw new CertImportException("Could not read the .p12 file: it holds no private key.");
             using var rsa = cert.GetRSAPrivateKey();
             if (rsa is null) throw Unsupported("not RSA");
-            return new Identity(cert.RawData, rsa.ExportRSAPrivateKey());
+            // Windows CNG keys loaded from a PFX allow only an encrypted export, so go through that.
+            var pbe = new PbeParameters(PbeEncryptionAlgorithm.Aes256Cbc, HashAlgorithmName.SHA256, 1);
+            var enc = rsa.ExportEncryptedPkcs8PrivateKey("x", pbe);
+            using var plain = RSA.Create();
+            plain.ImportEncryptedPkcs8PrivateKey("x", enc, out _);
+            return new Identity(cert.RawData, plain.ExportRSAPrivateKey());
         }
     }
 
