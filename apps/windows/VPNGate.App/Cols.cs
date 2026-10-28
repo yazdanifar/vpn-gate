@@ -12,6 +12,8 @@ public static class Cols
     public static Visibility Vis(bool v) => v ? Visibility.Visible : Visibility.Collapsed;
     public static Visibility VisNotNull(string? s) => string.IsNullOrEmpty(s) ? Visibility.Collapsed : Visibility.Visible;
 
+    public static bool NotNull(object? o) => o is not null;
+
     public static string Region(string flag, string country) => flag.Length == 0 ? country : $"{flag} {country}";
     public static string Uptime(long ms) => ListFormat.Uptime(ms);
     public static string Sessions(int n) => ListFormat.Sessions(n);

@@ -7,8 +7,9 @@
     xmlns:tb="using:H.NotifyIcon"
     Title="VPN Gate Public VPN Relay Servers">
 
-    <Grid x:Name="Root" Padding="16" RowSpacing="8">
+    <Grid x:Name="Root" Padding="16,8,16,16" RowSpacing="8">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -19,24 +20,47 @@
         </Grid.RowDefinitions>
 
         <tb:TaskbarIcon x:Name="Tray" ToolTipText="VPN Gate" ContextMenuMode="PopupMenu" NoLeftClickDelay="True">
-            <tb:TaskbarIcon.IconSource>
-                <tb:GeneratedIconSource Text="V" Foreground="White" Background="#2563EB" FontWeight="Bold" />
-            </tb:TaskbarIcon.IconSource>
             <tb:TaskbarIcon.ContextFlyout>
                 <MenuFlyout>
                     <MenuFlyoutItem x:Name="TrayState" Text="Disconnected" IsEnabled="False" />
                     <MenuFlyoutItem x:Name="TrayServer" Text="" IsEnabled="False" Visibility="Collapsed" />
                     <MenuFlyoutSeparator />
+                    <MenuFlyoutItem x:Name="TrayVirtualIp" Text="" IsEnabled="False" Visibility="Collapsed" />
+                    <MenuFlyoutItem x:Name="TrayTraffic" Text="" IsEnabled="False" Visibility="Collapsed" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem x:Name="TrayConnect" Text="Connect" Click="OnTrayConnect" Visibility="Collapsed" />
                     <MenuFlyoutItem x:Name="TrayDisconnect" Text="Disconnect" Click="OnTrayDisconnect" />
+                    <MenuFlyoutItem x:Name="TrayReconnect" Text="Reconnect" Click="OnTrayReconnect" Visibility="Collapsed" />
                     <MenuFlyoutItem Text="Show VPN Gate" Click="OnTrayShow" />
+                    <MenuFlyoutItem Text="VPN Connection Settings…" Click="OnShowAccounts" />
+                    <MenuFlyoutItem Text="Settings…" Click="OnShowSettings" />
                     <MenuFlyoutSeparator />
                     <MenuFlyoutItem Text="Quit" Click="OnTrayQuit" />
                 </MenuFlyout>
             </tb:TaskbarIcon.ContextFlyout>
         </tb:TaskbarIcon>
 
+        <MenuBar Grid.Row="0">
+            <MenuBarItem Title="File">
+                <MenuFlyoutItem Text="Refresh List" Click="OnRefresh" />
+                <MenuFlyoutItem Text="Disconnect" Click="OnTrayDisconnect" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem Text="Settings…" Click="OnShowSettings" />
+                <MenuFlyoutItem Text="Quit" Click="OnTrayQuit" />
+            </MenuBarItem>
+            <MenuBarItem Title="View">
+                <MenuFlyoutItem Text="Show VPN Gate" Click="OnTrayShow" />
+                <MenuFlyoutItem Text="Show VPN Connection Settings" Click="OnShowAccounts" />
+                <MenuFlyoutItem Text="Show Connection History" Click="OnShowHistory" />
+                <MenuFlyoutItem Text="Show Connection Log" Click="OnShowLog" />
+            </MenuBarItem>
+            <MenuBarItem Title="Help">
+                <MenuFlyoutItem Text="VPN Gate Web Site" Click="OnWebSite" />
+            </MenuBarItem>
+        </MenuBar>
+
         <!-- Header and connection card -->
-        <Grid Grid.Row="0" ColumnSpacing="16">
+        <Grid Grid.Row="1" ColumnSpacing="16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="280" />
@@ -63,10 +87,10 @@
         </Grid>
 
         <!-- List status -->
-        <TextBlock Grid.Row="1" Text="{x:Bind Vm.ListStatus, Mode=OneWay}" TextWrapping="Wrap" Opacity="0.8" />
+        <TextBlock Grid.Row="2" Text="{x:Bind Vm.ListStatus, Mode=OneWay}" TextWrapping="Wrap" Opacity="0.8" />
 
         <!-- Toolbar -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8">
             <TextBox x:Name="SearchBox" Width="260" PlaceholderText="Search host, IP, country, operator" TextChanged="OnSearchChanged" />
             <ComboBox x:Name="CountryBox" Width="180" SelectionChanged="OnCountryChanged" />
             <ComboBox x:Name="LoggingBox" Width="170" SelectedIndex="0" SelectionChanged="OnLoggingChanged">
@@ -77,12 +101,13 @@
             </ComboBox>
             <ToggleButton x:Name="FavoritesToggle" Content="Favorites only" Click="OnFavoritesToggled" />
             <Button Content="Clear Filters" Click="OnClearFilters" Visibility="{x:Bind local:Cols.Vis(Vm.FilterActive), Mode=OneWay}" />
+            <Button Content="Details" Click="OnDetails" IsEnabled="{x:Bind local:Cols.NotNull(Vm.Selected), Mode=OneWay}" />
             <Button Content="Refresh List" Click="OnRefresh" IsEnabled="{x:Bind Vm.IsNotLoading, Mode=OneWay}" />
-            <Button Content="Log" Click="OnShowLog" />
+            <Button Content="Settings" Click="OnShowSettings" />
         </StackPanel>
 
         <!-- Column headers -->
-        <Grid Grid.Row="3" Padding="12,0" ColumnSpacing="8">
+        <Grid Grid.Row="4" Padding="12,0" ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="2.4*" />
                 <ColumnDefinition Width="1.6*" />
@@ -104,7 +129,7 @@
         </Grid>
 
         <!-- Table -->
-        <ListView Grid.Row="4" x:Name="ServerList" ItemsSource="{x:Bind Vm.Servers, Mode=OneWay}"
+        <ListView Grid.Row="5" x:Name="ServerList" ItemsSource="{x:Bind Vm.Servers, Mode=OneWay}"
                   SelectedItem="{x:Bind Vm.Selected, Mode=TwoWay}" DoubleTapped="OnRowDoubleTapped">
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="core:VpnServer">
@@ -112,6 +137,7 @@
                         <Grid.ContextFlyout>
                             <MenuFlyout>
                                 <MenuFlyoutItem Text="Connect to the VPN Server" Tag="{x:Bind}" Click="OnRowConnect" />
+                                <MenuFlyoutItem Text="Server Details…" Tag="{x:Bind}" Click="OnRowDetails" />
                                 <MenuFlyoutItem Text="Add or remove favorite" Tag="{x:Bind}" Click="OnRowFavorite" />
                             </MenuFlyout>
                         </Grid.ContextFlyout>
@@ -142,12 +168,12 @@
         </ListView>
 
         <!-- Bottom bar -->
-        <Grid Grid.Row="5">
+        <Grid Grid.Row="6">
             <Button HorizontalAlignment="Right" MinWidth="220" Click="OnPrimaryAction" IsEnabled="{x:Bind Vm.CanAct, Mode=OneWay}"
                     Style="{StaticResource AccentButtonStyle}"
                     Content="{x:Bind Vm.ActionLabel, Mode=OneWay}" />
         </Grid>
-        <TextBlock Grid.Row="6" Opacity="0.6" TextWrapping="Wrap"
+        <TextBlock Grid.Row="7" Opacity="0.6" TextWrapping="Wrap"
                    Text="Academic project at University of Tsukuba, Japan. A server with a higher Line Speed and a smaller Ping is usually more comfortable to use." />
     </Grid>
 </Window>

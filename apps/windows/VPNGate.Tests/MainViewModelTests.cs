@@ -280,3 +280,136 @@ public class MainViewModelTests
         await Task.CompletedTask;
     }
 }
+
+public class MainViewModelU19Tests
+{
+    private static async Task Until(Func<bool> cond)
+    {
+        var until = DateTime.UtcNow.AddSeconds(10);
+        while (!cond()) { Assert.True(DateTime.UtcNow < until, "condition not reached"); await Task.Delay(10); }
+    }
+
+    private static (FakeDaemon d, IpcClient ipc) Daemon()
+    {
+        var d = new FakeDaemon().Start();
+        d.Respond = r => (string?)r["cmd"] switch
+        {
+            "listServers" or "refreshServers" => new[] { $"{{\"reply\":\"{r["cmd"]}\",\"id\":{r["id"]},\"ok\":true,\"result\":{{\"servers\":[],\"source\":\"Cached\",\"isFresh\":true,\"outcome\":\"synced\"}}}}" },
+            "status" => new[] { FakeDaemon.Snapshot("disconnected") },
+            _ => Array.Empty<string>(),
+        };
+        return (d, d.Client());
+    }
+
+    [Fact]
+    public async Task ListConnectionsUseTheSettings()
+    {
+        var (d, ipc) = Daemon();
+        await using var _d = d; await using var _i = ipc;
+        var secrets = new MemorySecretStore();
+        var s = new MemorySettings
+        {
+            HasAgreedToDisclaimer = true, BlockIPv6 = false, TunnelMode = TunnelMode.SocksProxy, SocksPort = 2222,
+            ProxyKind = ProxyKind.Http, ProxyHost = "px", ProxyPort = 8080, ProxyUsername = "me",
+            Routing = new RoutingConfig { BypassPrivateNetworks = true },
+        };
+        var vm = new MainViewModel(ipc, s, secrets: secrets, answerTimeout: TimeSpan.FromSeconds(30));
+        vm.ProxyPassword = "pp";
+        vm.Connect(new VpnServer { HostName = "h", Ip = "1.1.1.1", ListedPort = 443 });
+        var r = await d.NextRequestAsync("connect");
+        Assert.False((bool)r["blockIPv6"]!);
+        Assert.Equal("socksProxy", (string?)r["tunnelMode"]);
+        Assert.Equal(2222, (int?)r["socksPort"]);
+        Assert.Equal("px", (string?)r["proxy"]!["host"]);
+        Assert.Equal("pp", (string?)r["proxy"]!["password"]);
+        Assert.True((bool)r["routing"]!["bypassPrivateNetworks"]!);
+    }
+
+    [Fact]
+    public async Task ProxyCredentialsAreSentOnlyWithAUsername()
+    {
+        var (d, ipc) = Daemon();
+        await using var _d = d; await using var _i = ipc;
+        var s = new MemorySettings { HasAgreedToDisclaimer = true, ProxyKind = ProxyKind.Socks5, ProxyHost = "p", ProxyPort = 1 };
+        var vm = new MainViewModel(ipc, s);
+        vm.ProxyPassword = "pp";
+        Assert.Null(vm.CurrentProxy().Password);
+        Assert.Null(vm.CurrentProxy().Username);
+    }
+
+    [Fact]
+    public async Task RefreshSendsTheMirror()
+    {
+        var (d, ipc) = Daemon();
+        await using var _d = d; await using var _i = ipc;
+        var s = new MemorySettings { HasAgreedToDisclaimer = true, MirrorUrl = " https://m.example/x " };
+        var vm = new MainViewModel(ipc, s);
+        await vm.RefreshAsync();
+        var r = await d.NextRequestAsync("refreshServers");
+        Assert.Equal("https://m.example/x", (string?)r["mirror"]);
+    }
+
+    [Fact]
+    public async Task AccountConnectSendsTheFullConfigAndRecordsHistory()
+    {
+        var (d, ipc) = Daemon();
+        await using var _d = d; await using var _i = ipc;
+        var dir = Path.Combine(Path.GetTempPath(), "vg-vm-" + Guid.NewGuid().ToString("N")[..8]);
+        try
+        {
+            var secrets = new MemorySecretStore();
+            var accounts = new AccountStore(Path.Combine(dir, "a.json"), secrets);
+            var acc = new ClientAccount { Name = "Home", Host = "vpn.example.com", Username = "bob", Hub = "H" };
+            accounts.Add(acc, "pw");
+            var history = new ConnectionHistoryStore(Path.Combine(dir, "h.json"));
+            var vm = new MainViewModel(ipc, new MemorySettings { HasAgreedToDisclaimer = true }, accounts: accounts, secrets: secrets,
+                history: history, answerTimeout: TimeSpan.FromSeconds(30));
+            vm.Connect(acc);
+            var r = await d.NextRequestAsync("connect");
+            Assert.Equal("vpn.example.com", (string?)r["config"]!["host"]);
+            Assert.Equal("pw", (string?)r["config"]!["password"]);
+            Assert.Equal("Standard Password (SHA-0)", (string?)r["config"]!["authType"]);
+            Assert.Equal("H", (string?)r["config"]!["hubName"]);
+            Assert.Equal("Home", vm.ActiveAccount?.Name);
+
+            vm.ApplyEvent(new HelperEvent { State = ConnectionState.Connected, Server = "vpn.example.com", BytesIn = 5, BytesOut = 6 });
+            vm.ApplyEvent(new HelperEvent { State = ConnectionState.Connected, Server = "vpn.example.com", BytesIn = 50, BytesOut = 60 });
+            Assert.Single(history.Entries);
+            Assert.Equal("Home", history.Entries[0].ServerName);
+            vm.ApplyEvent(new HelperEvent { State = ConnectionState.Disconnected, Error = "gone" });
+            Assert.Equal((50ul, 60ul, "gone"), (history.Entries[0].BytesIn, history.Entries[0].BytesOut, history.Entries[0].Error));
+            Assert.NotNull(history.Entries[0].DisconnectedAt);
+        }
+        finally { try { Directory.Delete(dir, true); } catch (IOException) { } }
+    }
+
+    [Fact]
+    public async Task CertificateAccountWithoutAnIdentityDoesNotConnect()
+    {
+        var (d, ipc) = Daemon();
+        await using var _d = d; await using var _i = ipc;
+        var secrets = new MemorySecretStore();
+        var accounts = new AccountStore(Path.Combine(Path.GetTempPath(), "vg-" + Guid.NewGuid().ToString("N")[..8], "a.json"), secrets);
+        var vm = new MainViewModel(ipc, new MemorySettings { HasAgreedToDisclaimer = true }, accounts: accounts, secrets: secrets);
+        vm.Connect(new ClientAccount { Name = "Cert", Host = "h.com", AuthType = AuthTypes.Certificate });
+        Assert.Contains("needs a certificate and RSA private key", vm.Notice);
+        await Task.Delay(100);
+        Assert.DoesNotContain(d.Requests, r => (string?)r["cmd"] == "connect");
+    }
+
+    [Fact]
+    public async Task TheGlobalAutoReconnectSwitchStopsListReconnects()
+    {
+        var (d, ipc) = Daemon();
+        await using var _d = d; await using var _i = ipc;
+        var s = new MemorySettings { HasAgreedToDisclaimer = true, AutoReconnect = false };
+        var vm = new MainViewModel(ipc, s, reconnectDelay: TimeSpan.FromMilliseconds(20), answerTimeout: TimeSpan.FromSeconds(30));
+        vm.Connect(new VpnServer { HostName = "h", Ip = "1.1.1.1", ListedPort = 443 });
+        await d.NextRequestAsync("connect");
+        vm.ApplyEvent(new HelperEvent { State = ConnectionState.Connected, Server = "1.1.1.1" });
+        vm.ApplyEvent(new HelperEvent { State = ConnectionState.Disconnected, Error = "lost" });
+        await Task.Delay(150);
+        Assert.Equal(ConnectionState.Disconnected, vm.State);
+        Assert.Equal(0, vm.ReconnectAttempts);
+    }
+}

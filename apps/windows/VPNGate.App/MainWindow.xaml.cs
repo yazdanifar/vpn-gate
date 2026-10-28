@@ -11,6 +11,9 @@ public sealed partial class MainWindow : Window
 {
     private readonly DispatcherQueueTimer _tick;
     private LogWindow? _log;
+    private AccountsWindow? _accounts;
+    private HistoryWindow? _history;
+    private SettingsWindow? _settingsWindow;
     private bool _dialogOpen;
     private bool _suppressFilter = true;
     private int _tickCount;
@@ -20,9 +23,14 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         var queue = DispatcherQueue.GetForCurrentThread();
-        Vm = new MainViewModel(IpcClient.ForNamedPipe(), new JsonFileSettings(JsonFileSettings.DefaultPath), a => queue.TryEnqueue(() => a()));
+        var secrets = CredentialStore.Create();
+        Vm = new MainViewModel(IpcClient.ForNamedPipe(), new JsonFileSettings(JsonFileSettings.DefaultPath), a => queue.TryEnqueue(() => a()),
+            accounts: new AccountStore(AccountStore.DefaultPath, secrets), secrets: secrets,
+            history: new ConnectionHistoryStore(ConnectionHistoryStore.DefaultPath));
         InitializeComponent();
-        AppWindow.Resize(new SizeInt32(1100, 720));
+        Ui.Size(this, 1100, 720);
+        var icon = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+        if (File.Exists(icon)) Tray.Icon = new System.Drawing.Icon(icon);
 
         Vm.QuitRequested += () => Application.Current.Exit();
         Vm.PropertyChanged += OnVmChanged;
@@ -61,6 +69,8 @@ public sealed partial class MainWindow : Window
                 break;
             case nameof(MainViewModel.State):
             case nameof(MainViewModel.ServerName):
+            case nameof(MainViewModel.VirtualIp):
+            case nameof(MainViewModel.TrafficText):
                 UpdateTray();
                 break;
         }
@@ -90,12 +100,6 @@ public sealed partial class MainWindow : Window
                                    "Public VPN relay servers are hosted by volunteers around the world. Anyone can connect through these servers to " +
                                    "achieve anonymity and bypass censorship.\n\n" +
                                    "By clicking “Agree and Continue”, you confirm that you will use this service in compliance with local laws.",
-                        },
-                        new TextBlock
-                        {
-                            TextWrapping = TextWrapping.Wrap,
-                            Opacity = 0.7,
-                            Text = "Optional diagnostics upload is off and can be turned on in Settings → Advanced.",
                         },
                     },
                 },
@@ -167,7 +171,9 @@ public sealed partial class MainWindow : Window
 
     private async void OnRefresh(object sender, RoutedEventArgs e) => await Vm.RefreshAsync();
 
-    private void OnShowLog(object sender, RoutedEventArgs e)
+    private void OnShowLog(object sender, RoutedEventArgs e) => ShowLog();
+
+    private void ShowLog()
     {
         if (_log is null)
         {
@@ -175,6 +181,52 @@ public sealed partial class MainWindow : Window
             _log.Closed += (_, _) => _log = null;
         }
         _log.Activate();
+    }
+
+    private void OnShowAccounts(object sender, RoutedEventArgs e) => ShowAccounts();
+
+    private void ShowAccounts()
+    {
+        if (_accounts is null)
+        {
+            _accounts = new AccountsWindow(Vm, () => Activate());
+            _accounts.Closed += (_, _) => _accounts = null;
+        }
+        _accounts.Activate();
+    }
+
+    private void OnShowHistory(object sender, RoutedEventArgs e)
+    {
+        if (Vm.History is null) return;
+        if (_history is null)
+        {
+            _history = new HistoryWindow(Vm.History);
+            _history.Closed += (_, _) => _history = null;
+        }
+        _history.Activate();
+    }
+
+    private void OnShowSettings(object sender, RoutedEventArgs e)
+    {
+        if (_settingsWindow is null)
+        {
+            _settingsWindow = new SettingsWindow(Vm, ShowAccounts, ShowLog);
+            _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        }
+        _settingsWindow.Activate();
+    }
+
+    private void OnWebSite(object sender, RoutedEventArgs e) =>
+        _ = Windows.System.Launcher.LaunchUriAsync(new Uri("http://www.vpngate.net/"));
+
+    private async void OnDetails(object sender, RoutedEventArgs e)
+    {
+        if (Vm.Selected is { } s) await ServerDetails.ShowAsync(Root.XamlRoot, s);
+    }
+
+    private async void OnRowDetails(object sender, RoutedEventArgs e)
+    {
+        if (((FrameworkElement)sender).Tag is VpnServer s) await ServerDetails.ShowAsync(Root.XamlRoot, s);
     }
 
     private void OnSort(object sender, RoutedEventArgs e) =>
@@ -207,8 +259,27 @@ public sealed partial class MainWindow : Window
         TrayState.Text = Fmt.Title(Vm.State);
         TrayServer.Text = Vm.ServerName ?? "";
         TrayServer.Visibility = string.IsNullOrEmpty(Vm.ServerName) ? Visibility.Collapsed : Visibility.Visible;
-        TrayDisconnect.Visibility = Vm.State == ConnectionState.Disconnected ? Visibility.Collapsed : Visibility.Visible;
+        TrayVirtualIp.Text = Cols.VirtualIp(Vm.VirtualIp);
+        TrayVirtualIp.Visibility = string.IsNullOrEmpty(Vm.VirtualIp) ? Visibility.Collapsed : Visibility.Visible;
+        TrayTraffic.Text = Vm.TrafficText;
+        TrayTraffic.Visibility = Vm.IsConnected ? Visibility.Visible : Visibility.Collapsed;
+        var idle = Vm.State == ConnectionState.Disconnected;
+        var target = TrayTarget();
+        TrayConnect.Text = target is null ? "Connect" : $"Connect to {target.HostName}";
+        TrayConnect.Visibility = idle && target is not null ? Visibility.Visible : Visibility.Collapsed;
+        TrayDisconnect.Visibility = idle ? Visibility.Collapsed : Visibility.Visible;
+        TrayReconnect.Visibility = !idle && Vm.LastServer is not null ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    /// <summary>The last server, else the first favourite (UI-SPEC 2).</summary>
+    private VpnServer? TrayTarget() => Vm.LastServer ?? Vm.Servers.FirstOrDefault(Vm.IsFavorite);
+
+    private void OnTrayConnect(object sender, RoutedEventArgs e)
+    {
+        if (TrayTarget() is { } s) Vm.Connect(s);
+    }
+
+    private void OnTrayReconnect(object sender, RoutedEventArgs e) => Vm.Reconnect();
 
     private void OnTrayDisconnect(object sender, RoutedEventArgs e) => Vm.Disconnect();
 
