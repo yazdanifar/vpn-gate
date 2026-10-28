@@ -70,7 +70,13 @@ fn run_service() -> Result<(), Box<dyn std::error::Error>> {
         0,
     ))?;
 
-    let result = runtime.block_on(run_pipe_daemon(backend::WINDOWS_PIPE_NAME.to_string(), None, None, async move {
+    // The installer puts the bundled relay list (VPNGate.dat) next to the executable.
+    let bundle = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("VPNGate.dat")))
+        .filter(|p| p.is_file())
+        .map(|p| p.to_string_lossy().into_owned());
+    let result = runtime.block_on(run_pipe_daemon(backend::WINDOWS_PIPE_NAME.to_string(), None, bundle, async move {
         stop.notified().await
     }));
 
