@@ -37,9 +37,9 @@
     </ComponentGroup>
 
     <!-- The WinUI app (self-contained publish output). -->
-    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+    <DirectoryRef Id="INSTALLFOLDER">
       <Files Include="$(AppDir)\**" />
-    </ComponentGroup>
+    </DirectoryRef>
 
     <!-- State: %ProgramData%\VPNGate holds the server cache and host id. Created here, locked to SYSTEM and Administrators
          below, removed on uninstall. -->
