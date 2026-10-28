@@ -2,6 +2,8 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+### Added
+- U16: Windows backend, tunnel and routes, in `vpngate-platform::windows`: a Wintun adapter (`wintun.dll` loaded at run time), address/MTU/routes through the IP Helper API, and `WinNetConfig` (split default route, relay bypass, IPv6 capture, routing rules, undo list). Route logic is tested against a recording fake on every OS; the Windows syscall layer is compile-checked only until the U20 VM checklist.
 ### Fixed
 - `HelperClient` is marked `@unchecked Sendable` (its state is lock-guarded), which removes the Swift concurrency warning printed on every app build.
 
