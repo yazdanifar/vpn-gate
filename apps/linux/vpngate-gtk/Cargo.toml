@@ -17,5 +17,6 @@ vpngate-app-model = { path = "../../../crates/vpngate-app-model" }
 gtk = { package = "gtk4", version = "0.10", features = ["v4_10"] }
 adw = { package = "libadwaita", version = "0.8", features = ["v1_5"] }
 async-channel = "2"
+uuid = { version = "1", features = ["v4"] }
 ksni = "0.3"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "time", "sync"] }

@@ -110,6 +110,46 @@ pub fn list_is_ok(timestamp_ms: u64, now_ms: u64) -> bool {
     timestamp_ms.abs_diff(now_ms) < 86_400_001
 }
 
+/// "H:MM:SS", "active" while the period is still open.
+pub fn history_duration(seconds: Option<u64>) -> String {
+    seconds.map_or_else(|| "active".into(), duration)
+}
+
+/// The label/value rows of the Server Details sheet (UI-SPEC 4); optional rows only when the list has them.
+pub fn server_details(s: &vpngate_core::server_list::VpnServer) -> Vec<(&'static str, String)> {
+    let join = |v: &[u16]| v.iter().map(u16::to_string).collect::<Vec<_>>().join(", ");
+    let ssl = s.prioritized_ssl_ports();
+    let owner = s.owner.as_deref().filter(|o| !o.is_empty()).unwrap_or(&s.operator_name);
+    let mut rows = vec![
+        ("DDNS Hostname", if s.fqdn.is_empty() { s.host_name.clone() } else { s.fqdn.clone() }),
+        ("IP Address", s.ip.clone()),
+        ("Country", format!("{} ({})", s.country_long, s.country_short)),
+        ("Line Speed", speed(s.speed)),
+        ("Score", s.score.to_string()),
+        ("Ping to Japan", format!("{} ms", s.ping)),
+        ("Ping to Google", if s.ping_to_google == 0 { "-".into() } else { format!("{} ms", s.ping_to_google) }),
+        ("UDP port", s.udp_port.filter(|&p| p != 0).map_or("-".into(), |p| p.to_string())),
+        ("SSL-VPN Ports", if ssl.is_empty() { "Default (443)".into() } else { join(&ssl) }),
+        (
+            "OpenVPN UDP Ports",
+            if s.open_vpn_udp_ports.is_empty() { "None".into() } else { join(&s.open_vpn_udp_ports) },
+        ),
+        ("L2TP / IPsec", if s.l2tp { "Supported" } else { "Not supported" }.into()),
+        ("Logging Policy", logging(&s.log_type)),
+        ("Operator / Owner", if owner.is_empty() { "Anonymous".into() } else { owner.into() }),
+    ];
+    let mut opt = |label, v: Option<String>| {
+        if let Some(v) = v.filter(|v| !v.is_empty()) {
+            rows.push((label, v));
+        }
+    };
+    opt("Abuse Contact", s.abuse.clone());
+    opt("Operating System", s.os.clone());
+    opt("SoftEther Build", s.soft.as_ref().map(|soft| s.build.map_or(soft.clone(), |b| format!("{soft} (build {b})"))));
+    opt("Server Message", Some(s.message.clone()));
+    rows
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,5 +191,28 @@ mod tests {
         assert_eq!(title(ConnectionState::Dhcp), "Getting address…");
         assert_eq!(icon_name(ConnectionState::Connected), "channel-secure-symbolic");
         assert_eq!(icon_name(ConnectionState::Reconnecting), "emblem-synchronizing-symbolic");
+    }
+
+    #[test]
+    fn details_rows() {
+        let mut s = vpngate_core::server_list::VpnServer::new("h", "1.2.3.4");
+        s.country_long = "Japan".into();
+        s.country_short = "JP".into();
+        let rows = server_details(&s);
+        let get = |k: &str| rows.iter().find(|r| r.0 == k).map(|r| r.1.clone());
+        assert_eq!(get("Country").as_deref(), Some("Japan (JP)"));
+        assert_eq!(get("SSL-VPN Ports").as_deref(), Some("Default (443)"));
+        assert_eq!(get("Operator / Owner").as_deref(), Some("Anonymous"));
+        assert_eq!(get("Ping to Google").as_deref(), Some("-"));
+        assert!(get("Abuse Contact").is_none() && get("Server Message").is_none(), "optional rows are omitted");
+        s.ssl_ports = vec![995, 443];
+        s.soft = Some("SoftEther".into());
+        s.build = Some(9700);
+        s.message = "hi".into();
+        let rows = server_details(&s);
+        assert!(rows.contains(&("SoftEther Build", "SoftEther (build 9700)".into())));
+        assert!(rows.contains(&("SSL-VPN Ports", "443, 995".into())));
+        assert_eq!(history_duration(None), "active");
+        assert_eq!(history_duration(Some(65)), "0:01:05");
     }
 }

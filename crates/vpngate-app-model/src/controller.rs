@@ -6,12 +6,33 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::sync::mpsc::UnboundedReceiver;
-use vpngate_core::ipc::{ConnectionState, HelperEvent, HelperRequest, ProxySettings, TunnelMode, DEFAULT_SOCKS_PORT};
+use uuid::Uuid;
+use vpngate_core::client_account::{AccountAuthType, ConnectOptions};
+use vpngate_core::ipc::{ConnectionState, HelperEvent, HelperRequest, ProxyKind, ProxySettings};
 use vpngate_core::server_list::VpnServer;
 use vpngate_ipc_client::{ClientError, ClientEvent, IpcClient};
 
+use crate::accounts::AccountStore;
+use crate::history::History;
 use crate::model::AppModel;
-use crate::settings::{Settings, SettingsStore};
+use crate::secrets::SecretStore;
+use crate::settings::{Settings, SettingsStore, PROXY_PASSWORD_KEY};
+
+/// Everything the controller persists besides the settings.
+pub struct Stores {
+    pub accounts: AccountStore,
+    pub history: History,
+    pub secrets: Arc<dyn SecretStore>,
+}
+
+impl Stores {
+    /// Nothing touches the real config directory or keyring (tests).
+    pub fn memory() -> Stores {
+        let secrets: Arc<dyn SecretStore> = Arc::new(crate::secrets::MemorySecrets::default());
+        let path = std::env::temp_dir().join(format!("vg-mem-{}/accounts.json", Uuid::new_v4()));
+        Stores { accounts: AccountStore::new(path, secrets.clone()), history: History::new(None), secrets }
+    }
+}
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
@@ -45,6 +66,8 @@ struct Flow {
     connect_seq: u64,
     last_event_at_ms: u64,
     loading: bool,
+    /// The history entry of the connected period in progress.
+    history_id: Option<Uuid>,
 }
 
 struct Inner {
@@ -52,6 +75,7 @@ struct Inner {
     model: Mutex<AppModel>,
     settings: Mutex<Settings>,
     store: Box<dyn SettingsStore>,
+    stores: Mutex<Stores>,
     flow: Mutex<Flow>,
     timing: Timing,
     notify: Box<dyn Fn() + Send + Sync>,
@@ -70,6 +94,7 @@ impl Controller {
     pub fn new(
         ipc: IpcClient,
         store: Box<dyn SettingsStore>,
+        stores: Stores,
         timing: Timing,
         notify: impl Fn() + Send + Sync + 'static,
         quit: impl Fn() + Send + Sync + 'static,
@@ -81,6 +106,7 @@ impl Controller {
             model: Mutex::new(model),
             settings: Mutex::new(settings),
             store,
+            stores: Mutex::new(stores),
             flow: Mutex::new(Flow::default()),
             timing,
             notify: Box::new(notify),
@@ -109,6 +135,27 @@ impl Controller {
         let _ = self.0.store.save(&s);
     }
 
+    /// The accounts, the history and the secret store, for the UI's windows.
+    pub fn with_stores<R>(&self, f: impl FnOnce(&mut Stores) -> R) -> R {
+        f(&mut lock(&self.0.stores))
+    }
+
+    pub fn proxy_password(&self) -> Option<String> {
+        self.with_stores(|s| s.secrets.get(PROXY_PASSWORD_KEY))
+    }
+
+    /// `false` when the secret service refused the value.
+    pub fn set_proxy_password(&self, password: &str) -> bool {
+        self.with_stores(|s| {
+            if password.is_empty() {
+                s.secrets.delete(PROXY_PASSWORD_KEY);
+                true
+            } else {
+                s.secrets.set(PROXY_PASSWORD_KEY, password)
+            }
+        })
+    }
+
     // MARK: events
 
     /// Handles the client's event stream until it closes.
@@ -131,12 +178,30 @@ impl Controller {
             f.last_event_at_ms = now;
             f.reconnect.is_some()
         };
+        let (was_in, was_out) = self.read(|m| (m.bytes_in, m.bytes_out));
         self.change(|m| m.apply_event(e, now, pending));
         if e.state == ConnectionState::Connected {
             lock(&self.0.flow).attempts = 0;
+            self.history_start(now);
         } else if e.state == ConnectionState::Disconnected {
+            self.history_end(now, was_in.max(e.bytes_in), was_out.max(e.bytes_out), e.error.clone());
             self.consider_reconnect();
         }
+    }
+
+    fn history_start(&self, now: u64) {
+        if lock(&self.0.flow).history_id.is_some() {
+            return;
+        }
+        let (name, ip) = self.read(|m| (m.server_name().unwrap_or_default(), m.server.clone().unwrap_or_default()));
+        let id = self.with_stores(|s| s.history.record_start(&name, &ip, now));
+        lock(&self.0.flow).history_id = Some(id);
+        self.change(|_| {});
+    }
+
+    fn history_end(&self, now: u64, bytes_in: u64, bytes_out: u64, error: Option<String>) {
+        let Some(id) = lock(&self.0.flow).history_id.take() else { return };
+        self.with_stores(|s| s.history.record_end(id, bytes_in, bytes_out, error, now));
     }
 
     // MARK: reconnect
@@ -232,8 +297,61 @@ impl Controller {
             f.last_server = Some(id.to_string());
             f.attempts = 0;
         }
-        self.change(|m| m.notice = None);
+        self.change(|m| {
+            m.notice = None;
+            m.active_account = None;
+        });
         self.send_connect(server).await;
+    }
+
+    /// Connects with one of the user's own accounts (UI-SPEC 5). The daemon reconnects by itself when the account says so.
+    pub async fn connect_account(&self, id: Uuid) {
+        let Some(account) = self.with_stores(|s| s.accounts.find(id).cloned()) else { return };
+        if !self.change(|m| m.require_agreement()) {
+            return;
+        }
+        self.cancel_reconnect();
+        {
+            let mut f = lock(&self.0.flow);
+            f.wanted = None;
+            f.last_server = None;
+        }
+        self.change(|m| m.notice = None);
+        let (cert, key, password, proxy_pw) = self.with_stores(|s| {
+            (
+                s.accounts.certificate(&account),
+                s.accounts.private_key(&account),
+                s.accounts.password(&account),
+                s.accounts.proxy_password(&account),
+            )
+        });
+        if account.auth_type == AccountAuthType::Certificate && (cert.is_none() || key.is_none()) {
+            self.change(|m| {
+                m.notice = Some(format!(
+                    "“{}” needs a certificate and RSA private key. Open its properties and import them.",
+                    account.name
+                ))
+            });
+            return;
+        }
+        let settings = self.settings();
+        let mut acc = account.clone();
+        if acc.proxy.kind != ProxyKind::None && acc.proxy.password.is_none() {
+            acc.proxy.password = proxy_pw;
+        }
+        let cfg = acc.to_connect_config(ConnectOptions {
+            password,
+            cert_der: cert,
+            private_key_der: key,
+            block_ipv6: settings.block_ipv6,
+            global_routing: Some(settings.routing.clone()).filter(|r| !r.is_empty()),
+            tunnel_mode: settings.tunnel_mode,
+            socks_port: settings.socks_port,
+        });
+        let mut r = HelperRequest::new("connect");
+        r.config = Some(cfg);
+        self.change(|m| m.active_account = Some(account.id));
+        self.dispatch(r, account.host.clone(), None).await;
     }
 
     /// Connects to the last list server again.
@@ -284,12 +402,7 @@ impl Controller {
     }
 
     async fn send_connect(&self, s: VpnServer) {
-        let (seq, sent_at) = {
-            let mut f = lock(&self.0.flow);
-            f.connect_seq += 1;
-            (f.connect_seq, now_ms())
-        };
-        let block_ipv6 = lock(&self.0.settings).block_ipv6;
+        let settings = self.settings();
         let mut r = HelperRequest::new("connect");
         r.host = Some(s.ip.clone());
         r.port = s.connect_port();
@@ -297,22 +410,50 @@ impl Controller {
         if !ports.is_empty() {
             r.ports = Some(ports.into_iter().map(i64::from).collect());
         }
-        r.proxy = Some(ProxySettings::default());
+        r.proxy = Some(self.proxy_settings(&settings));
         // Retrying is done here (consider_reconnect), so the daemon makes a single attempt.
         r.auto_reconnect = Some(false);
-        r.block_ipv6 = Some(block_ipv6);
-        r.tunnel_mode = Some(TunnelMode::FullTunnel);
-        r.socks_port = Some(DEFAULT_SOCKS_PORT);
+        r.block_ipv6 = Some(settings.block_ipv6);
+        r.routing = Some(settings.routing.clone()).filter(|r| !r.is_empty());
+        r.tunnel_mode = Some(settings.tunnel_mode);
+        r.socks_port = Some(settings.socks_port);
+        self.dispatch(r, s.ip.clone(), Some(s.id().to_string())).await;
+    }
+
+    /// The proxy of Settings → Proxy; credentials travel only when a user name is set.
+    fn proxy_settings(&self, s: &Settings) -> ProxySettings {
+        if s.proxy_kind == ProxyKind::None {
+            return ProxySettings::default();
+        }
+        let user = Some(s.proxy_username.clone()).filter(|u| !u.is_empty());
+        ProxySettings {
+            kind: s.proxy_kind,
+            host: s.proxy_host.trim().to_string(),
+            port: s.proxy_port,
+            password: user.as_ref().and_then(|_| self.proxy_password()),
+            username: user,
+        }
+    }
+
+    /// Sends a connect request and watches for a silent daemon. `list_id`: the list server being connected (None for
+    /// accounts), which the watchdog checks against `wanted`.
+    async fn dispatch(&self, r: HelperRequest, ip: String, list_id: Option<String>) {
+        let (seq, sent_at) = {
+            let mut f = lock(&self.0.flow);
+            f.connect_seq += 1;
+            (f.connect_seq, now_ms())
+        };
         // Optimistic: the daemon's events may arrive before the send returns, and must not be overwritten afterwards.
         self.change(|m| {
             m.state = ConnectionState::Connecting;
-            m.server = Some(s.ip.clone());
+            m.server = Some(ip.clone());
         });
         if !self.0.ipc.send(&r).await {
             lock(&self.0.flow).wanted = None;
             self.change(|m| {
                 m.service_running = false;
                 m.state = ConnectionState::Disconnected;
+                m.active_account = None;
                 m.notice = Some(
                     "The VPN Gate service is not running. Start it with “sudo systemctl start vpngate” or reinstall VPN Gate."
                         .into(),
@@ -324,13 +465,14 @@ impl Controller {
         tokio::time::sleep(self.0.timing.answer_timeout).await;
         let silent = {
             let f = lock(&self.0.flow);
-            f.last_event_at_ms < sent_at && f.connect_seq == seq && f.wanted.as_deref() == Some(s.id())
+            f.last_event_at_ms < sent_at && f.connect_seq == seq && f.wanted == list_id
         };
         if silent && self.read(|m| m.state) == ConnectionState::Connecting {
             lock(&self.0.flow).wanted = None;
             let secs = self.0.timing.answer_timeout.as_secs();
             self.change(|m| {
                 m.state = ConnectionState::Disconnected;
+                m.active_account = None;
                 m.notice = Some(
                     "The VPN Gate service is not responding. Restart it with “sudo systemctl restart vpngate”.".into(),
                 );

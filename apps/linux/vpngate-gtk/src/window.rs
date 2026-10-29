@@ -7,15 +7,22 @@ use std::sync::Arc;
 
 use adw::prelude::*;
 use gtk::{gio, glib};
+use vpngate_app_model::accounts::AccountStore;
 use vpngate_app_model::format;
+use vpngate_app_model::history::History;
 use vpngate_app_model::model::SortKey;
+use vpngate_app_model::secrets::SecretTool;
 use vpngate_app_model::settings::FileSettings;
-use vpngate_app_model::{now_ms, Controller, Timing};
+use vpngate_app_model::{now_ms, Controller, Stores, Timing};
 use vpngate_core::ipc::ConnectionState;
 use vpngate_core::server_list::VpnServer;
 use vpngate_ipc_client::IpcClient;
 
+use crate::accounts_window::AccountsWindow;
+use crate::ctx::Ctx;
+use crate::history_window::HistoryWindow;
 use crate::log_window::LogWindow;
+use crate::settings_window;
 use crate::tray::{self, TrayAction, TraySnapshot};
 
 const INTRO: &str =
@@ -66,6 +73,7 @@ struct Widgets {
     clear: gtk::Button,
     refresh: gtk::Button,
     favorite: gtk::Button,
+    details: gtk::Button,
     action: gtk::Button,
     store: gtk::StringList,
     selection: gtk::SingleSelection,
@@ -83,9 +91,16 @@ pub fn build(app: &adw::Application, rt: Arc<tokio::runtime::Runtime>, socket: S
     let (ipc, events) = IpcClient::new(socket);
     let notify = tx.clone();
     let quit = tx.clone();
+    let secrets: Arc<dyn vpngate_app_model::secrets::SecretStore> = Arc::new(SecretTool::new());
+    let stores = Stores {
+        accounts: AccountStore::new(AccountStore::default_path(), secrets.clone()),
+        history: History::new(Some(History::default_path())),
+        secrets,
+    };
     let ctl = Controller::new(
         ipc,
         Box::new(FileSettings::new(FileSettings::default_path())),
+        stores,
         Timing::default(),
         move || {
             let _ = notify.try_send(Ui::Changed);
@@ -105,6 +120,12 @@ pub fn build(app: &adw::Application, rt: Arc<tokio::runtime::Runtime>, socket: S
     let w = Rc::new(widgets());
     window.set_content(Some(&layout(&w)));
     let log = Rc::new(LogWindow::new(&window));
+    let ctx = Ctx { ctl: ctl.clone(), rt: rt.clone() };
+    let accounts = {
+        let w = window.clone();
+        AccountsWindow::new(&window, &ctx, move || w.present())
+    };
+    let history = HistoryWindow::new(&window, &ctx);
     let tray_tx = {
         let tx = tx.clone();
         tray::spawn(rt.handle(), move |a| {
@@ -116,12 +137,15 @@ pub fn build(app: &adw::Application, rt: Arc<tokio::runtime::Runtime>, socket: S
     wire_filters(&w, &ctl);
     wire_buttons(&w, &ctl, &rt);
     add_actions(app, &window, &log, &tx);
+    add_window_actions(&window, &ctx, &log, &accounts, &history);
+    wire_details(&w, &ctl, &window);
 
     let shown = Rc::new(RefCell::new(Shown { ids: vec![], favorites: BTreeSet::new(), countries: vec![] }));
     let disclaimer_open = Rc::new(Cell::new(false));
     let updating = Rc::new(Cell::new(false));
     let sync = {
         let (w, ctl, log, window, rt) = (w.clone(), ctl.clone(), log.clone(), window.clone(), rt.clone());
+        let (accounts, history) = (accounts.clone(), history.clone());
         let tray_tx = tray_tx.clone();
         Rc::new(move || {
             updating.set(true);
@@ -130,6 +154,8 @@ pub fn build(app: &adw::Application, rt: Arc<tokio::runtime::Runtime>, socket: S
             if log.is_visible() {
                 log.set_text(&ctl.read(|m| m.log_text()));
             }
+            accounts.refresh();
+            history.refresh();
             let _ = tray_tx.send(tray_snapshot(&ctl));
             if ctl.read(|m| m.show_disclaimer) && !disclaimer_open.replace(true) {
                 show_disclaimer(&window, &ctl, &rt, disclaimer_open.clone());
@@ -230,6 +256,7 @@ fn widgets() -> Widgets {
         clear: gtk::Button::builder().label("Clear Filters").build(),
         refresh: gtk::Button::builder().icon_name("view-refresh-symbolic").tooltip_text("Refresh List").build(),
         favorite: gtk::Button::builder().label("Add to Favorites").build(),
+        details: gtk::Button::builder().label("Details").build(),
         action: gtk::Button::builder().label("Connect to the VPN Server").build(),
         store,
         table: gtk::ColumnView::new(Some(selection.clone())),
@@ -241,6 +268,9 @@ fn layout(w: &Widgets) -> adw::ToolbarView {
     let header = adw::HeaderBar::new();
     header.pack_start(&w.refresh);
     let menu = gio::Menu::new();
+    menu.append(Some("VPN Connection Settings…"), Some("win.accounts"));
+    menu.append(Some("Connection History"), Some("win.history"));
+    menu.append(Some("Settings…"), Some("win.settings"));
     menu.append(Some("Connection Log"), Some("win.log"));
     menu.append(Some("VPN Gate Web Site"), Some("app.website"));
     menu.append(Some("Quit"), Some("app.quit"));
@@ -297,6 +327,7 @@ fn layout(w: &Widgets) -> adw::ToolbarView {
 
     let bar = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     bar.set_halign(gtk::Align::End);
+    bar.append(&w.details);
     bar.append(&w.favorite);
     bar.append(&w.action);
 
@@ -358,10 +389,13 @@ fn wire_table(w: &Rc<Widgets>, ctl: &Controller, rt: &Arc<tokio::runtime::Runtim
             label.set_text(&text.unwrap_or_default());
         });
         let col = gtk::ColumnViewColumn::new(Some(title), Some(factory));
+        // A sorter makes the header clickable; the real ordering is the model's (see `wire_header_sort`).
+        col.set_sorter(Some(&gtk::CustomSorter::new(|_, _| gtk::Ordering::Equal)));
         col.set_resizable(true);
         col.set_expand(i == 0);
         table.append_column(&col);
     }
+    wire_header_sort(w, ctl);
     // selection -> model; the sync guard keeps a programmatic change from echoing back
     let (store, ctl2) = (w.store.clone(), ctl.clone());
     w.selection.connect_selection_changed(move |sel, _, _| {
@@ -382,6 +416,41 @@ fn wire_table(w: &Rc<Widgets>, ctl: &Controller, rt: &Arc<tokio::runtime::Runtim
                 }
             });
         }
+    });
+}
+
+/// Sort key of each default column, in `columns()` order.
+const COLUMN_SORT: [SortKey; 8] = [
+    SortKey::Host,
+    SortKey::Country,
+    SortKey::Uptime,
+    SortKey::Sessions,
+    SortKey::Speed,
+    SortKey::Ping,
+    SortKey::Logging,
+    SortKey::Score,
+];
+
+/// Clicking a header sorts like the drop-down does: the model orders the rows, the header only shows the arrow.
+fn wire_header_sort(w: &Rc<Widgets>, ctl: &Controller) {
+    let (table, ctl) = (w.table.clone(), ctl.clone());
+    let t = table.clone();
+    table.sorter().expect("column view sorter").connect_changed(move |sorter, _| {
+        if syncing() {
+            return;
+        }
+        let Some(cs) = sorter.downcast_ref::<gtk::ColumnViewSorter>() else { return };
+        let Some(col) = cs.primary_sort_column() else { return };
+        let Some(i) = (0..t.columns().n_items()).find(|&i| t.columns().item(i).as_ref() == Some(col.upcast_ref()))
+        else {
+            return;
+        };
+        let descending = cs.primary_sort_order() == gtk::SortType::Descending;
+        ctl.change(|m| {
+            m.sort_key = COLUMN_SORT[i as usize % COLUMN_SORT.len()];
+            m.sort_descending = descending;
+            m.rebuild();
+        });
     });
 }
 
@@ -654,6 +723,7 @@ fn refresh_widgets(w: &Widgets, ctl: &Controller, shown: &Rc<RefCell<Shown>>) {
             "destructive-action"
         });
         w.favorite.set_sensitive(m.selected_server().is_some());
+        w.details.set_sensitive(m.selected_server().is_some());
         w.favorite.set_label(match m.selected_server() {
             Some(s) if m.is_favorite(s) => "Remove from Favorites",
             _ => "Add to Favorites",
@@ -679,6 +749,12 @@ fn refresh_widgets(w: &Widgets, ctl: &Controller, shown: &Rc<RefCell<Shown>>) {
         if let Some(i) = SORT_CHOICES.iter().position(|c| c.1 == m.sort_key) {
             w.sort.set_selected(i as u32);
         }
+        if let Some(i) = COLUMN_SORT.iter().position(|k| *k == m.sort_key) {
+            if let Some(col) = w.table.columns().item(i as u32).and_downcast::<gtk::ColumnViewColumn>() {
+                let order = if m.sort_descending { gtk::SortType::Descending } else { gtk::SortType::Ascending };
+                w.table.sort_by_column(Some(&col), order);
+            }
+        }
         let logging = LOGGING_CHOICES.iter().position(|c| c.1 == m.filter.max_log_weeks).unwrap_or(0);
         w.logging.set_selected(logging as u32);
 
@@ -702,4 +778,50 @@ fn refresh_widgets(w: &Widgets, ctl: &Controller, shown: &Rc<RefCell<Shown>>) {
 
 fn flag_of(m: &vpngate_app_model::model::AppModel, ip: &str) -> String {
     m.servers().iter().find(|s| s.ip == ip).map(VpnServer::flag).unwrap_or_default()
+}
+
+fn add_window_actions(
+    window: &adw::ApplicationWindow,
+    ctx: &Ctx,
+    log: &Rc<LogWindow>,
+    accounts: &Rc<AccountsWindow>,
+    history: &Rc<HistoryWindow>,
+) {
+    let a = accounts.clone();
+    let open = gio::SimpleAction::new("accounts", None);
+    open.connect_activate(move |_, _| {
+        a.show();
+        a.refresh();
+    });
+    window.add_action(&open);
+    let h = history.clone();
+    let open = gio::SimpleAction::new("history", None);
+    open.connect_activate(move |_, _| h.show());
+    window.add_action(&open);
+    let (ctx, w, a, l) = (ctx.clone(), window.clone(), accounts.clone(), log.clone());
+    let open = gio::SimpleAction::new("settings", None);
+    open.connect_activate(move |_, _| {
+        let (a, l) = (a.clone(), l.clone());
+        settings_window::open(
+            &w,
+            &ctx,
+            settings_window::Actions {
+                open_accounts: Rc::new(move || {
+                    a.show();
+                    a.refresh();
+                }),
+                open_log: Rc::new(move || l.show()),
+            },
+        );
+    });
+    window.add_action(&open);
+}
+
+fn wire_details(w: &Rc<Widgets>, ctl: &Controller, window: &adw::ApplicationWindow) {
+    let (c, win) = (ctl.clone(), window.clone());
+    w.details.connect_clicked(move |_| {
+        if let Some(s) = c.read(|m| m.selected_server().cloned()) {
+            crate::details::show(&win, &s);
+        }
+    });
 }
