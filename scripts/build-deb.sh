@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 VERSION=${1:-$(cat VERSION)}
-command -v cargo-deb >/dev/null || cargo install cargo-deb --locked --version 3.6.1
+command -v cargo-deb >/dev/null || cargo install cargo-deb --locked --version 3.8.0
 cargo build --release --locked -p vpngate-daemon
 (cd apps/linux && cargo build --release --locked)
 mkdir -p build
