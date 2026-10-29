@@ -9,6 +9,8 @@
 //! The platform half is [`VpnHostCallbacks`]: `establish` turns the engine's [`TunnelPlanRecord`] into a
 //! `VpnService.Builder` tunnel and returns the descriptor, and `protect` is `VpnService.protect`.
 
+#![cfg(unix)] // Android is Linux; the crate is empty where the descriptor-based tunnel cannot exist.
+
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
