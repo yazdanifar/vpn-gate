@@ -4,7 +4,8 @@ pub mod args;
 pub mod backend;
 pub mod daemon;
 pub mod engine;
-#[cfg(unix)]
+// Bionic only has `getgrnam_r` from API 28, and Android has no daemon to authenticate anyway.
+#[cfg(all(unix, not(target_os = "android")))]
 pub mod group_auth;
 pub mod ipc_server;
 #[cfg(windows)]

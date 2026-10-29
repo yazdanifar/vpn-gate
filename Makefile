@@ -1,6 +1,6 @@
 # Thin wrapper over scripts/. The scripts are the source of truth.
 .DEFAULT_GOAL := help
-.PHONY: lint format help build app pkg test test-each test-tsan test-asan clean rust-test rust-lint rust-coverage rust-live
+.PHONY: lint format help build app pkg test test-each test-tsan test-asan clean rust-test rust-lint rust-coverage rust-live android-engine
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -34,5 +34,7 @@ rust-lint: ## Rust fmt + clippy (warnings are errors)
 	cargo clippy --workspace --all-targets -- -D warnings
 rust-coverage: ## Rust line-coverage thresholds (cargo-llvm-cov)
 	scripts/coverage-rs.sh
+android-engine: ## Cross-compile the Android engine and generate Kotlin bindings (needs ANDROID_NDK_HOME)
+	scripts/build-android-engine.sh
 rust-live: ## Live relay tests (network)
 	cargo test -p vpngate-daemon --test live -- --ignored --nocapture

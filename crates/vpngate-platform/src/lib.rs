@@ -174,6 +174,10 @@ impl CommandRunner for SystemRunner {
 }
 
 #[cfg(unix)]
+pub mod android;
+#[cfg(unix)]
 pub mod linux;
 pub mod macos;
+#[cfg(unix)]
+pub mod protect;
 pub mod windows;

@@ -167,6 +167,12 @@ impl UdpAccel {
     /// from the login pack, of which the first 32 bytes are used.
     pub fn bind(my_key_v2: &[u8]) -> std::io::Result<UdpAccel> {
         let std_socket = std::net::UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
+        #[cfg(unix)]
+        {
+            use std::os::fd::AsRawFd;
+            // The UDP endpoint is the relay: its datagrams must not enter the tunnel.
+            vpngate_platform::protect::protect(std_socket.as_raw_fd())?;
+        }
         std_socket.set_nonblocking(true)?;
         let sender = std_socket.try_clone()?;
         let socket = UdpSocket::from_std(std_socket)?;

@@ -94,6 +94,15 @@ returned, with `isFresh:false`). One sync runs at a time.
 hello on `port`; `connectMs` is TCP+TLS, `helloMs` the whole test. Without `ports` the relay's own SSL ports are tried
 (at most 3, in the Windows client's priority order), then 443.
 
+## Android (in-process)
+
+Android has no daemon: `vpngate-uniffi`'s `AndroidEngine` runs the same `IpcCore` in the app process. `send(requestJson)`
+is one request line; every reply and event is delivered as one line to the `LineListener` (the first line is the state
+snapshot, as on a socket). The platform half is `VpnHostCallbacks`: `establish(TunnelPlanRecord)` builds the tunnel with
+`VpnService.Builder` and returns the detached tun descriptor (or an error text), `protect(fd)` is `VpnService.protect`,
+and `tunnelClosed()` tells Kotlin the engine closed the tunnel. Paths: `files_dir` holds the host id and the server
+cache; `bundle_path` is `VPNGate.dat` copied out of the assets. Build: `scripts/build-android-engine.sh`.
+
 ## Client rules
 
 - Connect lazily and reconnect on the next send after the connection drops; report the drop to the UI. Never let a write to

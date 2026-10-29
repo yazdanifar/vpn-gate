@@ -12,7 +12,7 @@ use vpngate_net::session::{simple_connect_config, EmitFn, SessionControlling};
 
 #[cfg(unix)]
 use crate::engine::Engine;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 use crate::group_auth::{GroupPeerAuth, SystemDirectory, GROUP_NAME};
 #[cfg(unix)]
 use crate::ipc_server::{IpcServer, PeerAuth, UidPeerAuth};
@@ -28,14 +28,8 @@ pub async fn run_daemon(
     shutdown: impl Future<Output = ()>,
 ) -> io::Result<()> {
     // With a fixed uid the console is not consulted at all.
-    let auth: Arc<dyn PeerAuth> = if uid.is_some() {
-        Arc::new(UidPeerAuth::new(uid, || None))
-    } else if cfg!(target_os = "linux") {
-        // No console owner on a Linux server or over SSH: root and the `vpngate` group decide.
-        Arc::new(GroupPeerAuth::new(GROUP_NAME, Arc::new(SystemDirectory)))
-    } else {
-        Arc::new(UidPeerAuth::new(None, console_uid))
-    };
+    let auth: Arc<dyn PeerAuth> =
+        if uid.is_some() { Arc::new(UidPeerAuth::new(uid, || None)) } else { default_auth(console_uid) };
     let server = IpcServer::new(&socket, uid, auth, session.clone());
     if let Some(engine) = engine {
         server.set_engine(engine);
@@ -46,6 +40,22 @@ pub async fn run_daemon(
     session.disconnect();
     server.stop();
     Ok(())
+}
+
+/// No fixed uid: on Linux root and the `vpngate` group decide (no console owner on a server or over SSH), elsewhere the
+/// console owner.
+#[cfg(all(unix, not(target_os = "android")))]
+fn default_auth(console_uid: impl Fn() -> Option<u32> + Send + Sync + 'static) -> Arc<dyn PeerAuth> {
+    if cfg!(target_os = "linux") {
+        Arc::new(GroupPeerAuth::new(GROUP_NAME, Arc::new(SystemDirectory)))
+    } else {
+        Arc::new(UidPeerAuth::new(None, console_uid))
+    }
+}
+
+#[cfg(target_os = "android")]
+fn default_auth(console_uid: impl Fn() -> Option<u32> + Send + Sync + 'static) -> Arc<dyn PeerAuth> {
+    Arc::new(UidPeerAuth::new(None, console_uid))
 }
 
 /// The Windows twin of [`run_daemon`]: serves the named pipe until `shutdown` completes. Creates the data directory and
