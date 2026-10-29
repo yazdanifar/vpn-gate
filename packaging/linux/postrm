@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+if [ "$1" = purge ]; then
+    rm -rf /var/lib/vpngate
+    delgroup --system vpngate >/dev/null 2>&1 || groupdel vpngate >/dev/null 2>&1 || true
+fi
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload || true
+fi
+exit 0

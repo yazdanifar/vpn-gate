@@ -20,3 +20,22 @@ async-channel = "2"
 uuid = { version = "1", features = ["v4"] }
 ksni = "0.3"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "time", "sync"] }
+
+# `cargo deb --no-build` (scripts/build-deb.sh): the daemon comes from the root workspace, the app from this one.
+[package.metadata.deb]
+name = "vpn-gate"
+maintainer = "VPN Gate <noreply@users.noreply.github.com>"
+section = "net"
+priority = "optional"
+extended-description = "VPN Gate client: the vpngate daemon (systemd service) and a GTK4 app for connecting to the free relays of the VPN Gate academic project. Users in the vpngate group can connect."
+depends = "$auto, iproute2, systemd, libgtk-4-1, libadwaita-1-0 (>= 1.5)"
+recommends = "libsecret-tools"
+maintainer-scripts = "../../../packaging/linux"
+assets = [
+    ["../../../target/release/vpngate-daemon", "usr/bin/vpngate-daemon", "755"],
+    ["../target/release/vpngate-gtk", "usr/bin/vpngate-gtk", "755"],
+    ["../../../assets/VPNGate.dat", "usr/share/vpngate/VPNGate.dat", "644"],
+    ["../../../packaging/linux/vpngate.service", "lib/systemd/system/vpngate.service", "644"],
+    ["../../../packaging/linux/net.vpngate.App.desktop", "usr/share/applications/net.vpngate.App.desktop", "644"],
+    ["../../../assets/AppIcon-256.png", "usr/share/icons/hicolor/256x256/apps/net.vpngate.App.png", "644"],
+]
