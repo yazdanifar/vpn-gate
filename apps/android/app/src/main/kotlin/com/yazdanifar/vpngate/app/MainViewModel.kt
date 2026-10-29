@@ -2,6 +2,7 @@ package com.yazdanifar.vpngate.app
 
 import android.app.Application
 import android.content.Intent
+import android.net.Uri
 import android.net.VpnService
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -23,10 +24,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val model = MainModel(
         ipc = ipc,
-        settings = AppSettings(app),
+        settings = AppSettings(app, (app as VpnGateApp).secrets),
         scope = viewModelScope,
         preparer = VpnPreparer { prepare() },
+        accountStore = (app as VpnGateApp).accounts,
+        historyStore = app.history,
     )
+
+    /** Reads a file the user picked (SAF); null when it cannot be opened. */
+    fun readUri(uri: Uri): ByteArray? = try {
+        getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() }
+    } catch (_: java.io.IOException) {
+        null
+    }
 
     fun onConsentResult(granted: Boolean) {
         consent?.complete(granted)

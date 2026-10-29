@@ -1,0 +1,103 @@
+package com.yazdanifar.vpngate.app
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.yazdanifar.vpngate.RoutingAction
+import com.yazdanifar.vpngate.RoutingConfig
+import com.yazdanifar.vpngate.RoutingRule
+import com.yazdanifar.vpngate.RoutingRuleType
+import com.yazdanifar.vpngate.RoutingRuleValidation
+
+private fun actionLabel(a: RoutingAction) = when (a) {
+    RoutingAction.Proxy -> "Through VPN"
+    RoutingAction.Direct -> "Direct"
+    RoutingAction.Block -> "Block"
+}
+
+/**
+ * The routing rules (UI-SPEC 8): an ordered list (first match wins) with a default action and a private-network bypass.
+ * The Android tunnel plan (`plan_for`) turns only "Direct" IP and CIDR rules into excluded routes; the other rules are
+ * stored and sent to the engine but have no effect on the tunnel yet, which the hint below says.
+ */
+@Composable
+fun RoutingEditor(config: RoutingConfig, onChange: (RoutingConfig) -> Unit) {
+    var type by remember { mutableStateOf(RoutingRuleType.DomainSuffix) }
+    var action by remember { mutableStateOf(RoutingAction.Direct) }
+    var value by remember { mutableStateOf("") }
+    val error = if (value.isBlank()) null else RoutingRuleValidation.error(type, value)
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Choice("Unmatched traffic", RoutingAction.entries, config.defaultAction, ::actionLabel) {
+            onChange(config.copy(defaultAction = it))
+        }
+        SwitchRow(
+            "Bypass private networks",
+            config.bypassPrivateNetworks,
+            { onChange(config.copy(bypassPrivateNetworks = it)) },
+            hint = "Local addresses (10.x, 192.168.x, …) skip the VPN.",
+        )
+        Text(
+            "On Android only “Direct” IP and range rules change the tunnel; the other rules are saved but not applied yet.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        HorizontalDivider()
+        Text("Rules (first match wins)", style = MaterialTheme.typography.titleSmall)
+        config.rules.forEachIndexed { i, rule ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(rule.value)
+                    Text(
+                        "${RoutingRuleValidation.types.first { it.type == rule.type }.label} → ${actionLabel(rule.action)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(rule.enabled, { on -> onChange(config.copy(rules = config.rules.toMutableList().also { it[i] = rule.copy(enabled = on) })) })
+                TextButton(enabled = i > 0, onClick = { onChange(config.copy(rules = config.rules.swap(i, i - 1))) }) { Text("↑") }
+                TextButton(enabled = i < config.rules.size - 1, onClick = { onChange(config.copy(rules = config.rules.swap(i, i + 1))) }) { Text("↓") }
+                TextButton(onClick = { onChange(config.copy(rules = config.rules.filterIndexed { j, _ -> j != i })) }) { Text("Remove") }
+            }
+        }
+        Text("Add a rule", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+        Choice("Type", RoutingRuleValidation.types, RoutingRuleValidation.types.first { it.type == type }, { it.label }) { type = it.type }
+        Field(
+            "Value",
+            value,
+            { value = it },
+            error = error,
+            placeholder = RoutingRuleValidation.types.first { it.type == type }.placeholder,
+        )
+        Choice("Action", RoutingAction.entries, action, ::actionLabel) { action = it }
+        Button(
+            enabled = value.isNotBlank() && error == null,
+            onClick = {
+                onChange(config.copy(rules = config.rules + RoutingRule(type = type, value = value.trim(), action = action)))
+                value = ""
+            },
+        ) { Text("Add rule") }
+    }
+}
+
+private fun <T> List<T>.swap(a: Int, b: Int): List<T> = toMutableList().also {
+    val t = it[a]
+    it[a] = it[b]
+    it[b] = t
+}

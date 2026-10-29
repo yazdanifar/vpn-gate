@@ -11,9 +11,11 @@ import android.net.IpPrefix
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import com.yazdanifar.vpngate.ConfigConnectRequest
 import com.yazdanifar.vpngate.ConnectRequest
 import com.yazdanifar.vpngate.Ipc
 import com.yazdanifar.vpngate.RouteSplit
+import com.yazdanifar.vpngate.connectRequest
 import uniffi.vpngate_uniffi.EstablishResult
 import uniffi.vpngate_uniffi.TunnelPlanRecord
 import java.net.InetAddress
@@ -57,8 +59,16 @@ class VpnEngineService : VpnService() {
     }
 
     private fun reconnectLastServer() {
-        val last = AppSettings(this).lastServer ?: return
-        (application as VpnGateApp).hub.send(Ipc.json.encodeToString(ConnectRequest.serializer(), last))
+        val app = application as VpnGateApp
+        val settings = AppSettings(this, app.secrets)
+        val account = settings.lastAccountId?.let { id -> app.accounts.accounts.firstOrNull { it.id == id } }
+        if (account != null) {
+            val request = app.accounts.connectRequest(account, settings.blockIPv6, settings.globalRouting)
+            app.hub.send(Ipc.json.encodeToString(ConfigConnectRequest.serializer(), request))
+            return
+        }
+        val last = settings.lastServer ?: return
+        app.hub.send(Ipc.json.encodeToString(ConnectRequest.serializer(), last))
     }
 
     /** Called on an engine thread. */

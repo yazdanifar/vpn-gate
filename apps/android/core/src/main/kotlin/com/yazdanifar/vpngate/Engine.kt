@@ -127,6 +127,8 @@ class IpcClient(private val channel: EngineChannel, private val scope: Coroutine
 
     fun connect(request: ConnectRequest) = channel.send(Ipc.json.encodeToString(ConnectRequest.serializer(), request))
 
+    fun connect(request: ConfigConnectRequest) = channel.send(Ipc.json.encodeToString(ConfigConnectRequest.serializer(), request))
+
     fun disconnect() = sendCommand("disconnect")
 
     fun status() = sendCommand("status")
