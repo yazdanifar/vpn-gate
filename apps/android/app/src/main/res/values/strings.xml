@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VPN Gate</string>
+    <string name="notification_channel">VPN connection</string>
+    <string name="notification_title">VPN Gate</string>
+</resources>

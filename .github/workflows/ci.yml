@@ -152,6 +152,21 @@ jobs:
         run: ANDROID_NDK_HOME="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}" scripts/build-android-engine.sh
       - uses: actions/upload-artifact@v5
         with: { name: vpn-gate-android-engine, path: build/android-engine }
+  android-app:
+    runs-on: ubuntu-latest
+    needs: [android-engine]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with: { name: vpn-gate-android-engine, path: build/android-engine }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Core tests (JVM) and the debug APK (the runner ships the Android SDK)
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :core:test :app:assembleDebug
+      - uses: actions/upload-artifact@v5
+        with: { name: vpn-gate-apk-debug, path: apps/android/app/build/outputs/apk/debug/*.apk }
   coverage:
     runs-on: ubuntu-latest
     steps:
