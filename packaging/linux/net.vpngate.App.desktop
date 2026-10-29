@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=VPN Gate
+Comment=Connect to free VPN Gate relays
+Exec=vpngate-gtk
+Icon=net.vpngate.App
+Terminal=false
+Categories=Network;
+StartupWMClass=net.vpngate.App

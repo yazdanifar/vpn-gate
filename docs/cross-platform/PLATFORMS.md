@@ -34,3 +34,26 @@ Get `vpn-gate-msi` from the latest green `msi` CI job (unsigned: SmartScreen "Mo
     `C:\ProgramData\VPNGate`.
 
 Report anything that fails with the log (`install.log`, `%LocalAppData%\VPNGate`, `sc query`).
+
+## Linux (U24) — clean Ubuntu 24.04 / Debian 13 desktop VM, systemd, a normal user with sudo
+
+**Automated in CI** (the `deb` job, ubuntu-latest): `scripts/build-deb.sh` builds `vpn-gate_<version>_<arch>.deb`;
+`scripts/test-deb.sh` installs it, checks the `vpngate` group, the enabled and active unit, the installed files, a `status`
+reply over `/run/vpngate.sock`, the restart after `kill -9`, `remove` (unit gone, group kept) and `purge` (state and group gone).
+Not covered: a tun device and routes (CI has no relay), the GTK window, the tray.
+
+Get `vpn-gate-deb` from the latest green `deb` CI job.
+
+1. **Install.** `sudo apt install ./vpn-gate_*.deb`. It prints that your user was added to the `vpngate` group; log out and in.
+   `id` lists `vpngate`; `systemctl status vpngate` is active.
+2. **App.** Start "VPN Gate" from the application menu (icon present). The window opens, the list is filled, the status shows
+   the daemon is reachable. Compare against UI-SPEC.md. On GNOME the tray needs the AppIndicator extension.
+3. **Connect.** Connect to a relay: `ip route` shows `0.0.0.0/1` and `128.0.0.0/1` via `vpngate0`, the public IP changes,
+   `resolvectl status` shows the VPN resolver with `~.`, IPv6 is blocked. Disconnect restores routes and DNS.
+4. **Command line.** `sudo scripts/e2e-tunnel-linux.sh <server-ip>` (get a live one from the app or `vpngate-daemon --probe`) prints
+   `E2E PASSED`: traffic, DNS, the IPv6 block, and exact restore after SIGINT, SIGTERM and kill -9 + restart.
+5. **Secrets.** With `libsecret-tools` and a keyring: an account's password survives an app restart and is not in
+   `~/.config/vpngate/accounts.json`.
+6. **Uninstall.** `sudo apt remove vpn-gate` leaves no `vpngate0`, routes or DNS changes; `purge` removes `/var/lib/vpngate`.
+
+Report anything that fails with `journalctl -u vpngate` and the output of the script.

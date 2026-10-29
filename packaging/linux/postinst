@@ -1,0 +1,18 @@
+#!/bin/sh
+# Creates the vpngate group, adds the installing user to it and enables the unit.
+set -e
+if [ "$1" = configure ]; then
+    getent group vpngate >/dev/null || addgroup --system vpngate >/dev/null 2>&1 || groupadd --system vpngate
+    # The user who ran sudo/pkexec (or the console user); membership applies from their next login.
+    user="${SUDO_USER:-${PKEXEC_UID:+$(getent passwd "$PKEXEC_UID" | cut -d: -f1)}}"
+    if [ -n "$user" ] && [ "$user" != root ] && getent passwd "$user" >/dev/null; then
+        adduser "$user" vpngate >/dev/null 2>&1 || usermod -aG vpngate "$user" || true
+        echo "vpngate: added $user to the vpngate group (log out and in again for it to apply)"
+    fi
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload || true
+        systemctl enable vpngate.service || true
+        systemctl restart vpngate.service || true
+    fi
+fi
+exit 0
