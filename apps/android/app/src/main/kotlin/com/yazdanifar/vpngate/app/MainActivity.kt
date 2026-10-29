@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             val state by viewModel.model.state.collectAsState()
-            MainScreen(state, viewModel.model, onQuit = ::finishAndRemoveTask)
+            AppRoot(state, viewModel.model, viewModel::readUri, onQuit = ::finishAndRemoveTask)
         }
     }
 

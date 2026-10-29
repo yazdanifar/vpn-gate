@@ -56,7 +56,7 @@ private const val DISCLAIMER_BODY =
         "By tapping “Agree and Continue”, you confirm that you will use this service in compliance with local laws."
 
 @Composable
-fun MainScreen(state: UiState, model: MainModel, onQuit: () -> Unit) {
+fun MainScreen(state: UiState, model: MainModel, onQuit: () -> Unit, onNavigate: (Screen) -> Unit) {
     if (state.showDisclaimer) {
         AlertDialog(
             onDismissRequest = {},
@@ -72,6 +72,7 @@ fun MainScreen(state: UiState, model: MainModel, onQuit: () -> Unit) {
         )
     }
     Scaffold(
+        topBar = { MainBar(state, onNavigate) },
         bottomBar = { BottomBar(state, model) },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
@@ -256,4 +257,29 @@ private fun BottomBar(state: UiState, model: MainModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun MainBar(state: UiState, onNavigate: (Screen) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    androidx.compose.material3.TopAppBar(
+        title = { Text("VPN Gate") },
+        actions = {
+            TextButton(onClick = { open = true }) { Text("Menu") }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                @Composable
+                fun item(label: String, enabled: Boolean = true, to: Screen) =
+                    DropdownMenuItem(text = { Text(label) }, enabled = enabled, onClick = {
+                        open = false
+                        onNavigate(to)
+                    })
+                item("Connection settings", to = Screen.Accounts)
+                item("Server details", enabled = state.selected != null, to = Screen.Details)
+                item("History", to = Screen.History)
+                item("Log", to = Screen.Log)
+                item("Settings", to = Screen.Settings)
+            }
+        },
+    )
 }

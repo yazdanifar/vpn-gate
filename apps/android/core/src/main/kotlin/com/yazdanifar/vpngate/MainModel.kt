@@ -34,6 +34,13 @@ data class UiState(
     val sortDescending: Boolean = true,
     val selectedId: String? = null,
     val logLines: List<String> = emptyList(),
+    val accounts: List<ClientAccount> = emptyList(),
+    val accountsNotice: String? = null,
+    val history: List<ConnectionLogEntry> = emptyList(),
+    val proxy: ProxySettings = ProxySettings(),
+    val autoReconnect: Boolean = true,
+    val blockIPv6: Boolean = true,
+    val globalRouting: RoutingConfig = RoutingConfig(),
 ) {
     /** The filtered, sorted rows. */
     val servers: List<VpnServer> get() = filter.apply(allServers, favorites).sortedBy(sortKey, sortDescending)
@@ -85,9 +92,21 @@ class MainModel(
     private val clock: () -> Long = System::currentTimeMillis,
     private val reconnectDelayMs: Long = 15_000,
     private val answerTimeoutMs: Long = 10_000,
+    private val accountStore: AccountStore? = null,
+    private val historyStore: ConnectionHistoryStore? = null,
 ) {
     private val _state = MutableStateFlow(
-        UiState(showDisclaimer = !settings.hasAgreedToDisclaimer, favorites = settings.favorites),
+        UiState(
+            showDisclaimer = !settings.hasAgreedToDisclaimer,
+            favorites = settings.favorites,
+            accounts = accountStore?.accounts.orEmpty(),
+            accountsNotice = accountStore?.loadNotice,
+            history = historyStore?.entries.orEmpty(),
+            proxy = settings.proxy,
+            autoReconnect = settings.autoReconnect,
+            blockIPv6 = settings.blockIPv6,
+            globalRouting = settings.globalRouting,
+        ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
@@ -100,6 +119,7 @@ class MainModel(
     private var reconnectAttempts = 0
     private val log = ArrayDeque<String>()
     private var started = false
+    private var openHistoryId: String? = null
 
     /** Subscribes to the engine's events, asks for a snapshot and loads the list (cache first, then a refresh). */
     fun start() {
@@ -139,7 +159,7 @@ class MainModel(
     // region list
 
     fun refreshList() {
-        scope.launch { load { ipc.refreshServers() } }
+        scope.launch { load { ipc.refreshServers(settings.proxy.takeIf { it.kind != ProxyKind.None }) } }
     }
 
     private suspend fun load(fetch: suspend () -> ServerListResult): ServerListResult? {
@@ -191,6 +211,11 @@ class MainModel(
 
     fun applyEvent(e: HelperEvent) {
         lastEventAt = clock()
+        // A "disconnected" event carries zeroed counters; the totals are those of the last event before it.
+        if (e.state != ConnectionState.Disconnected) {
+            lastBytesIn = e.bytesIn
+            lastBytesOut = e.bytesOut
+        }
         if (e.ipcVersion != null && e.ipcVersion < Ipc.IPC_VERSION) {
             _state.update { it.copy(notice = "The VPN engine is too old for this app. Update VPN Gate.") }
         }
@@ -216,11 +241,39 @@ class MainModel(
             )
         }
         when (e.state) {
-            ConnectionState.Connected -> reconnectAttempts = 0
-            ConnectionState.Disconnected -> considerReconnect()
+            ConnectionState.Connected -> {
+                reconnectAttempts = 0
+                startHistory(e)
+            }
+            ConnectionState.Disconnected -> {
+                endHistory(e)
+                considerReconnect()
+            }
             else -> {}
         }
     }
+
+    // One history entry per connected period (UI-SPEC 9).
+    private fun startHistory(e: HelperEvent) {
+        val store = historyStore ?: return
+        if (openHistoryId != null) return
+        val ip = e.server ?: _state.value.server ?: return
+        val name = _state.value.allServers.firstOrNull { it.ip == ip }?.hostName ?: accountName ?: ip
+        openHistoryId = store.recordStart(name, ip)
+        _state.update { it.copy(history = store.entries) }
+    }
+
+    private fun endHistory(e: HelperEvent) {
+        val store = historyStore ?: return
+        val id = openHistoryId ?: return
+        openHistoryId = null
+        store.recordEnd(id, lastBytesIn, lastBytesOut, e.error?.takeIf { it.isNotEmpty() })
+        _state.update { it.copy(history = store.entries) }
+    }
+
+    private var lastBytesIn = 0L
+    private var lastBytesOut = 0L
+    private var accountName: String? = null
 
     private fun appendLog(line: String) {
         log.addLast(line)
@@ -246,38 +299,133 @@ class MainModel(
         val seq = ++connectSeq
         val sentAt = clock()
         _state.update { it.copy(state = ConnectionState.Connecting, server = s.ip, notice = null) }
-        if (!preparer.prepare()) {
-            wanted = null
-            _state.update {
-                it.copy(
-                    state = ConnectionState.Disconnected,
-                    notice = "VPN permission was not granted. Allow the VPN connection to continue.",
-                )
-            }
-            appendLog("VPN permission denied")
-            return
-        }
+        if (!permitted()) return
+        accountName = null
         val request = ConnectRequest(
             host = s.ip,
             port = s.connectPort,
             ports = s.prioritizedSslPorts.takeIf { it.isNotEmpty() },
+            proxy = settings.proxy.takeIf { it.kind != ProxyKind.None },
             // retrying is done here (considerReconnect), so the engine makes a single attempt
             autoReconnect = false,
             blockIPv6 = settings.blockIPv6,
         )
         settings.lastServer = request
+        settings.lastAccountId = null
         ipc.connect(request)
-        // An engine that never answers must not leave the UI on "Connecting…" forever.
+        watchAnswer(seq, sentAt) { wanted?.id == s.id }
+    }
+
+    private suspend fun permitted(): Boolean {
+        if (preparer.prepare()) return true
+        wanted = null
+        _state.update {
+            it.copy(
+                state = ConnectionState.Disconnected,
+                notice = "VPN permission was not granted. Allow the VPN connection to continue.",
+            )
+        }
+        appendLog("VPN permission denied")
+        return false
+    }
+
+    /** An engine that never answers must not leave the UI on "Connecting…" forever. */
+    private suspend fun watchAnswer(seq: Int, sentAt: Long, stillWanted: () -> Boolean) {
         delay(answerTimeoutMs)
-        if (lastEventAt < sentAt && _state.value.state == ConnectionState.Connecting && seq == connectSeq && wanted?.id == s.id) {
+        if (lastEventAt < sentAt && _state.value.state == ConnectionState.Connecting && seq == connectSeq && stillWanted()) {
             wanted = null
+            accountWanted = null
             _state.update { it.copy(state = ConnectionState.Disconnected, notice = "The VPN engine is not responding.") }
             appendLog("No answer from the engine within ${answerTimeoutMs / 1000} s")
         }
     }
 
+    // region accounts
+
+    private var accountWanted: String? = null
+
+    /** Connects with a saved connection setting; the engine retries by itself (the account's own reconnect settings). */
+    fun connectAccount(account: ClientAccount) {
+        val store = accountStore ?: return
+        if (!requireAgreement { connectAccount(account) }) return
+        _state.update { it.copy(notice = null) }
+        cancelReconnect()
+        wanted = null
+        scope.launch {
+            val seq = ++connectSeq
+            val sentAt = clock()
+            _state.update { it.copy(state = ConnectionState.Connecting, server = account.host, notice = null) }
+            if (!permitted()) return@launch
+            accountName = account.name
+            accountWanted = account.id
+            val request = store.connectRequest(account, settings.blockIPv6, settings.globalRouting)
+            settings.lastAccountId = account.id
+            settings.lastServer = null
+            ipc.connect(request)
+            watchAnswer(seq, sentAt) { accountWanted == account.id }
+        }
+    }
+
+    /** Saves the editor form as a new account, or over [base]. */
+    fun saveAccount(editor: AccountEditorState, base: ClientAccount?) {
+        val store = accountStore ?: return
+        val account = editor.makeAccount(base)
+        val password = editor.password.takeIf { AuthTypes.usesPassword(editor.authType) }
+        if (base == null) store.add(account, password, editor.certDer, editor.privateKeyDer)
+        else store.update(account, password, editor.certDer, editor.privateKeyDer)
+        refreshAccounts()
+    }
+
+    fun deleteAccount(account: ClientAccount) {
+        accountStore?.delete(account)
+        refreshAccounts()
+    }
+
+    fun duplicateAccount(account: ClientAccount) {
+        accountStore?.duplicate(account)
+        refreshAccounts()
+    }
+
+    /** The editor's starting state for [account] (null = a new one), with its stored secrets. */
+    fun editorFor(account: ClientAccount?): AccountEditorState {
+        val store = accountStore ?: return AccountEditorState()
+        return if (account == null) AccountEditorState(proxy = settings.proxy.copy(password = null))
+        else AccountEditorState(account, store.password(account), store.hasCertificateIdentity(account), store.proxyPassword(account))
+    }
+
+    private fun refreshAccounts() = _state.update {
+        it.copy(accounts = accountStore?.accounts.orEmpty(), accountsNotice = accountStore?.loadNotice)
+    }
+
+    // endregion
+
+    // region settings and history
+
+    fun updateSettings(
+        proxy: ProxySettings = settings.proxy,
+        autoReconnect: Boolean = settings.autoReconnect,
+        blockIPv6: Boolean = settings.blockIPv6,
+        globalRouting: RoutingConfig = settings.globalRouting,
+    ) {
+        settings.proxy = proxy
+        settings.autoReconnect = autoReconnect
+        settings.blockIPv6 = blockIPv6
+        settings.globalRouting = globalRouting
+        _state.update {
+            it.copy(proxy = proxy, autoReconnect = autoReconnect, blockIPv6 = blockIPv6, globalRouting = globalRouting)
+        }
+    }
+
+    fun clearHistory() {
+        historyStore?.clear()
+        _state.update { it.copy(history = historyStore?.entries.orEmpty()) }
+    }
+
+    // endregion
+
     fun disconnect() {
         wanted = null
+        accountWanted = null
         cancelReconnect()
         if (_state.value.state == ConnectionState.Reconnecting) _state.update { it.copy(state = ConnectionState.Disconnected) }
         ipc.disconnect()
