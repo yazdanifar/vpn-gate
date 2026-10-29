@@ -95,13 +95,13 @@ pub trait LineListener: Send + Sync {
 
 #[derive(uniffi::Error, Debug)]
 pub enum EngineError {
-    Failed { message: String },
+    Failed { reason: String },
 }
 
 impl std::fmt::Display for EngineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let EngineError::Failed { message } = self;
-        f.write_str(message)
+        let EngineError::Failed { reason } = self;
+        f.write_str(reason)
     }
 }
 
@@ -226,7 +226,7 @@ impl AndroidEngine {
         listener: Arc<dyn LineListener>,
         customize: impl FnOnce(&mut SessionDependencies),
     ) -> Result<Arc<Self>, EngineError> {
-        let fail = |e: &dyn std::fmt::Display| EngineError::Failed { message: e.to_string() };
+        let fail = |e: &dyn std::fmt::Display| EngineError::Failed { reason: e.to_string() };
         let dir = PathBuf::from(files_dir);
         std::fs::create_dir_all(&dir).map_err(|e| fail(&e))?;
         let runtime = tokio::runtime::Builder::new_multi_thread()
