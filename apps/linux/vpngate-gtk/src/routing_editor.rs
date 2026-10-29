@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use adw::prelude::*;
+use gtk::glib::prelude::StaticType;
 use vpngate_core::routing_rule::{RoutingAction, RoutingConfig, RoutingRule, RoutingRuleType};
 
 const TYPES: [(RoutingRuleType, &str, &str); 6] = [
@@ -72,6 +73,17 @@ pub fn groups(cfg: Rc<RefCell<RoutingConfig>>, changed: Rc<dyn Fn()>) -> Vec<adw
 }
 
 impl Editor {
+    /// Moves the rule at `from` to position `to`; `false` when nothing changes.
+    fn move_rule(&self, from: usize, to: usize) -> bool {
+        let mut c = self.cfg.borrow_mut();
+        if from == to || from >= c.rules.len() || to >= c.rules.len() {
+            return false;
+        }
+        let rule = c.rules.remove(from);
+        c.rules.insert(to, rule);
+        true
+    }
+
     fn rebuild(self: &Rc<Self>) {
         for r in self.rows.borrow_mut().drain(..) {
             self.rules.remove(&r);
@@ -131,6 +143,28 @@ impl Editor {
                     (e.changed)();
                 });
             }
+            // Drag the handle onto another row to move the rule there.
+            let handle = gtk::Image::from_icon_name("list-drag-handle-symbolic");
+            row.add_prefix(&handle);
+            let source = gtk::DragSource::builder().actions(gtk::gdk::DragAction::MOVE).build();
+            source.connect_prepare(move |_, _, _| Some(gtk::gdk::ContentProvider::for_value(&(i as u32).to_value())));
+            handle.add_controller(source);
+            let target = gtk::DropTarget::new(u32::static_type(), gtk::gdk::DragAction::MOVE);
+            let e = self.clone();
+            target.connect_drop(move |_, value, _, _| {
+                let Ok(from) = value.get::<u32>() else { return false };
+                let moved = e.move_rule(from as usize, i);
+                if moved {
+                    // Not inside the drop handler: the rebuild destroys this very row.
+                    let e = e.clone();
+                    gtk::glib::idle_add_local_once(move || {
+                        e.rebuild();
+                        (e.changed)();
+                    });
+                }
+                moved
+            });
+            row.add_controller(target);
             let (e, rule) = (self.clone(), rule.clone());
             row.connect_activated(move |r| open_rule(&e, r.upcast_ref(), Some(rule.clone())));
             self.rules.add(&row);

@@ -184,3 +184,16 @@ fn custom_routing_round_trips_and_blocks_invalid_rules() {
     let back = AccountEditor::from_account(&a, None, false);
     assert!(back.use_custom_routing && back.routing.rules.len() == 1);
 }
+
+#[test]
+fn pkcs12_import_fills_the_identity() {
+    let file = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/modern.p12")).unwrap();
+    let mut e = editor("1.2.3.4");
+    e.auth_type = AccountAuthType::Certificate;
+    e.p12_passphrase = "nope".into();
+    e.import_pkcs12(&file);
+    assert!(e.import_error.is_some() && !e.can_save());
+    e.p12_passphrase = "secret".into();
+    e.import_pkcs12(&file);
+    assert!(e.import_error.is_none() && e.can_save());
+}

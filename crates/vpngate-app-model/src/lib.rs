@@ -4,6 +4,7 @@
 pub mod accounts;
 pub mod autostart;
 pub mod cert_import;
+pub mod columns;
 pub mod format;
 pub mod history;
 pub mod model;

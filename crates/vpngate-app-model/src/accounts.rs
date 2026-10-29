@@ -232,6 +232,8 @@ pub struct AccountEditor {
     pub cert_der: Option<Vec<u8>>,
     pub key_der: Option<Vec<u8>>,
     pub has_stored_identity: bool,
+    /// For the `.p12` import.
+    pub p12_passphrase: String,
     pub import_error: Option<String>,
 }
 
@@ -268,6 +270,7 @@ impl AccountEditor {
             cert_der: None,
             key_der: None,
             has_stored_identity,
+            p12_passphrase: String::new(),
             import_error: None,
         }
     }
@@ -377,13 +380,25 @@ impl AccountEditor {
         }
     }
 
+    /// Reads a `.p12` / `.pfx` with `p12_passphrase`.
+    pub fn import_pkcs12(&mut self, file: &[u8]) {
+        match crate::cert_import::parse_pkcs12(file, &self.p12_passphrase) {
+            Ok((c, k)) => {
+                self.cert_der = Some(c);
+                self.key_der = Some(k);
+                self.import_error = None;
+            }
+            Err(e) => self.import_error = Some(e),
+        }
+    }
+
     pub fn certificate_status(&self) -> &'static str {
         if self.cert_der.is_some() && self.key_der.is_some() {
             "Certificate and RSA key ready to save."
         } else if self.has_stored_identity {
             "A certificate and key are stored in the keyring. Import again to replace them."
         } else {
-            "No certificate yet. Import a PEM or DER certificate with its RSA key."
+            "No certificate yet. Import a PEM or DER certificate with its RSA key, or a .p12 file."
         }
     }
 }

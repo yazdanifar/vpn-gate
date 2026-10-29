@@ -27,6 +27,8 @@ pub struct Settings {
     pub proxy_username: String,
     pub tunnel_mode: TunnelMode,
     pub socks_port: i64,
+    /// Visible server-table columns in order (`columns::layout`); empty means the default layout.
+    pub list_columns: Vec<String>,
     /// The global routing rules; accounts with their own rules ignore them.
     pub routing: RoutingConfig,
 }
@@ -45,6 +47,7 @@ impl Default for Settings {
             proxy_username: String::new(),
             tunnel_mode: TunnelMode::FullTunnel,
             socks_port: DEFAULT_SOCKS_PORT,
+            list_columns: Vec::new(),
             routing: RoutingConfig::default(),
         }
     }

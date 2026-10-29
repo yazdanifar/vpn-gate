@@ -1,6 +1,6 @@
 //! Turns user-supplied certificate and key files into the DER blobs the daemon needs: an X.509 certificate and an RSA
 //! private key as PKCS#1 `RSAPrivateKey` (mirrors `CertImport.swift` / `CertImport.cs`). Only RSA; nothing touches disk.
-//! PKCS#12 is not handled here (see DECISIONS: convert with `openssl pkcs12`).
+//! PKCS#12 (`.p12` / `.pfx`) goes through `parse_pkcs12`.
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
@@ -117,6 +117,21 @@ pub fn parse_private_key(data: &[u8]) -> Result<Vec<u8>, String> {
     key.to_pkcs1_der().map(|d| d.as_bytes().to_vec()).map_err(|e| e.to_string())
 }
 
+/// A PKCS#12 bundle: the first private key with its leaf certificate, as `(certificate DER, PKCS#1 key DER)`.
+pub fn parse_pkcs12(data: &[u8], passphrase: &str) -> Result<(Vec<u8>, Vec<u8>), String> {
+    use p12_keystore::{KeyStore, KeyStoreEntry, Pkcs12ImportPolicy};
+    let store = KeyStore::from_pkcs12(data, passphrase, Pkcs12ImportPolicy::Strict)
+        .map_err(|_| "That file could not be opened as PKCS#12. Check the passphrase.".to_string())?;
+    for (_, entry) in store.entries() {
+        if let KeyStoreEntry::PrivateKeyChain(chain) = entry {
+            let Some(leaf) = chain.certs().first() else { continue };
+            let key = parse_private_key(chain.key().as_der())?;
+            return Ok((leaf.as_der().to_vec(), key));
+        }
+    }
+    Err("That PKCS#12 file holds no private key with a certificate.".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,5 +176,25 @@ mod tests {
         assert_eq!(parse_private_key(&pem("RSA PRIVATE KEY", &pkcs1)).unwrap(), pkcs1);
         assert_eq!(parse_private_key(&pem("PRIVATE KEY", &pkcs8)).unwrap(), pkcs1);
         assert_eq!(parse_private_key(&pkcs8).unwrap(), pkcs1, "raw DER");
+    }
+
+    fn fixture(name: &str) -> Vec<u8> {
+        std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata").join(name)).unwrap()
+    }
+
+    #[test]
+    fn pkcs12_gives_the_same_identity_as_the_pem_files() {
+        let cert = parse_certificate(&fixture("cert.pem")).unwrap();
+        let key = parse_private_key(&fixture("key.pem")).unwrap();
+        for name in ["modern.p12", "legacy.p12"] {
+            let (c, k) = parse_pkcs12(&fixture(name), "secret").unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!((c, k), (cert.clone(), key.clone()), "{name}");
+        }
+    }
+
+    #[test]
+    fn pkcs12_errors_are_explained() {
+        assert!(parse_pkcs12(&fixture("modern.p12"), "wrong").unwrap_err().contains("passphrase"));
+        assert!(parse_pkcs12(b"not a p12", "").is_err());
     }
 }
