@@ -210,8 +210,9 @@ mod tests {
         backend.make_net().apply(&request()).unwrap();
         tun.close();
         let mut buf = [0u8; 4];
-        // SAFETY: valid buffer; the peer is closed, so the read reports end of stream or a reset, never data.
-        assert!(unsafe { libc::read(theirs, buf.as_mut_ptr().cast(), 4) } <= 0);
+        // SAFETY: valid buffer. Non-blocking, because a datagram socket whose peer closed reports EOF on macOS but
+        // would block forever on Linux; either way no data can arrive.
+        assert!(unsafe { libc::recv(theirs, buf.as_mut_ptr().cast(), 4, libc::MSG_DONTWAIT) } <= 0);
         // SAFETY: closing our end of the pair once.
         unsafe { libc::close(theirs) };
     }
