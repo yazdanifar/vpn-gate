@@ -33,6 +33,8 @@ impl SortKey {
 pub struct AppModel {
     pub state: ConnectionState,
     pub server: Option<String>,
+    /// The account (not list server) last connected; read it through `live_account`.
+    pub active_account: Option<uuid::Uuid>,
     pub virtual_ip: Option<String>,
     pub bytes_in: u64,
     pub bytes_out: u64,
@@ -62,6 +64,7 @@ impl AppModel {
         AppModel {
             state: ConnectionState::Disconnected,
             server: None,
+            active_account: None,
             virtual_ip: None,
             bytes_in: 0,
             bytes_out: 0,
@@ -113,6 +116,11 @@ impl AppModel {
 
     pub fn selected_server(&self) -> Option<&VpnServer> {
         self.selected.as_deref().and_then(|id| self.find(id))
+    }
+
+    /// The account whose connection is live or in progress; `None` once disconnected.
+    pub fn live_account(&self) -> Option<uuid::Uuid> {
+        self.active_account.filter(|_| self.state != ConnectionState::Disconnected)
     }
 
     pub fn state_title(&self) -> &'static str {

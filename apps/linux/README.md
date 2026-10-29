@@ -9,7 +9,8 @@ cd apps/linux && cargo run
 ```
 
 `VPNGATE_SOCKET` overrides the daemon socket (default `/run/vpngate.sock`). Your user must be root or in the `vpngate`
-group. Settings live in `~/.config/vpngate/settings.json`.
+group. Settings, accounts and the history live in `~/.config/vpngate/`. Account passwords, keys and the proxy password go
+to the Secret Service (GNOME Keyring, KWallet) through `secret-tool`: `sudo apt install libsecret-tools`.
 
 **Tray.** The icon is a StatusNotifierItem. KDE, XFCE and Cinnamon show it; GNOME needs the *AppIndicator and
 KStatusNotifierItem Support* extension. Without a watcher the tray is simply absent. Closing the window quits the app.

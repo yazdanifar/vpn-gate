@@ -1,7 +1,14 @@
 //! VPN Gate for Linux: the GTK4 / libadwaita front end. All state and daemon logic lives in `vpngate-app-model`; this crate
 //! is widgets, the tray and the glue between the tokio runtime and the GTK main loop.
 
+mod account_editor;
+mod accounts_window;
+mod ctx;
+mod details;
+mod history_window;
 mod log_window;
+mod routing_editor;
+mod settings_window;
 mod tray;
 mod window;
 

@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use vpngate_core::ipc::{HelperReply, ListSource, ServerListResult, SyncOutcome};
+use vpngate_core::ipc::{HelperReply, ListSource, ServerListResult, SyncOutcome, TunnelMode};
 use vpngate_testkit::fake_daemon::{FakeDaemon, Line};
 
 use super::*;
@@ -61,6 +61,7 @@ async fn rig(agreed: bool, servers: Vec<VpnServer>) -> Rig {
     let ctl = Controller::new(
         ipc,
         Box::new(store),
+        Stores::memory(),
         fast(),
         move || {
             c.fetch_add(1, Ordering::SeqCst);
@@ -109,7 +110,7 @@ async fn an_empty_cache_falls_back_to_a_download() {
         _ => vec![],
     });
     let (ipc, _rx) = IpcClient::new(daemon.path());
-    let ctl = Controller::new(ipc, Box::new(MemorySettings::default()), fast(), || {}, || {});
+    let ctl = Controller::new(ipc, Box::new(MemorySettings::default()), Stores::memory(), fast(), || {}, || {});
     ctl.load_list().await;
     assert_eq!(ctl.read(|m| m.servers().len()), 1);
     assert!(!ctl.read(|m| m.is_loading));
@@ -120,7 +121,7 @@ async fn an_empty_cache_falls_back_to_a_download() {
 #[tokio::test]
 async fn list_failures_are_shown() {
     let (ipc, _rx) = IpcClient::new(temp_path("nobody"));
-    let ctl = Controller::new(ipc, Box::new(MemorySettings::default()), fast(), || {}, || {});
+    let ctl = Controller::new(ipc, Box::new(MemorySettings::default()), Stores::memory(), fast(), || {}, || {});
     ctl.load_list().await;
     assert_eq!(ctl.read(|m| m.list_error.clone()).as_deref(), Some("Not connected to the daemon"));
     ctl.refresh().await;
@@ -205,6 +206,7 @@ async fn an_unreachable_service_is_explained() {
     let ctl = Controller::new(
         ipc,
         Box::new(MemorySettings::with(Settings { has_agreed_to_disclaimer: true, ..Settings::default() })),
+        Stores::memory(),
         fast(),
         || {},
         || {},
@@ -236,6 +238,7 @@ async fn a_silent_daemon_does_not_leave_connecting_forever() {
     let ctl = Controller::new(
         ipc,
         Box::new(MemorySettings::with(Settings { has_agreed_to_disclaimer: true, ..Settings::default() })),
+        Stores::memory(),
         fast(),
         || {},
         || {},
@@ -263,4 +266,97 @@ async fn favorites_persist_to_the_settings() {
     assert!(r.ctl.settings().favorites.contains("a"));
     r.ctl.toggle_favorite("a");
     assert!(r.ctl.settings().favorites.is_empty());
+}
+
+#[tokio::test]
+async fn account_connect_sends_the_full_config_with_secrets() {
+    use crate::accounts::AccountEditor;
+    let r = rig(true, vec![]).await;
+    r.ctl.update_settings(|s| {
+        s.tunnel_mode = TunnelMode::SocksProxy;
+        s.socks_port = 1090;
+    });
+    let mut e = AccountEditor {
+        host: "vpn.example.com".into(),
+        username: "bob".into(),
+        password: "hunter2".into(),
+        ..AccountEditor::default()
+    };
+    e.ports = "443, 992".into();
+    let account = e.make_account(None);
+    let id = account.id;
+    r.ctl.with_stores(|s| s.accounts.add(account, e.secrets()));
+    r.ctl.connect_account(id).await;
+    let sent = r.daemon.requests().into_iter().find(|q| q.cmd == "connect").expect("connect request");
+    let cfg = sent.config.expect("account connects carry a config");
+    assert_eq!(
+        (cfg.host.as_str(), cfg.user_name.as_str(), cfg.password.as_deref()),
+        ("vpn.example.com", "bob", Some("hunter2"))
+    );
+    assert_eq!(cfg.ports, [443, 992]);
+    assert_eq!((cfg.tunnel_mode, cfg.socks_port), (TunnelMode::SocksProxy, 1090));
+    r.daemon.push(&event(ConnectionState::Connected, "vpn.example.com"));
+    assert!(eventually(|| r.ctl.read(|m| m.live_account()) == Some(id)).await);
+    r.daemon.push(&event(ConnectionState::Disconnected, "vpn.example.com"));
+    assert!(eventually(|| r.ctl.read(|m| m.live_account()).is_none()).await, "not live once disconnected");
+}
+
+#[tokio::test]
+async fn certificate_accounts_without_an_identity_explain_themselves() {
+    use crate::accounts::AccountEditor;
+    use vpngate_core::client_account::AccountAuthType;
+    let r = rig(true, vec![]).await;
+    let e =
+        AccountEditor { host: "1.2.3.4".into(), auth_type: AccountAuthType::Certificate, ..AccountEditor::default() };
+    let account = e.make_account(None);
+    let id = account.id;
+    r.ctl.with_stores(|s| s.accounts.add(account, e.secrets()));
+    r.ctl.connect_account(id).await;
+    assert!(r.ctl.read(|m| m.notice.clone()).unwrap().contains("needs a certificate"));
+    assert!(r.daemon.requests().iter().all(|q| q.cmd != "connect"));
+}
+
+#[tokio::test]
+async fn history_records_one_entry_per_connected_period() {
+    let r = rig(true, vec![server("a", "1.1.1.1")]).await;
+    r.ctl.load_list().await;
+    r.ctl.connect("a").await;
+    r.daemon.push(&event(ConnectionState::Connected, "1.1.1.1"));
+    assert!(eventually(|| r.ctl.with_stores(|s| s.history.entries.len()) == 1).await);
+    r.daemon.push(&event(ConnectionState::Connected, "1.1.1.1"));
+    r.ctl.disconnect().await;
+    r.daemon.push(&event(ConnectionState::Disconnected, "1.1.1.1"));
+    assert!(eventually(|| r.ctl.with_stores(|s| s.history.entries[0].disconnected_at_ms.is_some())).await);
+    assert_eq!(r.ctl.with_stores(|s| s.history.entries.len()), 1, "a repeated Connected event is the same period");
+    assert_eq!(r.ctl.with_stores(|s| s.history.entries[0].server_name.clone()), "a");
+}
+
+#[tokio::test]
+async fn list_connects_use_the_proxy_and_global_routing_settings() {
+    use vpngate_core::ipc::ProxyKind;
+    use vpngate_core::routing_rule::{RoutingAction, RoutingRule, RoutingRuleType};
+    let r = rig(true, vec![server("a", "1.1.1.1")]).await;
+    r.ctl.load_list().await;
+    r.ctl.update_settings(|s| {
+        s.proxy_kind = ProxyKind::Http;
+        s.proxy_host = " proxy.local ".into();
+        s.proxy_port = 8080;
+        s.proxy_username = "u".into();
+        s.routing.rules.push(RoutingRule::new(RoutingRuleType::DomainSuffix, "example.com", RoutingAction::Direct));
+    });
+    assert!(r.ctl.set_proxy_password("pw"));
+    r.ctl.connect("a").await;
+    let sent = r.daemon.requests().into_iter().find(|q| q.cmd == "connect").unwrap();
+    let p = sent.proxy.unwrap();
+    assert_eq!(
+        (p.kind, p.host.as_str(), p.port, p.username.as_deref(), p.password.as_deref()),
+        (ProxyKind::Http, "proxy.local", 8080, Some("u"), Some("pw"))
+    );
+    assert_eq!(sent.routing.unwrap().rules.len(), 1);
+    // Without a user name no credentials are sent.
+    r.ctl.update_settings(|s| s.proxy_username.clear());
+    r.ctl.disconnect().await;
+    r.ctl.connect("a").await;
+    let last = r.daemon.requests().into_iter().rfind(|q| q.cmd == "connect").unwrap();
+    assert_eq!(last.proxy.unwrap().password, None);
 }

@@ -1488,9 +1488,12 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "vpngate-app-model"
 version = "0.0.0"
 dependencies = [
+ "base64",
+ "rsa",
  "serde",
  "serde_json",
  "tokio",
+ "uuid",
  "vpngate-core",
  "vpngate-ipc-client",
 ]
@@ -1519,6 +1522,7 @@ dependencies = [
  "ksni",
  "libadwaita",
  "tokio",
+ "uuid",
  "vpngate-app-model",
  "vpngate-core",
  "vpngate-ipc-client",

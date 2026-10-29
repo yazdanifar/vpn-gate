@@ -15,6 +15,9 @@ vpngate-core.workspace = true
 vpngate-ipc-client.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+uuid = { version = "1", features = ["v4", "serde"] }
+rsa = { version = "0.9", default-features = false, features = ["std"] }
+base64 = "0.22"
 tokio = { version = "1.54.1", features = ["time", "sync", "rt"] }
 
 [dev-dependencies]
