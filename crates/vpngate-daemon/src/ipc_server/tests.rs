@@ -111,10 +111,19 @@ impl Raw {
     async fn read_until(&mut self, needle: &str, timeout_ms: u64) -> String {
         let mut got = String::new();
         let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
-        while !got.contains(needle) {
+        loop {
             let left = deadline.saturating_duration_since(tokio::time::Instant::now()).as_millis() as u64;
             match self.read(left.max(1)).await {
-                Some(s) if !s.is_empty() => got.push_str(&s),
+                Some(s) if !s.is_empty() => {
+                    // Only the new chunk plus the bytes a needle could straddle: rescanning everything read so far
+                    // is quadratic, which a test pushing megabytes through cannot afford on a slow runner.
+                    let from = got.len().saturating_sub(needle.len());
+                    let from = (0..=from).rev().find(|&i| got.is_char_boundary(i)).unwrap_or(0);
+                    got.push_str(&s);
+                    if got[from..].contains(needle) {
+                        break;
+                    }
+                }
                 _ => break,
             }
         }

@@ -102,7 +102,7 @@ impl ByteStream for PlainStream {
         &mut self.buffer
     }
     async fn start(&mut self) -> Result<(), StreamError> {
-        self.io = Some(tokio::net::TcpStream::connect((self.host.as_str(), self.port)).await?);
+        self.io = Some(crate::connect::connect_tcp(&self.host, self.port).await?);
         Ok(())
     }
     async fn send(&mut self, data: &[u8]) -> Result<(), StreamError> {

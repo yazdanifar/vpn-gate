@@ -151,7 +151,7 @@ impl TlsStream {
     async fn connect(&mut self) -> Result<(), StreamError> {
         let tcp = match proxy::effective(&self.proxy) {
             Some((p, proxy_port)) => proxy::connect(p, proxy_port, &self.host, self.port).await?,
-            None => TcpStream::connect((self.host.as_str(), self.port)).await?,
+            None => crate::connect::connect_tcp(&self.host, self.port).await?,
         };
         tcp.set_nodelay(true)?;
         SockRef::from(&tcp).set_tcp_keepalive(&TcpKeepalive::new().with_time(KEEPALIVE_IDLE))?;

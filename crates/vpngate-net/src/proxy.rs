@@ -26,7 +26,7 @@ pub fn effective(proxy: &ProxySettings) -> Option<(&ProxySettings, u16)> {
 
 /// Connects to the proxy and asks it for a tunnel to `host:port`.
 pub async fn connect(proxy: &ProxySettings, proxy_port: u16, host: &str, port: u16) -> Result<TcpStream, StreamError> {
-    let mut tcp = TcpStream::connect((proxy.host.as_str(), proxy_port)).await?;
+    let mut tcp = crate::connect::connect_tcp(&proxy.host, proxy_port).await?;
     match proxy.kind {
         ProxyKind::Http => http_connect(&mut tcp, proxy, host, port).await?,
         ProxyKind::Socks5 => socks5_connect(&mut tcp, proxy, host, port).await?,
