@@ -58,9 +58,18 @@ pub fn open(parent: &impl IsA<gtk::Widget>, ctx: &Ctx, account: Option<ClientAcc
     let cert_status = adw::ActionRow::builder().title("Certificate").build();
     let import = gtk::Button::builder().label("Certificate + Key…").valign(gtk::Align::Center).build();
     cert_status.add_suffix(&import);
+    let import_p12 = gtk::Button::builder().label("PKCS#12 (.p12)…").valign(gtk::Align::Center).build();
+    cert_status.add_suffix(&import_p12);
+    let p12_pass = adw::PasswordEntryRow::builder().title("Passphrase for the .p12 file").build();
     let import_error = gtk::Label::builder().xalign(0.0).wrap(true).css_classes(["error"]).build();
     let auth_group = adw::PreferencesGroup::builder().title("User Authentication Setting").build();
-    for r in [auth.upcast_ref::<gtk::Widget>(), user.upcast_ref(), password.upcast_ref(), cert_status.upcast_ref()] {
+    for r in [
+        auth.upcast_ref::<gtk::Widget>(),
+        user.upcast_ref(),
+        password.upcast_ref(),
+        cert_status.upcast_ref(),
+        p12_pass.upcast_ref(),
+    ] {
         auth_group.add(r);
     }
     auth_group.add(&import_error);
@@ -148,8 +157,15 @@ pub fn open(parent: &impl IsA<gtk::Widget>, ctx: &Ctx, account: Option<ClientAcc
     // state -> widgets that depend on it
     let refresh: Refresh = {
         let st = st.clone();
-        let (user, password, cert_status, import, import_error) =
-            (user.clone(), password.clone(), cert_status.clone(), import.clone(), import_error.clone());
+        let (user, password, cert_status, import, import_error, import_p12, p12_pass) = (
+            user.clone(),
+            password.clone(),
+            cert_status.clone(),
+            import.clone(),
+            import_error.clone(),
+            import_p12.clone(),
+            p12_pass.clone(),
+        );
         let (host, mtu, mac, fingerprint, save, problems, advanced) = (
             host.clone(),
             mtu.clone(),
@@ -168,6 +184,8 @@ pub fn open(parent: &impl IsA<gtk::Widget>, ctx: &Ctx, account: Option<ClientAcc
             let is_cert = e.auth_type == AccountAuthType::Certificate;
             cert_status.set_visible(is_cert);
             import.set_visible(is_cert);
+            import_p12.set_visible(is_cert);
+            p12_pass.set_visible(is_cert);
             cert_status.set_subtitle(e.certificate_status());
             import_error.set_visible(is_cert && e.import_error.is_some());
             import_error.set_text(e.import_error.as_deref().unwrap_or(""));
@@ -236,6 +254,7 @@ pub fn open(parent: &impl IsA<gtk::Widget>, ctx: &Ctx, account: Option<ClientAcc
     bind_text!(hub, hub);
     bind_text!(user, username);
     bind_text!(password, password);
+    bind_text!(p12_pass, p12_passphrase);
     bind_text!(mtu, mtu);
     bind_text!(mac, mac);
     bind_text!(fingerprint, fingerprint);
@@ -283,6 +302,24 @@ pub fn open(parent: &impl IsA<gtk::Widget>, ctx: &Ctx, account: Option<ClientAcc
                     },
                 );
             });
+        });
+    }
+
+    {
+        let (st, r) = (st.clone(), refresh.clone());
+        import_p12.connect_clicked(move |b| {
+            let (st, r) = (st.clone(), r.clone());
+            pick_file(
+                "Choose the PKCS#12 file (.p12 / .pfx)",
+                b.root().and_downcast::<gtk::Window>(),
+                move |path, _| {
+                    match std::fs::read(&path) {
+                        Ok(bytes) => st.borrow_mut().import_pkcs12(&bytes),
+                        Err(e) => st.borrow_mut().import_error = Some(format!("Cannot read {}: {e}", path.display())),
+                    }
+                    r();
+                },
+            );
         });
     }
 

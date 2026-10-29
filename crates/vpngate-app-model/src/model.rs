@@ -1,7 +1,7 @@
 //! The main window's state: the daemon's session, the server list and the disclaimer gate. Pure and synchronous: the
 //! controller feeds it events and replies, the UI reads it. Times come in as unix milliseconds so tests need no clock.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use vpngate_core::ipc::{ConnectionState, HelperEvent, ListSource, ServerListResult, IPC_VERSION};
 use vpngate_core::server_filter::ServerFilter;
@@ -21,12 +21,56 @@ pub enum SortKey {
     Speed,
     Ping,
     Logging,
+    /// "Test from this computer": fastest handshake first, untested next, failures last.
+    Test,
 }
 
 impl SortKey {
     /// Numeric columns start with the best value first.
     fn starts_descending(self) -> bool {
         matches!(self, SortKey::Score | SortKey::Uptime | SortKey::Sessions | SortKey::Speed)
+    }
+}
+
+/// One list server's "Test Connection" state (UI-SPEC 4, probe cell).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Probe {
+    Queued,
+    Testing,
+    Ok { connect_ms: i64, hello_ms: Option<i64>, port: Option<u16> },
+    Failed(String),
+}
+
+impl Probe {
+    /// Lower sorts first: working servers by connect time, then untested ones, then failures.
+    pub fn sort_rank(p: Option<&Probe>) -> i64 {
+        match p {
+            Some(Probe::Ok { connect_ms, .. }) => *connect_ms,
+            None | Some(Probe::Queued | Probe::Testing) => i64::MAX - 1,
+            Some(Probe::Failed(_)) => i64::MAX,
+        }
+    }
+
+    pub fn text(p: Option<&Probe>) -> String {
+        match p {
+            None => "—".into(),
+            Some(Probe::Queued) => "Waiting…".into(),
+            Some(Probe::Testing) => "Testing…".into(),
+            Some(Probe::Ok { connect_ms, .. }) => format!("{connect_ms} ms"),
+            Some(Probe::Failed(why)) => why.clone(),
+        }
+    }
+
+    pub fn tooltip(p: Option<&Probe>) -> Option<String> {
+        match p {
+            None => Some("Not tested yet — press Test Connection".into()),
+            Some(Probe::Ok { hello_ms, port, .. }) => Some(format!(
+                "handshake {} · port {}",
+                hello_ms.map_or("-".into(), |h| format!("{h} ms")),
+                port.map_or("-".into(), |p| p.to_string())
+            )),
+            _ => None,
+        }
     }
 }
 
@@ -52,6 +96,9 @@ pub struct AppModel {
     pub sort_descending: bool,
     /// The row the user picked, by `VpnServer::id`.
     pub selected: Option<String>,
+    /// Test Connection results by `VpnServer::id`; `probe_rev` changes with them so the UI knows to redraw cells.
+    pub probes: HashMap<String, Probe>,
+    pub probe_rev: u64,
     all: Vec<VpnServer>,
     visible: Vec<VpnServer>,
     countries: Vec<String>,
@@ -81,6 +128,8 @@ impl AppModel {
             sort_key: SortKey::Score,
             sort_descending: true,
             selected: None,
+            probes: HashMap::new(),
+            probe_rev: 0,
             all: Vec::new(),
             visible: Vec::new(),
             countries: Vec::new(),
@@ -286,8 +335,10 @@ impl AppModel {
     pub fn rebuild(&mut self) {
         let mut rows: Vec<VpnServer> = self.filter.apply(&self.all).into_iter().cloned().collect();
         let key = self.sort_key;
+        let probes = &self.probes;
         rows.sort_by(|a, b| {
-            let ord = compare(key, a, b);
+            let rank = |s: &VpnServer| Probe::sort_rank(probes.get(s.id()));
+            let ord = if key == SortKey::Test { rank(a).cmp(&rank(b)) } else { compare(key, a, b) };
             if self.sort_descending {
                 ord.reverse()
             } else {
@@ -295,6 +346,18 @@ impl AppModel {
             }
         });
         self.visible = rows;
+    }
+
+    pub fn set_probe(&mut self, id: &str, p: Probe) {
+        self.probes.insert(id.to_string(), p);
+        self.probe_rev += 1;
+        if self.sort_key == SortKey::Test {
+            self.rebuild();
+        }
+    }
+
+    pub fn probe_text(&self, id: &str) -> String {
+        Probe::text(self.probes.get(id))
     }
 
     pub fn sort(&mut self, key: SortKey) {
@@ -341,6 +404,7 @@ fn compare(key: SortKey, a: &VpnServer, b: &VpnServer) -> std::cmp::Ordering {
         SortKey::Ping => ping(a).cmp(&ping(b)),
         SortKey::Logging => weeks(a).cmp(&weeks(b)),
         SortKey::Score => a.score.cmp(&b.score),
+        SortKey::Test => std::cmp::Ordering::Equal,
     }
 }
 

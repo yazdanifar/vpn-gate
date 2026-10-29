@@ -8,13 +8,13 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::UnboundedReceiver;
 use uuid::Uuid;
 use vpngate_core::client_account::{AccountAuthType, ConnectOptions};
-use vpngate_core::ipc::{ConnectionState, HelperEvent, HelperRequest, ProxyKind, ProxySettings};
+use vpngate_core::ipc::{ConnectionState, HelperEvent, HelperRequest, ProbeTarget, ProxyKind, ProxySettings};
 use vpngate_core::server_list::VpnServer;
 use vpngate_ipc_client::{ClientError, ClientEvent, IpcClient};
 
 use crate::accounts::AccountStore;
 use crate::history::History;
-use crate::model::AppModel;
+use crate::model::{AppModel, Probe};
 use crate::secrets::SecretStore;
 use crate::settings::{Settings, SettingsStore, PROXY_PASSWORD_KEY};
 
@@ -68,6 +68,7 @@ struct Flow {
     loading: bool,
     /// The history entry of the connected period in progress.
     history_id: Option<Uuid>,
+    testing: bool,
 }
 
 struct Inner {
@@ -479,6 +480,71 @@ impl Controller {
                 m.append_log(format!("No answer from the service within {secs} s"));
             });
         }
+    }
+
+    // MARK: test connection
+
+    /// Servers per `probe` request: the daemon tests them concurrently, and results show up batch by batch.
+    const PROBE_BATCH: usize = 8;
+
+    /// "Test Connection": a real SoftEther handshake with every server in the current view.
+    pub async fn test_connections(&self) {
+        {
+            let mut f = lock(&self.0.flow);
+            if std::mem::replace(&mut f.testing, true) {
+                return;
+            }
+        }
+        let targets: Vec<(String, ProbeTarget)> = self.read(|m| {
+            m.servers()
+                .iter()
+                .map(|s| {
+                    let ports: Vec<i64> = s.prioritized_ssl_ports().into_iter().map(i64::from).collect();
+                    (
+                        s.id().to_string(),
+                        ProbeTarget { host: s.ip.clone(), ports: Some(ports).filter(|p| !p.is_empty()) },
+                    )
+                })
+                .collect()
+        });
+        self.change(|m| {
+            for (id, _) in &targets {
+                m.set_probe(id, Probe::Queued);
+            }
+        });
+        let proxy = self.proxy_settings(&self.settings());
+        for batch in targets.chunks(Self::PROBE_BATCH) {
+            self.change(|m| {
+                for (id, _) in batch {
+                    m.set_probe(id, Probe::Testing);
+                }
+            });
+            let result = self.0.ipc.probe(batch.iter().map(|b| b.1.clone()).collect(), Some(proxy.clone()), None).await;
+            self.change(|m| match &result {
+                Ok(r) => {
+                    for (entry, (id, _)) in r.results.iter().zip(batch) {
+                        let p = match (entry.ok, entry.connect_ms) {
+                            (true, Some(connect_ms)) => {
+                                Probe::Ok { connect_ms, hello_ms: entry.hello_ms, port: entry.port }
+                            }
+                            _ => Probe::Failed(entry.error.clone().unwrap_or_else(|| "failed".into())),
+                        };
+                        m.set_probe(id, p);
+                    }
+                }
+                Err(e) => {
+                    for (id, _) in batch {
+                        m.set_probe(id, Probe::Failed(e.to_string()));
+                    }
+                }
+            });
+        }
+        lock(&self.0.flow).testing = false;
+        self.change(|_| {});
+    }
+
+    pub fn is_testing(&self) -> bool {
+        lock(&self.0.flow).testing
     }
 
     // MARK: list

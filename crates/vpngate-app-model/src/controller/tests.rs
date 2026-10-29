@@ -7,6 +7,7 @@ use vpngate_core::ipc::{HelperReply, ListSource, ServerListResult, SyncOutcome, 
 use vpngate_testkit::fake_daemon::{FakeDaemon, Line};
 
 use super::*;
+use crate::model::SortKey;
 use crate::settings::MemorySettings;
 
 static SEQ: AtomicUsize = AtomicUsize::new(0);
@@ -359,4 +360,57 @@ async fn list_connects_use_the_proxy_and_global_routing_settings() {
     r.ctl.connect("a").await;
     let last = r.daemon.requests().into_iter().rfind(|q| q.cmd == "connect").unwrap();
     assert_eq!(last.proxy.unwrap().password, None);
+}
+
+#[tokio::test]
+async fn test_connection_probes_the_view_in_batches_and_sorts_by_result() {
+    use vpngate_core::ipc::{ProbeEntry, ProbeResult};
+    let servers: Vec<VpnServer> = (1..=10).map(|i| server(&format!("h{i}"), &format!("10.0.0.{i}"))).collect();
+    let daemon = FakeDaemon::start(temp_path("probe")).unwrap();
+    daemon.on_request(move |r| match r.cmd.as_str() {
+        "probe" => {
+            let results = r
+                .targets
+                .clone()
+                .unwrap()
+                .into_iter()
+                .map(|t| {
+                    let n: i64 = t.host.rsplit('.').next().unwrap().parse().unwrap();
+                    let ok = n != 3;
+                    ProbeEntry {
+                        host: t.host,
+                        ok,
+                        port: ok.then_some(443),
+                        connect_ms: ok.then_some(100 - n),
+                        hello_ms: ok.then_some(5),
+                        build: None,
+                        error: (!ok).then(|| "timed out".to_string()),
+                    }
+                })
+                .collect();
+            vec![Line::Reply(HelperReply::success("probe", r.id, &ProbeResult { results }))]
+        }
+        _ => vec![],
+    });
+    let (ipc, _rx) = IpcClient::new(daemon.path());
+    let ctl = Controller::new(ipc, Box::new(MemorySettings::default()), Stores::memory(), fast(), || {}, || {});
+    ctl.change(|m| {
+        m.apply_list(ServerListResult {
+            servers,
+            source: ListSource::HttpApi,
+            timestamp_ms: None,
+            is_fresh: true,
+            outcome: SyncOutcome::Synced,
+            next_poll_seconds: None,
+        })
+    });
+    ctl.test_connections().await;
+    let probes = daemon.requests().iter().filter(|r| r.cmd == "probe").count();
+    assert_eq!(probes, 2, "10 servers in batches of 8");
+    assert_eq!(ctl.read(|m| m.probe_text("h1")), "99 ms");
+    assert_eq!(ctl.read(|m| m.probe_text("h3")), "timed out");
+    assert!(!ctl.is_testing());
+    ctl.change(|m| m.sort(SortKey::Test));
+    let order: Vec<String> = ctl.read(|m| m.servers().iter().map(|s| s.host_name.clone()).collect());
+    assert_eq!((order[0].as_str(), order[9].as_str()), ("h10", "h3"), "fastest first, failures last: {order:?}");
 }

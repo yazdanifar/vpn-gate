@@ -8,9 +8,10 @@ use std::sync::Arc;
 use adw::prelude::*;
 use gtk::{gio, glib};
 use vpngate_app_model::accounts::AccountStore;
+use vpngate_app_model::columns;
 use vpngate_app_model::format;
 use vpngate_app_model::history::History;
-use vpngate_app_model::model::SortKey;
+use vpngate_app_model::model::{AppModel, Probe, SortKey};
 use vpngate_app_model::secrets::SecretTool;
 use vpngate_app_model::settings::FileSettings;
 use vpngate_app_model::{now_ms, Controller, Stores, Timing};
@@ -74,6 +75,8 @@ struct Widgets {
     refresh: gtk::Button,
     favorite: gtk::Button,
     details: gtk::Button,
+    test: gtk::Button,
+    columns_button: gtk::MenuButton,
     action: gtk::Button,
     store: gtk::StringList,
     selection: gtk::SingleSelection,
@@ -82,6 +85,7 @@ struct Widgets {
 
 struct Shown {
     ids: Vec<String>,
+    probe_rev: u64,
     favorites: BTreeSet<String>,
     countries: Vec<String>,
 }
@@ -133,14 +137,15 @@ pub fn build(app: &adw::Application, rt: Arc<tokio::runtime::Runtime>, socket: S
         })
     };
 
-    wire_table(&w, &ctl, &rt);
+    wire_table(&w, &ctl, &rt, &window);
     wire_filters(&w, &ctl);
     wire_buttons(&w, &ctl, &rt);
     add_actions(app, &window, &log, &tx);
     add_window_actions(&window, &ctx, &log, &accounts, &history);
     wire_details(&w, &ctl, &window);
 
-    let shown = Rc::new(RefCell::new(Shown { ids: vec![], favorites: BTreeSet::new(), countries: vec![] }));
+    let shown =
+        Rc::new(RefCell::new(Shown { ids: vec![], probe_rev: 0, favorites: BTreeSet::new(), countries: vec![] }));
     let disclaimer_open = Rc::new(Cell::new(false));
     let updating = Rc::new(Cell::new(false));
     let sync = {
@@ -257,6 +262,13 @@ fn widgets() -> Widgets {
         refresh: gtk::Button::builder().icon_name("view-refresh-symbolic").tooltip_text("Refresh List").build(),
         favorite: gtk::Button::builder().label("Add to Favorites").build(),
         details: gtk::Button::builder().label("Details").build(),
+        test: gtk::Button::builder()
+            .label("Test Connection")
+            .tooltip_text(
+                "Try a real VPN handshake with the listed servers and show the connect time from this computer",
+            )
+            .build(),
+        columns_button: gtk::MenuButton::builder().icon_name("view-column-symbolic").tooltip_text("Columns").build(),
         action: gtk::Button::builder().label("Connect to the VPN Server").build(),
         store,
         table: gtk::ColumnView::new(Some(selection.clone())),
@@ -317,6 +329,7 @@ fn layout(w: &Widgets) -> adw::ToolbarView {
         w.sort.clone().upcast(),
         w.descending.clone().upcast(),
         w.clear.clone().upcast(),
+        w.columns_button.clone().upcast(),
     ] {
         filters.append(&c);
     }
@@ -327,6 +340,7 @@ fn layout(w: &Widgets) -> adw::ToolbarView {
 
     let bar = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     bar.set_halign(gtk::Align::End);
+    bar.append(&w.test);
     bar.append(&w.details);
     bar.append(&w.favorite);
     bar.append(&w.action);
@@ -347,55 +361,126 @@ fn layout(w: &Widgets) -> adw::ToolbarView {
     toolbar
 }
 
-type CellText = fn(&VpnServer) -> String;
-
-/// Default columns of UI-SPEC 4; the rest (and reordering) come with U23.
-fn columns() -> Vec<(&'static str, CellText)> {
-    vec![
-        ("IP Address (Hostname)", |s| format!("{} ({})", s.ip, s.host_name)),
-        ("Region", |s| format!("{} {}", s.flag(), s.country_long)),
-        ("Uptime", |s| format::uptime(s.uptime_ms)),
-        ("VPN Sessions", |s| format::sessions(s.sessions)),
-        ("Line Speed", |s| format::speed(s.speed)),
-        ("Ping (Google, SE)", |s| format::pings(s.ping_to_google, s.ping)),
-        ("Logging Policy", |s| format::logging(&s.log_type)),
-        ("Total Score", |s| s.score.to_string()),
-    ]
+/// The text of one cell; `key` is a `columns::Column::key`.
+fn cell_text(key: &str, m: &AppModel, s: &VpnServer) -> String {
+    match key {
+        "host" => format!("{} ({})", s.ip, s.host_name),
+        "region" => format!("{} {}", s.flag(), s.country_long),
+        "uptime" => format::uptime(s.uptime_ms),
+        "sessions" => format::sessions(s.sessions),
+        "speed" => format::speed(s.speed),
+        "ping" => format::pings(s.ping_to_google, s.ping),
+        "test" => m.probe_text(s.id()),
+        "logging" => format::logging(&s.log_type),
+        "score" => s.score.to_string(),
+        "ddns" => {
+            if s.fqdn.is_empty() {
+                s.host_name.clone()
+            } else {
+                s.fqdn.clone()
+            }
+        }
+        "ssl" => s.ssl_ports.iter().map(u16::to_string).collect::<Vec<_>>().join(", "),
+        "udp" => {
+            if s.udp_port.is_some_and(|p| p != 0) {
+                "Yes".into()
+            } else {
+                "No".into()
+            }
+        }
+        "transfers" => format::bytes(s.total_traffic.max(0) as u64),
+        "users" => s.total_users.to_string(),
+        "operator" => {
+            if s.operator_name.is_empty() {
+                "Anonymous".into()
+            } else {
+                s.operator_name.clone()
+            }
+        }
+        "message" => s.message.clone(),
+        _ => String::new(),
+    }
 }
 
-fn wire_table(w: &Rc<Widgets>, ctl: &Controller, rt: &Arc<tokio::runtime::Runtime>) {
-    let table = &w.table;
-    for (i, (title, cell)) in columns().into_iter().enumerate() {
-        let factory = gtk::SignalListItemFactory::new();
-        factory.connect_setup(|_, item| {
-            let l = gtk::Label::builder().xalign(0.0).margin_start(6).margin_end(6).build();
-            item.downcast_ref::<gtk::ListItem>().expect("list item").set_child(Some(&l));
+fn column_for(key: &'static str, title: &str, first: bool, ctl: &Controller) -> gtk::ColumnViewColumn {
+    let factory = gtk::SignalListItemFactory::new();
+    let menu_ctl = ctl.clone();
+    factory.connect_setup(move |_, item| {
+        let item = item.downcast_ref::<gtk::ListItem>().expect("list item");
+        let l = gtk::Label::builder().xalign(0.0).margin_start(6).margin_end(6).build();
+        // Right-click selects the row and opens its menu.
+        let click = gtk::GestureClick::builder().button(3).build();
+        let (weak, label, ctl) = (item.downgrade(), l.clone(), menu_ctl.clone());
+        click.connect_pressed(move |_, _, x, y| {
+            if let Some(id) = weak.upgrade().and_then(|i| i.item()).and_then(|o| o.downcast::<gtk::StringObject>().ok())
+            {
+                ctl.select(Some(id.string().to_string()));
+                row_menu(&label, &ctl, x, y);
+            }
         });
-        let ctl = ctl.clone();
-        factory.connect_bind(move |_, item| {
-            let item = item.downcast_ref::<gtk::ListItem>().expect("list item");
-            let Some(id) = item.item().and_then(|o| o.downcast::<gtk::StringObject>().ok()) else { return };
-            let Some(label) = item.child().and_then(|c| c.downcast::<gtk::Label>().ok()) else { return };
-            let text = ctl.read(|m| {
-                m.find(id.string().as_str()).map(|s| {
-                    let t = cell(s);
-                    if i == 0 && m.is_favorite(s) {
-                        format!("★ {t}")
-                    } else {
-                        t
-                    }
-                })
-            });
-            label.set_text(&text.unwrap_or_default());
+        l.add_controller(click);
+        item.set_child(Some(&l));
+    });
+    let ctl = ctl.clone();
+    factory.connect_bind(move |_, item| {
+        let item = item.downcast_ref::<gtk::ListItem>().expect("list item");
+        let Some(id) = item.item().and_then(|o| o.downcast::<gtk::StringObject>().ok()) else { return };
+        let Some(label) = item.child().and_then(|c| c.downcast::<gtk::Label>().ok()) else { return };
+        let (text, tip) = ctl.read(|m| {
+            m.find(id.string().as_str()).map_or((String::new(), None), |s| {
+                let t = cell_text(key, m, s);
+                let t = if first && m.is_favorite(s) { format!("★ {t}") } else { t };
+                let tip = (key == "test").then(|| Probe::tooltip(m.probes.get(s.id()))).flatten();
+                (t, tip)
+            })
         });
-        let col = gtk::ColumnViewColumn::new(Some(title), Some(factory));
+        label.set_text(&text);
+        label.set_tooltip_text(tip.as_deref());
+    });
+    let col = gtk::ColumnViewColumn::new(Some(title), Some(factory));
+    col.set_id(Some(key));
+    if columns::find(key).is_some_and(|c| c.sort.is_some()) {
         // A sorter makes the header clickable; the real ordering is the model's (see `wire_header_sort`).
         col.set_sorter(Some(&gtk::CustomSorter::new(|_, _| gtk::Ordering::Equal)));
-        col.set_resizable(true);
-        col.set_expand(i == 0);
+    }
+    col.set_resizable(true);
+    col.set_expand(first);
+    col
+}
+
+/// The right-click menu of a row (UI-SPEC 4): Connect (when disconnected), Server Details, favorite toggle.
+fn row_menu(anchor: &gtk::Label, ctl: &Controller, x: f64, y: f64) {
+    let menu = gio::Menu::new();
+    let (connect, favorite) =
+        ctl.read(|m| (m.state == ConnectionState::Disconnected, m.selected_server().is_some_and(|s| m.is_favorite(s))));
+    if connect {
+        menu.append(Some("Connect to the VPN Server"), Some("row.connect"));
+    }
+    menu.append(Some("Server Details…"), Some("row.details"));
+    menu.append(Some(if favorite { "Remove from Favorites" } else { "Add to Favorites" }), Some("row.favorite"));
+    let popover = gtk::PopoverMenu::from_model(Some(&menu));
+    popover.set_parent(anchor);
+    popover.set_has_arrow(false);
+    popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+    popover.connect_closed(|p| {
+        // Unparent after the closing animation so the menu item activation still reaches its action.
+        let p = p.clone();
+        gtk::glib::idle_add_local_once(move || p.unparent());
+    });
+    popover.popup();
+}
+
+fn wire_table(w: &Rc<Widgets>, ctl: &Controller, rt: &Arc<tokio::runtime::Runtime>, window: &adw::ApplicationWindow) {
+    let table = &w.table;
+    let layout = columns::layout(&ctl.settings().list_columns);
+    for (i, (c, visible)) in layout.iter().enumerate() {
+        let col = column_for(c.key, c.title, i == 0, ctl);
+        col.set_visible(*visible);
         table.append_column(&col);
     }
     wire_header_sort(w, ctl);
+    wire_column_chooser(w, ctl);
+    wire_row_actions(w, ctl, rt, window);
     // selection -> model; the sync guard keeps a programmatic change from echoing back
     let (store, ctl2) = (w.store.clone(), ctl.clone());
     w.selection.connect_selection_changed(move |sel, _, _| {
@@ -419,35 +504,103 @@ fn wire_table(w: &Rc<Widgets>, ctl: &Controller, rt: &Arc<tokio::runtime::Runtim
     });
 }
 
-/// Sort key of each default column, in `columns()` order.
-const COLUMN_SORT: [SortKey; 8] = [
-    SortKey::Host,
-    SortKey::Country,
-    SortKey::Uptime,
-    SortKey::Sessions,
-    SortKey::Speed,
-    SortKey::Ping,
-    SortKey::Logging,
-    SortKey::Score,
-];
+/// `row.*` actions behind the context menu.
+fn wire_row_actions(
+    w: &Rc<Widgets>,
+    ctl: &Controller,
+    rt: &Arc<tokio::runtime::Runtime>,
+    window: &adw::ApplicationWindow,
+) {
+    let group = gio::SimpleActionGroup::new();
+    let connect = gio::SimpleAction::new("connect", None);
+    let (c, rt) = (ctl.clone(), rt.clone());
+    connect.connect_activate(move |_, _| {
+        if let Some(id) = c.read(|m| m.selected.clone()) {
+            let c = c.clone();
+            rt.spawn(async move { c.connect(&id).await });
+        }
+    });
+    let details = gio::SimpleAction::new("details", None);
+    let (c, win) = (ctl.clone(), window.clone());
+    details.connect_activate(move |_, _| {
+        if let Some(s) = c.read(|m| m.selected_server().cloned()) {
+            crate::details::show(&win, &s);
+        }
+    });
+    let favorite = gio::SimpleAction::new("favorite", None);
+    let c = ctl.clone();
+    favorite.connect_activate(move |_, _| {
+        if let Some(id) = c.read(|m| m.selected.clone()) {
+            c.toggle_favorite(&id);
+        }
+    });
+    for a in [&connect, &details, &favorite] {
+        group.add_action(a);
+    }
+    w.table.insert_action_group("row", Some(&group));
+}
+
+/// Saves the visible columns in their current order.
+fn save_columns(table: &gtk::ColumnView, ctl: &Controller) {
+    let cols = table.columns();
+    let layout: Vec<(&'static str, bool)> = (0..cols.n_items())
+        .filter_map(|i| cols.item(i).and_downcast::<gtk::ColumnViewColumn>())
+        .filter_map(|c| {
+            let id = c.id()?;
+            columns::find(id.as_str()).map(|def| (def.key, c.is_visible()))
+        })
+        .collect();
+    let saved = columns::to_saved(&layout);
+    ctl.update_settings(|s| s.list_columns = saved);
+}
+
+/// The "Columns" menu (show/hide) and the persistence of drag-reordering.
+fn wire_column_chooser(w: &Rc<Widgets>, ctl: &Controller) {
+    let list = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    for def in columns::all() {
+        let check = gtk::CheckButton::with_label(def.title);
+        let table = w.table.clone();
+        let cols = w.table.columns();
+        let visible = (0..cols.n_items())
+            .filter_map(|i| cols.item(i).and_downcast::<gtk::ColumnViewColumn>())
+            .find(|c| c.id().is_some_and(|id| id == def.key))
+            .is_some_and(|c| c.is_visible());
+        check.set_active(visible);
+        let ctl = ctl.clone();
+        check.connect_toggled(move |b| {
+            let cols = table.columns();
+            let col = (0..cols.n_items())
+                .filter_map(|i| cols.item(i).and_downcast::<gtk::ColumnViewColumn>())
+                .find(|c| c.id().is_some_and(|id| id == def.key));
+            if let Some(col) = col {
+                col.set_visible(b.is_active());
+                save_columns(&table, &ctl);
+            }
+        });
+        list.append(&check);
+    }
+    w.columns_button.set_popover(Some(&gtk::Popover::builder().child(&list).build()));
+    // header drag-and-drop reorders the columns model
+    let (table, ctl) = (w.table.clone(), ctl.clone());
+    w.table.columns().connect_items_changed(move |_, _, _, _| save_columns(&table, &ctl));
+}
 
 /// Clicking a header sorts like the drop-down does: the model orders the rows, the header only shows the arrow.
 fn wire_header_sort(w: &Rc<Widgets>, ctl: &Controller) {
-    let (table, ctl) = (w.table.clone(), ctl.clone());
-    let t = table.clone();
-    table.sorter().expect("column view sorter").connect_changed(move |sorter, _| {
+    let ctl = ctl.clone();
+    w.table.sorter().expect("column view sorter").connect_changed(move |sorter, _| {
         if syncing() {
             return;
         }
         let Some(cs) = sorter.downcast_ref::<gtk::ColumnViewSorter>() else { return };
-        let Some(col) = cs.primary_sort_column() else { return };
-        let Some(i) = (0..t.columns().n_items()).find(|&i| t.columns().item(i).as_ref() == Some(col.upcast_ref()))
+        let Some(key) =
+            cs.primary_sort_column().and_then(|c| c.id()).and_then(|id| columns::find(&id)).and_then(|d| d.sort)
         else {
             return;
         };
         let descending = cs.primary_sort_order() == gtk::SortType::Descending;
         ctl.change(|m| {
-            m.sort_key = COLUMN_SORT[i as usize % COLUMN_SORT.len()];
+            m.sort_key = key;
             m.sort_descending = descending;
             m.rebuild();
         });
@@ -550,6 +703,11 @@ fn wire_buttons(w: &Rc<Widgets>, ctl: &Controller, rt: &Arc<tokio::runtime::Runt
     w.action.connect_clicked(move |_| {
         let c = c.clone();
         rt2.spawn(async move { c.primary_action().await });
+    });
+    let (c, rt2) = (ctl.clone(), rt.clone());
+    w.test.connect_clicked(move |_| {
+        let c = c.clone();
+        rt2.spawn(async move { c.test_connections().await });
     });
     let c = ctl.clone();
     w.favorite.connect_clicked(move |_| {
@@ -724,6 +882,9 @@ fn refresh_widgets(w: &Widgets, ctl: &Controller, shown: &Rc<RefCell<Shown>>) {
         });
         w.favorite.set_sensitive(m.selected_server().is_some());
         w.details.set_sensitive(m.selected_server().is_some());
+        let testing = ctl.is_testing();
+        w.test.set_sensitive(!testing && !m.servers().is_empty());
+        w.test.set_label(if testing { "Testing…" } else { "Test Connection" });
         w.favorite.set_label(match m.selected_server() {
             Some(s) if m.is_favorite(s) => "Remove from Favorites",
             _ => "Add to Favorites",
@@ -749,11 +910,15 @@ fn refresh_widgets(w: &Widgets, ctl: &Controller, shown: &Rc<RefCell<Shown>>) {
         if let Some(i) = SORT_CHOICES.iter().position(|c| c.1 == m.sort_key) {
             w.sort.set_selected(i as u32);
         }
-        if let Some(i) = COLUMN_SORT.iter().position(|k| *k == m.sort_key) {
-            if let Some(col) = w.table.columns().item(i as u32).and_downcast::<gtk::ColumnViewColumn>() {
-                let order = if m.sort_descending { gtk::SortType::Descending } else { gtk::SortType::Ascending };
-                w.table.sort_by_column(Some(&col), order);
-            }
+        let sort_col = w
+            .table
+            .columns()
+            .into_iter()
+            .filter_map(|o| o.ok().and_then(|o| o.downcast::<gtk::ColumnViewColumn>().ok()))
+            .find(|c| c.id().and_then(|id| columns::find(&id)).and_then(|d| d.sort) == Some(m.sort_key));
+        if let Some(col) = sort_col {
+            let order = if m.sort_descending { gtk::SortType::Descending } else { gtk::SortType::Ascending };
+            w.table.sort_by_column(Some(&col), order);
         }
         let logging = LOGGING_CHOICES.iter().position(|c| c.1 == m.filter.max_log_weeks).unwrap_or(0);
         w.logging.set_selected(logging as u32);
@@ -761,7 +926,8 @@ fn refresh_widgets(w: &Widgets, ctl: &Controller, shown: &Rc<RefCell<Shown>>) {
         // rows: rebuilt only when the visible ids or the favorites changed, so scrolling and selection survive traffic ticks
         let ids: Vec<String> = m.servers().iter().map(|s| s.id().to_string()).collect();
         let favorites: BTreeSet<String> = m.filter.favorites.iter().cloned().collect();
-        if sh.ids != ids || sh.favorites != favorites {
+        if sh.ids != ids || sh.favorites != favorites || sh.probe_rev != m.probe_rev {
+            sh.probe_rev = m.probe_rev;
             let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
             w.store.splice(0, w.store.n_items(), &refs);
             sh.ids = ids;
