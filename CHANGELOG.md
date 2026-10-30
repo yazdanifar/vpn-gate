@@ -3,6 +3,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
 
 ## [Unreleased]
 ### Added
+- Sanitizer jobs: the Swift test harness stretches its waits 4x under `--asan`/`--tsan` (`VPNGATE_TEST_SLOWDOWN`), after two different `helperclient` tests timed out on a loaded runner.
 - U30b: `softether-netns` also checks the SOCKS5 TCP flow (new `vpngate-daemon --connect <host> --socks <port>` flag; the request reaches the web server through SecureNAT while the default route stays untouched and everything is restored after stop) and the IPv6 block while connected (v6 destinations route to the tun, not the physical link, and requests fail). The SoftEther image is pinned by digest.
 - U36 (step 1): `sanitizers` CI job runs the Swift app suite under ThreadSanitizer and AddressSanitizer (`scripts/test.sh --tsan` / `--asan`), which no job ran before.
 - U32: installer gaps in CI. `scripts/test-pkg.sh` (the `test` job) installs the macOS .pkg and checks the files, ownership, signature, the LaunchDaemon, the helper socket, the KeepAlive restart after a kill and a reinstall over a running helper. `test-msi.ps1` also checks that the shortcut, the Programs and Features entry, adapters and processes are gone after uninstall, and `test-msi-upgrade.ps1` upgrades while the app window is open. `test-deb.sh` checks that the installing user is in `vpngate` in a fresh login session and can use the socket, and that an outsider is refused. A `real_secret_service_round_trip` test runs against a real gnome-keyring in the `deb` job.
