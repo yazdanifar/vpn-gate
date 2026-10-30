@@ -18,6 +18,14 @@ android {
     namespace = "com.yazdanifar.vpngate.app"
     compileSdk = 35
 
+    // AGP strips the native libraries with the NDK's llvm-strip and, without a matching NDK, ships them unstripped
+    // ("Unable to strip the following libraries"). CI runners carry several NDKs and AGP's default is rarely one of them,
+    // so follow the runner's latest (ANDROID_NDK_LATEST_HOME, a .../ndk/<version> directory) when it is installed in the SDK.
+    System.getenv("ANDROID_NDK_LATEST_HOME")
+        ?.let { File(it).name }
+        ?.takeIf { Regex("""\d+\.\d+\.\d+""").matches(it) }
+        ?.let { ndkVersion = it }
+
     defaultConfig {
         applicationId = "com.yazdanifar.vpngate"
         minSdk = 24
