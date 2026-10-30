@@ -48,7 +48,6 @@ public sealed partial class MainWindow : Window
 
         Vm.QuitRequested += () => Application.Current.Exit();
         Vm.PropertyChanged += OnVmChanged;
-        Closed += (_, _) => Tray.Dispose();
 
         // One tick a second: traffic text every time, a status poll every second one (UI-SPEC 11: the service is polled every 2 s).
         _tick = queue.CreateTimer();
@@ -57,6 +56,14 @@ public sealed partial class MainWindow : Window
         {
             Vm.RefreshTraffic();
             if (++_tickCount % 2 == 0) await Vm.PollAsync();
+        };
+
+        // A closed window must stop reacting to the view model (a disposed tray icon throws), which matters once tests open and close many.
+        Closed += (_, _) =>
+        {
+            _tick.Stop();
+            Vm.PropertyChanged -= OnVmChanged;
+            Tray.Dispose();
         };
 
         Root.Loaded += async (_, _) =>
