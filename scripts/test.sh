@@ -14,6 +14,8 @@ for a in "$@"; do
     *) PASS+=("$a") ;;
   esac
 done
+# Sanitized binaries are several times slower: stretch the harness's waits (Tests/Harness/Harness.swift).
+[[ ${#SAN[@]} -gt 0 ]] && export VPNGATE_TEST_SLOWDOWN=4
 OUT=build/test; mkdir -p "$OUT"
 FLAGS=(-swift-version 5 -Onone -g -target arm64-apple-macos14.0)
 

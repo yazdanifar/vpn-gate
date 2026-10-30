@@ -63,14 +63,16 @@ Report anything that fails with `journalctl -u vpngate` and the output of the sc
 
 ## Android (U28) — a real phone, Android 7.0 or newer
 
-**Automated in CI** (`android-app` and `android-emulator`, ubuntu-latest): JVM tests, the debug APK, the release APK and AAB
-(`vpn-gate-release-apk`, `vpn-gate-release-aab`), and an x86_64 emulator (API 34) smoke test: launch, agree to the disclaimer, the bundled list shows.
+**Automated in CI** (`android-app`, `android-emulator`, ubuntu-latest): JVM tests, the debug APK, the release APK and AAB
+(`vpn-gate-release-apk`, `vpn-gate-release-aab`), screenshot goldens of every screen (Paparazzi; the approved images are in
+`apps/android/app/src/test/snapshots`), the merged manifest's always-on declaration, and on an API 34 x86_64 emulator: launch and
+the bundled list, the system VPN consent dialog (deny, allow), the foreground notification, a connection through a SoftEther
+container with traffic leaving through it, the always-on start replaying the last connection, and the reconnect after airplane mode.
 Without secrets the release build is signed with the debug key (installable, not for distribution). For a real key set
 `VPNGATE_KEYSTORE` (path relative to `apps/android`), `VPNGATE_KEYSTORE_PASSWORD`, `VPNGATE_KEY_ALIAS`, `VPNGATE_KEY_PASSWORD`.
-Not covered: the VPN consent, a tunnel, always-on, the notification.
 
-1. **Install.** Sideload the APK from `vpn-gate-release-apk`. Launch, agree, the list shows.
-2. **Connect.** Accept the VPN consent. The key icon appears, the public IP changes, DNS works, IPv6 does not leak.
-3. **Drop.** Toggle airplane mode on and off: it reconnects.
-4. **Always-on.** Settings > VPN > VPN Gate > Always-on, plus "Block connections without VPN": it starts after a reboot.
-5. **Compare** the screens with UI-SPEC.md. This is also the first run of U26/U27 on a device.
+**Needs a human** (what an emulator cannot show):
+1. **Always-on on a real phone.** Settings > VPN > VPN Gate > Always-on, plus "Block connections without VPN": after a reboot the
+   key icon appears and nothing leaks. (CI covers the declaration and the service's response to the system's start action, not the
+   system's own restart after a process kill or a reboot.)
+2. **A real phone** (OEM battery savers, vendor VPN consent screens) once per release. Approve changed goldens in the PR that changes them.

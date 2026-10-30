@@ -310,7 +310,7 @@ over AT-SPI under Xvfb, Gradle Managed Devices (ATD), UiAutomator + `DevicePolic
   `StatusNotifierWatcher`.
 - **U34 WinUI UI.** WinUI Unit Test App with `[UITestMethod]` per view, `RenderTargetBitmap` goldens, a FlaUI launch/tray smoke test (a spike
   first: non-gating if the hosted runner has no usable desktop).
-- **U35 Android.** Roborazzi goldens, Gradle Managed Devices, UiAutomator on the VPN consent, always-on across `adb reboot`, airplane-mode reconnect.
+- **U35 Android.** Paparazzi goldens, `android-emulator-runner` (not Gradle Managed Devices), UiAutomator on the VPN consent, the always-on start simulated in-process, airplane-mode reconnect (see DECISIONS U35).
 - **U36 macOS app, sanitizers, timing.** `test-tsan`/`test-asan` jobs, `ImageRenderer` goldens, paused-time keep-alive/UDP-accel tests, the
   U04 trailing-deflate vector, the U07 system-trust accept path in `live.yml`.
 Left to a human afterwards: approving golden images once, SmartScreen on the unsigned MSI, OEM phone quirks.

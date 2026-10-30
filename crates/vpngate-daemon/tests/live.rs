@@ -8,10 +8,13 @@
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use vpngate_core::ipc::ConnectConfig;
+use vpngate_core::cert_pin::ServerCertPolicy;
+use vpngate_core::ipc::{ConnectConfig, ProxySettings};
 use vpngate_core::{validation, vgdat};
 use vpngate_net::dat_fetcher::{DatFetcher, DatFetcherConfig};
 use vpngate_net::session::tls_stream_factory;
+use vpngate_net::stream::ByteStream;
+use vpngate_net::tls::TlsStream;
 
 /// Relays to try: the override from the environment, else the bundled list (port 443 first, best score first).
 fn live_relays(limit: usize) -> Vec<(String, u16)> {
@@ -107,4 +110,17 @@ fn relay_handshake_and_dhcp() {
         ok >= 1,
         "no relay completed handshake + DHCP (network blocking VPN Gate, or all tried relays down): {report:?}"
     );
+}
+
+/// The accept half of the system-trust policy (`rustls-platform-verifier`): the hermetic suite only proves that a
+/// self-signed certificate is refused, so this checks that a certificate chaining to a public CA is accepted.
+#[tokio::test]
+#[ignore = "needs the network"]
+async fn system_trust_accepts_a_public_ca_certificate() {
+    let mut tls = TlsStream::new("example.com", 443, &ProxySettings::default(), ServerCertPolicy::new(true, None));
+    tls.start_with_timeout(Duration::from_secs(20)).await.expect("TLS handshake with a CA-signed host");
+    tls.send(b"GET / HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\n\r\n").await.unwrap();
+    let reply = tls.read_chunk().await.unwrap();
+    let head = String::from_utf8_lossy(&reply[..reply.len().min(40)]).into_owned();
+    assert!(reply.starts_with(b"HTTP/1."), "unexpected reply: {head:?}");
 }
