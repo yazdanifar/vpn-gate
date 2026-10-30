@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- FlaUI (UI Automation, UIA3) smoke test of the real VPNGate.exe against a fake daemon on a named pipe (U34). Windows only. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <NoWarn>CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.0.2" />
+    <PackageReference Include="FlaUI.UIA3" Version="4.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\VPNGate.Tests\FakeDaemon.cs" Link="FakeDaemon.cs" />
+    <ProjectReference Include="..\VPNGate.Core\VPNGate.Core.csproj" />
+  </ItemGroup>
+</Project>

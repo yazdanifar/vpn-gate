@@ -33,7 +33,7 @@ public sealed class ConnectionHistoryStore
     }
 
     public static string DefaultPath =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VPNGate", "connection_history.json");
+        Path.Combine(DataDir.Path, "connection_history.json");
 
     public List<ConnectionLogEntry> Entries { get; private set; }
     public event Action? Changed;

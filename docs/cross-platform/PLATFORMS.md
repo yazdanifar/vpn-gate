@@ -11,9 +11,13 @@ Manual checks that need a real machine. The agent cannot run these; the user doe
   fake relay (ping through the tunnel, only 192.0.2.0/24 captured, relay bypass, IPv6 block, restore on disconnect), SOCKS5-only
   mode (proxy answers, no system route change), and a killed process whose stale routes the next start removes.
 - `VPNGate.Tests/WindowsIntegrationTests.cs`: real Credential Manager (incl. chunking) and the run-at-login registry value.
+- `VPNGate.UiTests` (`winui-ui` job): every window and sheet built in-process over a fake daemon, key controls and state asserted
+  (list, sort, filters, Details, disclaimer, accounts, editor, routing, Settings, History, Log) and rendered to PNG; `VPNGate.Smoke`
+  (`winui-smoke` job): the real `VPNGate.exe` driven through UI Automation (launch, disclaimer, list, search, close).
 
-Only the rest needs a human: the look of the UI (5), a connection to a real relay with full-tunnel capture of the default
-route (6), a real TCP flow through SOCKS5, tray, upgrade of a running app window.
+Only the rest needs a human: looking once at the `winui-ui-screenshots` and `winui-smoke-screenshots` artifacts against UI-SPEC
+(5; the controls and their state are tested, the pictures are not yet diffed), a connection to a real relay with full-tunnel
+capture of the default route (6), a real TCP flow through SOCKS5, the tray icon and menu.
 
 Get `vpn-gate-msi` from the latest green `msi` CI job (unsigned: SmartScreen "More info" > "Run anyway").
 
@@ -21,9 +25,8 @@ Get `vpn-gate-msi` from the latest green `msi` CI job (unsigned: SmartScreen "Mo
 2. **Service.** `sc query VPNGate` is RUNNING; `sc qc VPNGate` shows AUTO_START, `--service`; `sc qfailure VPNGate` shows restart x3.
 3. **Files.** `C:\Program Files\VPN Gate` has `vpngate-daemon.exe`, `wintun.dll`, `VPNGate.dat`, `VPNGate.exe`.
 4. **State folder.** `icacls C:\ProgramData\VPNGate` lists only SYSTEM and Administrators (full control).
-5. **App.** Launch as a normal (non-admin) user: window renders; compare against UI-SPEC.md section by section
-   (disclaimer, list, filter, sort, columns, Details, accounts editor, routing editor, Settings, History, tray menu).
-   The list is filled (bundled list or sync); the status shows the service is reachable.
+5. **App.** Launch as a normal (non-admin) user. CI already checks every window's controls and renders them; what is left is
+   the tray menu and the real service: the list is filled (bundled list or sync) and the status shows the service is reachable.
 6. **Connect.** Connect to a relay. Verify: "VPNGate" adapter present, public IP changes, DNS resolves, IPv6 blocked
    (when set), `route print` shows the split default routes and the relay bypass. Disconnect restores routes and DNS.
 7. **Crash recovery.** While connected: `taskkill /F /IM vpngate-daemon.exe`. The service restarts within ~5 s and the
@@ -61,14 +64,16 @@ Report anything that fails with `journalctl -u vpngate` and the output of the sc
 
 ## Android (U28) — a real phone, Android 7.0 or newer
 
-**Automated in CI** (`android-app` and `android-emulator`, ubuntu-latest): JVM tests, the debug APK, the release APK and AAB
-(`vpn-gate-release-apk`, `vpn-gate-release-aab`), and an x86_64 emulator (API 34) smoke test: launch, agree to the disclaimer, the bundled list shows.
+**Automated in CI** (`android-app`, `android-emulator`, ubuntu-latest): JVM tests, the debug APK, the release APK and AAB
+(`vpn-gate-release-apk`, `vpn-gate-release-aab`), screenshot goldens of every screen (Paparazzi; the approved images are in
+`apps/android/app/src/test/snapshots`), the merged manifest's always-on declaration, and on an API 34 x86_64 emulator: launch and
+the bundled list, the system VPN consent dialog (deny, allow), the foreground notification, a connection through a SoftEther
+container with traffic leaving through it, the always-on start replaying the last connection, and the reconnect after airplane mode.
 Without secrets the release build is signed with the debug key (installable, not for distribution). For a real key set
 `VPNGATE_KEYSTORE` (path relative to `apps/android`), `VPNGATE_KEYSTORE_PASSWORD`, `VPNGATE_KEY_ALIAS`, `VPNGATE_KEY_PASSWORD`.
-Not covered: the VPN consent, a tunnel, always-on, the notification.
 
-1. **Install.** Sideload the APK from `vpn-gate-release-apk`. Launch, agree, the list shows.
-2. **Connect.** Accept the VPN consent. The key icon appears, the public IP changes, DNS works, IPv6 does not leak.
-3. **Drop.** Toggle airplane mode on and off: it reconnects.
-4. **Always-on.** Settings > VPN > VPN Gate > Always-on, plus "Block connections without VPN": it starts after a reboot.
-5. **Compare** the screens with UI-SPEC.md. This is also the first run of U26/U27 on a device.
+**Needs a human** (what an emulator cannot show):
+1. **Always-on on a real phone.** Settings > VPN > VPN Gate > Always-on, plus "Block connections without VPN": after a reboot the
+   key icon appears and nothing leaks. (CI covers the declaration and the service's response to the system's start action, not the
+   system's own restart after a process kill or a reboot.)
+2. **A real phone** (OEM battery savers, vendor VPN consent screens) once per release. Approve changed goldens in the PR that changes them.

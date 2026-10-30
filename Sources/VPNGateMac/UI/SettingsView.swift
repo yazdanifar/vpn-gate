@@ -20,7 +20,7 @@ struct SettingsView: View {
     }
 }
 
-private struct GeneralSettings: View {
+struct GeneralSettings: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.openWindow) private var openWindow
 
@@ -102,7 +102,7 @@ struct ProxyForm: View {
     }
 }
 
-private struct AdvancedSettings: View {
+struct AdvancedSettings: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.openWindow) private var openWindow
 
