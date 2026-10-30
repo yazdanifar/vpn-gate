@@ -67,7 +67,7 @@ class AccountsTest {
         assertEquals("vpn.example.com", cfg["host"]!!.jsonPrimitive.content)
         assertTrue("routing" in cfg)
         // an account's own rules win over the global ones, and an empty global config is omitted
-        val own = RoutingConfig(defaultAction = RoutingAction.Direct)
+        val own = RoutingConfig(rules = listOf(RoutingRule(type = RoutingRuleType.Ip, value = "8.8.8.8", action = RoutingAction.Direct)))
         assertEquals(own, a.copy(routing = own).toConnectConfig(null, null, null, true, global).routing)
         assertNull(a.toConnectConfig(null, null, null, true, RoutingConfig()).routing)
     }

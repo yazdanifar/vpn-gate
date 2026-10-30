@@ -48,9 +48,9 @@ data class ServerFilter(
     }
 }
 
-enum class SortKey { Score, Host, Country, Uptime, Sessions, Speed, Ping, Logging }
+enum class SortKey { Score, Host, Country, Uptime, Sessions, Speed, Ping, Logging, Test }
 
-fun List<VpnServer>.sortedBy(key: SortKey, descending: Boolean): List<VpnServer> {
+fun List<VpnServer>.sortedBy(key: SortKey, descending: Boolean, probes: Map<String, Probe> = emptyMap()): List<VpnServer> {
     val cmp: Comparator<VpnServer> = when (key) {
         SortKey.Score -> compareBy { it.score }
         SortKey.Host -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.hostName }
@@ -61,6 +61,7 @@ fun List<VpnServer>.sortedBy(key: SortKey, descending: Boolean): List<VpnServer>
         // unknown ping (0) sorts as slowest
         SortKey.Ping -> compareBy { if (it.ping == 0) Int.MAX_VALUE else it.ping }
         SortKey.Logging -> compareBy { ServerFilter.logWeeks(it.logType) ?: Int.MAX_VALUE }
+        SortKey.Test -> compareBy { Probe.sortRank(probes[it.id]) }
     }
     return sortedWith(if (descending) cmp.reversed() else cmp)
 }

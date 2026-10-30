@@ -60,6 +60,26 @@ async fn run(parsed: args::Args) -> u8 {
             0
         }
         Mode::Daemon { uid, bundle, cache } => run_daemon_mode(socket, uid, bundle, cache).await,
+        Mode::List { bundle, cache } => {
+            let engine = Engine::production(
+                PathBuf::from(cache.unwrap_or_else(|| backend::default_cache_path().to_string())),
+                bundle.into_iter().map(PathBuf::from).collect(),
+            );
+            match engine.list_servers().map(|r| serde_json::to_string(&r)) {
+                Ok(Ok(json)) => {
+                    println!("{json}");
+                    0
+                }
+                Ok(Err(e)) => {
+                    eprintln!("{e}");
+                    1
+                }
+                Err(e) => {
+                    eprintln!("{e}");
+                    1
+                }
+            }
+        }
         Mode::Service => 2, // handled in `main`
     }
 }

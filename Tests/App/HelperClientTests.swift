@@ -55,6 +55,24 @@ func registerHelperClientTests() {
         _ = try await c.refreshServers(proxy: ProxySettings(), mirror: "")
         expectEqual(fake.refreshes.last?.mirror, nil, "an empty mirror is not sent")
     }
+    test("helperclient/bundled-list-reads-the-helper-list-mode") {
+        func stub(_ body: String) throws -> URL {
+            let url = URL(fileURLWithPath: tempPath("list-stub-\(UUID().uuidString.prefix(6)).sh"))
+            try "#!/bin/sh\n\(body)\n".write(to: url, atomically: true, encoding: .utf8)
+            chmod(url.path, 0o755)
+            return url
+        }
+        let ok = try stub("""
+        echo '{"servers":[],"source":"Built-in","isFresh":false,"outcome":"synced","serverCount":0}'
+        """)
+        let r = await HelperClient.bundledList(binary: ok, list: nil)
+        expectEqual(r?.source, .bundle)
+        let failing = try stub("echo nope >&2; exit 1")
+        let failed = await HelperClient.bundledList(binary: failing, list: nil)
+        expect(failed == nil, "a failing helper gives no list")
+        let missing = await HelperClient.bundledList(binary: URL(fileURLWithPath: "/nonexistent/helper"), list: nil)
+        expect(missing == nil)
+    }
     test("helperclient/an-ok-false-reply-throws-its-reason") {
         let (srv, _, path) = startServer(); defer { srv.stop() }
         let c = HelperClient(path: path)

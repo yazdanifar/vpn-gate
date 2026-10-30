@@ -93,3 +93,60 @@ class AccountConnectTest {
         assertFalse(File(dir, "history.json").readText().contains("vpn1"))
     }
 }
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class AndroidLimitsTest {
+    private fun rule(t: RoutingRuleType, v: String, a: RoutingAction = RoutingAction.Direct, enabled: Boolean = true) =
+        RoutingRule(type = t, value = v, action = a, enabled = enabled)
+
+    @Test
+    fun onlyDirectIpv4RulesSurvive() {
+        val keep = rule(RoutingRuleType.Cidr, "10.0.0.0/8")
+        val cfg = RoutingConfig(
+            rules = listOf(
+                keep,
+                rule(RoutingRuleType.DomainSuffix, "example.com"),
+                rule(RoutingRuleType.Ip, "1.2.3.4", RoutingAction.Block),
+                rule(RoutingRuleType.Ip, "::1"),
+                rule(RoutingRuleType.Ip, "5.6.7.8", enabled = false),
+            ),
+            defaultAction = RoutingAction.Direct,
+        ).forAndroid()
+        assertEquals(listOf(keep), cfg.rules)
+        assertEquals(RoutingAction.Proxy, cfg.defaultAction)
+        val account = ClientAccount(host = "h")
+        assertEquals(null, account.toConnectConfig(null, null, null, true, RoutingConfig(rules = listOf(rule(RoutingRuleType.DomainFull, "a.com")))).routing)
+    }
+
+    @Test
+    fun certificateCheckNeedsAFingerprint() {
+        val s = AccountEditorState(name = "n", host = "h.example", checkServerCert = true)
+        assertFalse(s.canSave)
+        assertTrue(s.copy(fingerprint = "ab".repeat(20)).canSave)
+    }
+
+    @Test
+    fun probeResultsFillTheList() = runTest {
+        val engine = FakeEngine()
+        val model = MainModel(
+            IpcClient(engine, backgroundScope), MemorySettings(hasAgreedToDisclaimer = true), backgroundScope, preparer = { true },
+        )
+        val list = listResult(server("a", "1.1.1.1"), server("b", "2.2.2.2"))
+        engine.onRequest = { cmd, _ ->
+            when (cmd) {
+                "listServers", "refreshServers" -> resultJson(list)
+                "probe" -> """"ok":true,"result":{"results":[{"host":"1.1.1.1","ok":true,"connectMs":40,"port":443},{"host":"2.2.2.2","ok":false,"error":"Cannot connect"}]}"""
+                else -> null
+            }
+        }
+        model.start()
+        runCurrent()
+        model.testConnections()
+        runCurrent()
+        val s = model.state.value
+        assertEquals(Probe.Ok(40, null, 443), s.probes["a"])
+        assertEquals(Probe.Failed("Cannot connect"), s.probes["b"])
+        assertFalse(s.isTesting)
+        assertEquals("a", s.allServers.sortedBy(SortKey.Test, false, s.probes).first().id)
+    }
+}

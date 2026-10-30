@@ -138,6 +138,48 @@ data class ServerListResult(
     val nextPollSeconds: Double? = null,
 )
 
+@Serializable
+data class ProbeTarget(val host: String, val ports: List<Int>? = null)
+
+@Serializable
+data class ProbeEntry(
+    val host: String = "",
+    val ok: Boolean = false,
+    val port: Int? = null,
+    val connectMs: Long? = null,
+    val helloMs: Long? = null,
+    val build: Long? = null,
+    val error: String? = null,
+)
+
+@Serializable
+data class ProbeResult(val results: List<ProbeEntry> = emptyList())
+
+/** One list server's "Test Connection" state (UI-SPEC 4, probe cell). */
+sealed interface Probe {
+    data object Queued : Probe
+    data object Testing : Probe
+    data class Ok(val connectMs: Long, val helloMs: Long?, val port: Int?) : Probe
+    data class Failed(val why: String) : Probe
+
+    companion object {
+        /** Lower sorts first: working servers by connect time, then untested ones, then failures. */
+        fun sortRank(p: Probe?): Long = when (p) {
+            is Ok -> p.connectMs
+            null, Queued, Testing -> Long.MAX_VALUE - 1
+            is Failed -> Long.MAX_VALUE
+        }
+
+        fun text(p: Probe?): String = when (p) {
+            null -> "—"
+            Queued -> "Waiting…"
+            Testing -> "Testing…"
+            is Ok -> "${p.connectMs} ms"
+            is Failed -> p.why
+        }
+    }
+}
+
 /** `ConnectConfig` is not needed here: Android connects with the legacy flat fields of the `connect` request. */
 @Serializable
 data class ConnectRequest(

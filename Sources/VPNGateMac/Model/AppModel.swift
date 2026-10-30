@@ -140,6 +140,12 @@ final class AppModel: ObservableObject {
             // Until the helper answers `listServers`, show what the last run saved.
             servers = Self.loadCache()
             migrateFavorites()
+            if servers.isEmpty {
+                // First launch, helper not installed yet: show the shipped list instead of an empty window.
+                Task { @MainActor [weak self] in
+                    if let r = await HelperClient.bundledList(), let self, self.servers.isEmpty { self.apply(r, downloaded: false) }
+                }
+            }
         }
 
         helper.onEvent = { [weak self] e in Task { @MainActor in self?.handle(e) } }

@@ -39,6 +39,7 @@ import com.yazdanifar.vpngate.ConnectionState
 import com.yazdanifar.vpngate.Fmt
 import com.yazdanifar.vpngate.ListFormat
 import com.yazdanifar.vpngate.MainModel
+import com.yazdanifar.vpngate.Probe
 import com.yazdanifar.vpngate.ServerFilter
 import com.yazdanifar.vpngate.SortKey
 import com.yazdanifar.vpngate.UiState
@@ -144,6 +145,9 @@ private fun Toolbar(state: UiState, model: MainModel) {
             SortMenu(state, model)
             if (state.filter.isActive) TextButton(onClick = model::clearFilters) { Text("Clear") }
             Spacer(Modifier.weight(1f))
+            TextButton(onClick = model::testConnections, enabled = !state.isTesting && state.servers.isNotEmpty()) {
+                Text(if (state.isTesting) "Testing…" else "Test")
+            }
             TextButton(onClick = model::refreshList, enabled = !state.isLoading) { Text("Refresh") }
         }
     }
@@ -192,20 +196,21 @@ private fun sortLabel(k: SortKey) = when (k) {
     SortKey.Speed -> "Speed"
     SortKey.Ping -> "Ping"
     SortKey.Logging -> "Logging"
+    SortKey.Test -> "Test"
 }
 
 @Composable
 private fun ServerList(state: UiState, model: MainModel, modifier: Modifier) {
     LazyColumn(modifier) {
         items(state.servers, key = { it.id }) { s ->
-            ServerRow(s, selected = s.id == state.selectedId, favorite = s.id in state.favorites, model = model)
+            ServerRow(s, selected = s.id == state.selectedId, favorite = s.id in state.favorites, probe = state.probes[s.id], model = model)
             HorizontalDivider()
         }
     }
 }
 
 @Composable
-private fun ServerRow(s: VpnServer, selected: Boolean, favorite: Boolean, model: MainModel) {
+private fun ServerRow(s: VpnServer, selected: Boolean, favorite: Boolean, probe: Probe?, model: MainModel) {
     val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
     Row(
         Modifier.fillMaxWidth().background(bg).clickable { model.select(s) }.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -223,6 +228,14 @@ private fun ServerRow(s: VpnServer, selected: Boolean, favorite: Boolean, model:
         }
         Column(horizontalAlignment = Alignment.End) {
             Text("${s.score}", fontWeight = FontWeight.Bold)
+            if (probe != null) {
+                Text(
+                    Probe.text(probe),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (probe is Probe.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
             TextButton(onClick = { model.toggleFavorite(s) }) { Text(if (favorite) "★" else "☆") }
         }
     }

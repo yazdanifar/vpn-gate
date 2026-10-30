@@ -27,26 +27,22 @@ import com.yazdanifar.vpngate.RoutingRuleValidation
 
 private fun actionLabel(a: RoutingAction) = when (a) {
     RoutingAction.Proxy -> "Through VPN"
-    RoutingAction.Direct -> "Direct"
+    RoutingAction.Direct -> "Bypass the VPN"
     RoutingAction.Block -> "Block"
 }
 
 /**
  * The routing rules (UI-SPEC 8): an ordered list (first match wins) with a default action and a private-network bypass.
- * The Android tunnel plan (`plan_for`) turns only "Direct" IP and CIDR rules into excluded routes; the other rules are
- * stored and sent to the engine but have no effect on the tunnel yet, which the hint below says.
+ * The Android tunnel plan (`plan_for`) turns only "Direct" IPv4 IP and CIDR rules into excluded routes and the engine
+ * refuses domain rules, so the editor offers just those ([com.yazdanifar.vpngate.RoutingConfig.forAndroid] enforces it).
  */
 @Composable
 fun RoutingEditor(config: RoutingConfig, onChange: (RoutingConfig) -> Unit) {
-    var type by remember { mutableStateOf(RoutingRuleType.DomainSuffix) }
-    var action by remember { mutableStateOf(RoutingAction.Direct) }
+    var type by remember { mutableStateOf(RoutingRuleType.Cidr) }
     var value by remember { mutableStateOf("") }
-    val error = if (value.isBlank()) null else RoutingRuleValidation.error(type, value)
+    val error = if (value.isBlank()) null else RoutingRuleValidation.androidValueError(type, value)
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Choice("Unmatched traffic", RoutingAction.entries, config.defaultAction, ::actionLabel) {
-            onChange(config.copy(defaultAction = it))
-        }
         SwitchRow(
             "Bypass private networks",
             config.bypassPrivateNetworks,
@@ -54,18 +50,18 @@ fun RoutingEditor(config: RoutingConfig, onChange: (RoutingConfig) -> Unit) {
             hint = "Local addresses (10.x, 192.168.x, …) skip the VPN.",
         )
         Text(
-            "On Android only “Direct” IP and range rules change the tunnel; the other rules are saved but not applied yet.",
+            "Addresses and IPv4 ranges listed here skip the VPN. Domain rules and blocking are not available on Android.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         HorizontalDivider()
-        Text("Rules (first match wins)", style = MaterialTheme.typography.titleSmall)
+        Text("Bypass list", style = MaterialTheme.typography.titleSmall)
         config.rules.forEachIndexed { i, rule ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(rule.value)
                     Text(
-                        "${RoutingRuleValidation.types.first { it.type == rule.type }.label} → ${actionLabel(rule.action)}",
+                        RoutingRuleValidation.types.first { it.type == rule.type }.label,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -77,19 +73,18 @@ fun RoutingEditor(config: RoutingConfig, onChange: (RoutingConfig) -> Unit) {
             }
         }
         Text("Add a rule", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-        Choice("Type", RoutingRuleValidation.types, RoutingRuleValidation.types.first { it.type == type }, { it.label }) { type = it.type }
+        Choice("Type", RoutingRuleValidation.androidTypes, RoutingRuleValidation.androidTypes.first { it.type == type }, { it.label }) { type = it.type }
         Field(
             "Value",
             value,
             { value = it },
             error = error,
-            placeholder = RoutingRuleValidation.types.first { it.type == type }.placeholder,
+            placeholder = RoutingRuleValidation.androidTypes.first { it.type == type }.placeholder,
         )
-        Choice("Action", RoutingAction.entries, action, ::actionLabel) { action = it }
         Button(
             enabled = value.isNotBlank() && error == null,
             onClick = {
-                onChange(config.copy(rules = config.rules + RoutingRule(type = type, value = value.trim(), action = action)))
+                onChange(config.copy(rules = config.rules + RoutingRule(type = type, value = value.trim(), action = RoutingAction.Direct)))
                 value = ""
             },
         ) { Text("Add rule") }
