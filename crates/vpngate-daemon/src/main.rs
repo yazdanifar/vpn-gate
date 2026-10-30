@@ -44,7 +44,7 @@ async fn run(parsed: args::Args) -> u8 {
             2
         }
         Mode::Probe { host, port, watch_udp } => probe::run_probe(&host, port, watch_udp).await as u8,
-        Mode::Connect { host, port, allow_ipv6 } => {
+        Mode::Connect { host, port, allow_ipv6, socks_port } => {
             if !is_root() {
                 eprintln!("vpngate-daemon must run as root (use sudo)");
                 return 1;
@@ -54,7 +54,7 @@ async fn run(parsed: args::Args) -> u8 {
                 return 2;
             }
             let session = daemon::new_session();
-            daemon::run_connect(session, &host, port, allow_ipv6, daemon::wait_for_signal()).await;
+            daemon::run_connect(session, &host, port, allow_ipv6, socks_port, daemon::wait_for_signal()).await;
             0
         }
         Mode::Daemon { uid, bundle, cache } => run_daemon_mode(socket, uid, bundle, cache).await,
