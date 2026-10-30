@@ -893,7 +893,7 @@ fn show_disclaimer(
 fn refresh_widgets(w: &Widgets, ctl: &Controller, shown: &Rc<RefCell<Shown>>) {
     SYNCING.with(|s| s.set(true));
     let now = now_ms();
-    ctl.read(|m| {
+    let (rows, pos) = ctl.read(|m| {
         let busy = m.is_busy();
         w.spinner.set_spinning(busy);
         w.spinner.set_visible(busy);
@@ -996,19 +996,25 @@ fn refresh_widgets(w: &Widgets, ctl: &Controller, shown: &Rc<RefCell<Shown>>) {
         // rows: rebuilt only when the visible ids or the favorites changed, so scrolling and selection survive traffic ticks
         let ids: Vec<String> = m.servers().iter().map(|s| s.id().to_string()).collect();
         let favorites: BTreeSet<String> = m.filter.favorites.iter().cloned().collect();
+        let mut rows = None;
         if sh.ids != ids || sh.favorites != favorites || sh.probe_rev != m.probe_rev {
             sh.probe_rev = m.probe_rev;
-            let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
-            w.store.splice(0, w.store.n_items(), &refs);
+            rows = Some(ids.clone());
             sh.ids = ids;
             sh.favorites = favorites;
         }
         let pos = m.selected.as_ref().and_then(|id| sh.ids.iter().position(|i| i == id));
-        let want = pos.map_or(gtk::INVALID_LIST_POSITION, |p| p as u32);
-        if w.selection.selected() != want {
-            w.selection.set_selected(want);
-        }
+        (rows, pos)
     });
+    // Outside the model lock: GTK binds the new rows at once, and the cells read the model (a deadlock otherwise).
+    if let Some(ids) = rows {
+        let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
+        w.store.splice(0, w.store.n_items(), &refs);
+    }
+    let want = pos.map_or(gtk::INVALID_LIST_POSITION, |p| p as u32);
+    if w.selection.selected() != want {
+        w.selection.set_selected(want);
+    }
     SYNCING.with(|s| s.set(false));
 }
 
