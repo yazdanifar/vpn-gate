@@ -9,7 +9,7 @@ import org.junit.Test
 /**
  * Golden screenshots of the Compose screens (src/test/snapshots). `verifyPaparazziDebug` diffs against them,
  * `recordPaparazziDebug` rewrites them; CI produces the reference images (docs/cross-platform/PLATFORMS.md).
- * Dropdown menus and dialogs are separate windows that this Paparazzi version does not draw; the emulator tests cover them.
+ * AlertDialogs render (the disclaimer golden); dropdown menus are popups that are not drawn, the emulator tests cover them.
  */
 class ScreenshotTest {
     @get:Rule
