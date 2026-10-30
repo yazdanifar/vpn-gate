@@ -10,7 +10,7 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use adw::prelude::*;
@@ -40,9 +40,32 @@ type Case = fn(&Harness);
 
 // ---------------------------------------------------------------------------------------------------------------- driving GTK
 
+/// Where the run is, for the watchdog thread (a hung GTK main loop cannot report itself).
+static PROGRESS: Mutex<Option<(Instant, String)>> = Mutex::new(None);
+
+fn step(what: &str) {
+    *PROGRESS.lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), what.to_string()));
+}
+
+/// Aborts the run when no step was reached for a minute, saying which one was the last.
+fn start_watchdog() {
+    std::thread::spawn(|| loop {
+        std::thread::sleep(Duration::from_secs(5));
+        let last = PROGRESS.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some((at, what)) = last {
+            if at.elapsed() > Duration::from_secs(60) {
+                eprintln!("watchdog: no progress for 60 s, last step: {what}");
+                std::process::exit(3);
+            }
+        }
+    });
+}
+
+/// Handles what is pending; bounded so that an event source that never runs dry cannot hang the test.
 fn pump() {
     let ctx = glib::MainContext::default();
-    while ctx.iteration(false) {}
+    let end = Instant::now() + Duration::from_millis(200);
+    while ctx.iteration(false) && Instant::now() < end {}
 }
 
 /// Runs the main loop for `ms` (layout, frame clock, delayed signals).
@@ -56,6 +79,7 @@ fn settle(ms: u64) {
 }
 
 fn wait_until(what: &str, mut cond: impl FnMut() -> bool) {
+    step(&format!("waiting for {what}"));
     let start = Instant::now();
     loop {
         pump();
@@ -247,6 +271,7 @@ impl Rig {
     }
 
     fn with_stores(h: &Harness, agreed: bool, setup: impl FnOnce(&mut Stores)) -> Rig {
+        step("starting the fake daemon");
         let sock =
             PathBuf::from(format!("/tmp/vgui-{}-{}.sock", std::process::id(), SEQ.fetch_add(1, Ordering::SeqCst)));
         let daemon = {
@@ -272,7 +297,9 @@ impl Rig {
             timing: Timing::default(),
             tray: false,
         };
+        step("building the window");
         let built = window::build_with(&h.app, h.rt.clone(), env);
+        step("window built");
         Rig { daemon, built }
     }
 
@@ -1128,10 +1155,13 @@ fn main() {
     let filter: Vec<String> = std::env::args().skip(1).filter(|a| !a.starts_with('-')).collect();
     let (mut passed, mut failed) = (0, Vec::new());
     println!("running {} ui tests", cases.len());
+    start_watchdog();
     for (name, case) in cases {
         if !filter.is_empty() && !filter.iter().any(|f| name.contains(f.as_str())) {
             continue;
         }
+        step(&format!("start of {name}"));
+        eprintln!("-- {name}");
         let result = catch_unwind(AssertUnwindSafe(|| case(&harness)));
         match result {
             Ok(()) => {

@@ -157,6 +157,7 @@ jobs:
           cargo test --locked
           cargo build --locked
       - name: UI tests (the real windows driven in-process under Xvfb, golden screenshots)
+        timeout-minutes: 10
         working-directory: apps/linux
         env: { VPNGATE_UI_TESTS: '1' }
         run: xvfb-run -a -s '-screen 0 1280x1024x24' cargo test --locked --test ui -- --nocapture
