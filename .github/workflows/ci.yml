@@ -162,11 +162,39 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       - uses: gradle/actions/setup-gradle@v4
-      - name: Core tests (JVM) and the debug APK (the runner ships the Android SDK)
+      - name: Core tests (JVM), the debug APK, and the release APK + AAB (the runner ships the Android SDK)
         working-directory: apps/android
-        run: ./gradlew --no-daemon :core:test :app:assembleDebug
+        run: ./gradlew --no-daemon :core:test :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease :app:bundleRelease
       - uses: actions/upload-artifact@v5
         with: { name: vpn-gate-apk-debug, path: apps/android/app/build/outputs/apk/debug/*.apk }
+      - uses: actions/upload-artifact@v5
+        with:
+          name: vpn-gate-android-release
+          path: |
+            apps/android/app/build/outputs/apk/release/*.apk
+            apps/android/app/build/outputs/bundle/release/*.aab
+  android-emulator:
+    runs-on: ubuntu-latest
+    needs: [android-engine]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with: { name: vpn-gate-android-engine, path: build/android-engine }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Smoke test on an x86_64 emulator (launch, agree, the bundled list shows)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          working-directory: apps/android
+          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest
   coverage:
     runs-on: ubuntu-latest
     steps:

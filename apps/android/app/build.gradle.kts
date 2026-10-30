@@ -28,6 +28,27 @@ android {
 
     buildFeatures { compose = true }
 
+    // Release key from the environment (CI secrets); without it the release build is signed with the debug key so it
+    // still installs, and is not fit for distribution.
+    val releaseStore = System.getenv("VPNGATE_KEYSTORE")?.let { rootProject.file(it) }
+    signingConfigs {
+        if (releaseStore != null) {
+            create("release") {
+                storeFile = releaseStore
+                storePassword = System.getenv("VPNGATE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("VPNGATE_KEY_ALIAS")
+                keyPassword = System.getenv("VPNGATE_KEY_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            // No minification: the UniFFI bindings reach the engine through JNA reflection.
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+        }
+    }
+
     sourceSets["main"].apply {
         // KGP compiles Kotlin files found in the java source dirs too.
         java.srcDir(engineDir.resolve("kotlin"))
@@ -39,6 +60,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    defaultConfig.testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
     testOptions { unitTests.isReturnDefaultValues = true }
 }
@@ -62,4 +85,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation(kotlin("test"))
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
