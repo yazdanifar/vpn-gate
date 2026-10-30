@@ -47,7 +47,7 @@ Update at the end of every session (see the session protocol in [PLAN.md](PLAN.m
 | U33 | GTK UI automation + goldens | ⬜ | | |
 | U34 | WinUI UI tests + goldens | ⬜ | | |
 | U35 | Android UI, consent, always-on | ⬜ | | |
-| U36 | macOS app goldens, sanitizers, timing | ⬜ | | |
+| U36 | macOS app goldens, sanitizers, timing | 🔄 | xp/U36-sanitizers | Step 1: `sanitizers` CI job (`scripts/test.sh --tsan` / `--asan` on macos-15). ASan passes (88/88) and gates. TSan reports 3-4 races per run, always between `AppModel`'s own `@MainActor` methods and the tests' `MainActor.run` reads (`reconnectAttempts`, `scheduledPollDelay`, `reconnectTask`); believed to be false positives (TSan cannot order Swift's actor hand-offs) but unproven, so TSan is informational (annotation + summary) while its tests must still pass. Goldens, paused-time timing tests and the leftover vectors are still open. |
 
 ## Follow-ups found during implementation
 

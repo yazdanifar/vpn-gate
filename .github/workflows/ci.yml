@@ -51,6 +51,32 @@ jobs:
         run: scripts/test-pkg.sh
       - uses: actions/upload-artifact@v7
         with: { name: vpn-gate-pkg, path: build/VPN Gate.pkg }
+  sanitizers:
+    timeout-minutes: 30
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [tsan, asan]
+    steps:
+      - uses: actions/checkout@v7
+      # TSan reports data races between @MainActor-isolated accesses of AppModel that it cannot order (STATUS U36), so its
+      # findings are informational: the step may exit non-zero, the next step turns that into an annotation, and the job
+      # still fails when a test itself fails.
+      - name: Swift app tests under ${{ matrix.sanitizer }} (the suite compiles only Sources/VPNGateMac/Model, so no Rust build)
+        continue-on-error: ${{ matrix.sanitizer == 'tsan' }}
+        run: |
+          set -o pipefail
+          scripts/test.sh --${{ matrix.sanitizer }} 2>&1 | tee sanitizer.log
+      - name: Report
+        if: always()
+        run: |
+          grep -Eq '[0-9]+ passed, 0 failed' sanitizer.log || { echo "the tests did not all pass"; exit 1; }
+          n=$(grep -c 'SUMMARY: ThreadSanitizer' sanitizer.log || true)
+          if [ "$n" != 0 ]; then
+            echo "::warning title=ThreadSanitizer::$n data race report(s), informational (see the job log)"
+            { echo "### ThreadSanitizer reports"; grep 'SUMMARY: ThreadSanitizer' sanitizer.log | sort | uniq -c; } >> "$GITHUB_STEP_SUMMARY"
+          fi
   rust:
     timeout-minutes: 30
     strategy:
