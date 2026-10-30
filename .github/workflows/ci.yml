@@ -159,7 +159,7 @@ jobs:
       - name: UI tests (the real windows driven in-process under Xvfb, golden screenshots)
         timeout-minutes: 10
         working-directory: apps/linux
-        env: { VPNGATE_UI_TESTS: '1' }
+        env: { VPNGATE_UI_TESTS: '1', VPNGATE_UI_RECORD: '1' }  # TEMP record
         run: |
           sudo sysctl -w kernel.yama.ptrace_scope=0
           xvfb-run -a -s '-screen 0 1280x1024x24' cargo test --locked --test ui -- --nocapture
