@@ -40,14 +40,15 @@ Report anything that fails with the log (`install.log`, `%LocalAppData%\VPNGate`
 **Automated in CI** (the `deb` job, ubuntu-latest): `scripts/build-deb.sh` builds `vpn-gate_<version>_<arch>.deb`;
 `scripts/test-deb.sh` installs it, checks the `vpngate` group, the enabled and active unit, the installed files, a `status`
 reply over `/run/vpngate.sock`, the restart after `kill -9`, `remove` (unit gone, group kept) and `purge` (state and group gone).
-The group membership of the installing user in a fresh login session, socket access for members and refusal for others, and a real keyring round trip are covered too. A tun device and routes are covered by the `softether-netns` job. Not covered: the GTK window, the tray.
+The group membership of the installing user in a fresh login session, socket access for members and refusal for others, and a real keyring round trip are covered too. A tun device and routes are covered by the `softether-netns` job. The GTK windows (list, filters, sorting, column chooser, context-menu actions, details, accounts and editor, Settings and routing rules, history, log, disclaimer) are driven in-process under Xvfb with golden screenshots, and the tray item and menu are checked against a fake `StatusNotifierWatcher` (the `gtk` job). Not covered: a real desktop session (GNOME's AppIndicator extension, window decorations, real right-click and drag gestures), and the first look of the screenshots on your own theme.
 
 Get `vpn-gate-deb` from the latest green `deb` CI job.
 
 1. **Install.** `sudo apt install ./vpn-gate_*.deb`. It prints that your user was added to the `vpngate` group; log out and in.
    `id` lists `vpngate`; `systemctl status vpngate` is active.
-2. **App.** Start "VPN Gate" from the application menu (icon present). The window opens, the list is filled, the status shows
-   the daemon is reachable. Compare against UI-SPEC.md. On GNOME the tray needs the AppIndicator extension.
+2. **App.** Start "VPN Gate" from the application menu (icon present). The window opens on your desktop and the tray icon shows
+   (on GNOME the tray needs the AppIndicator extension). What the windows contain and how they react is covered by the `gtk` job
+   (widget tests and screenshots); only look for what a virtual display cannot show: your theme, real clicks and drags.
 3. **Connect.** Connect to a relay: `ip route` shows `0.0.0.0/1` and `128.0.0.0/1` via `vpngate0`, the public IP changes,
    `resolvectl status` shows the VPN resolver with `~.`, IPv6 is blocked. Disconnect restores routes and DNS.
 4. **Command line.** `sudo scripts/e2e-tunnel-linux.sh <server-ip>` (get a live one from the app or `vpngate-daemon --probe`) prints
