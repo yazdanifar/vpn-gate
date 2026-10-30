@@ -77,6 +77,22 @@ jobs:
             echo "::warning title=ThreadSanitizer::$n data race report(s), informational (see the job log)"
             { echo "### ThreadSanitizer reports"; grep 'SUMMARY: ThreadSanitizer' sanitizer.log | sort | uniq -c; } >> "$GITHUB_STEP_SUMMARY"
           fi
+  screenshots:
+    timeout-minutes: 20
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      # SwiftUI views rendered off-screen and diffed with Tests/Fixtures/screenshots (see CONTRIBUTING.md). A missing or
+      # different golden fails the step and the actual/diff images are uploaded below.
+      - name: Screenshot tests of the app's views
+        run: |
+          set -o pipefail
+          scripts/test-ui.sh 2>&1 | tee screenshots.log
+          grep -Eq '^[0-9]+ passed, 0 failed' screenshots.log
+      - name: Actual and diff images
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with: { name: screenshot-actual-and-diff, path: build/screenshots, if-no-files-found: ignore }
   rust:
     timeout-minutes: 30
     strategy:

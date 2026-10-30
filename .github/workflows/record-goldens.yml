@@ -1,0 +1,20 @@
+name: Record screenshot goldens
+# Screenshot goldens (Tests/Fixtures/screenshots) depend on the OS and its font rendering, so they are recorded on the
+# CI runner. Run this (Actions tab, or `gh workflow run record-goldens.yml --ref <branch>`), download the artifact,
+# look at the images, copy them into Tests/Fixtures/screenshots and commit. The CI `screenshots` job then compares.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    timeout-minutes: 20
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Render every view and write the PNGs
+        run: scripts/test-ui.sh --record
+      - uses: actions/upload-artifact@v7
+        with: { name: screenshot-goldens, path: Tests/Fixtures/screenshots/*.png, if-no-files-found: error }
