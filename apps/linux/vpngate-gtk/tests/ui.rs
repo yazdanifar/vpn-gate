@@ -168,28 +168,42 @@ fn toplevel(title: &str) -> gtk::Window {
     find_it().expect("window")
 }
 
-/// The dialog on top of an `AdwApplicationWindow` / `AdwWindow`, waiting for it to appear.
+/// The dialog on top of an `AdwApplicationWindow` / `AdwWindow`, if any.
+fn top_dialog(win: &gtk::Window) -> Option<adw::Dialog> {
+    if let Some(w) = win.downcast_ref::<adw::ApplicationWindow>() {
+        w.visible_dialog()
+    } else {
+        win.downcast_ref::<adw::Window>().and_then(|w| w.visible_dialog())
+    }
+}
+
+/// The dialog on top of the window, waiting for it to appear.
 fn dialog_of(win: &gtk::Window) -> adw::Dialog {
-    let top = || {
-        if let Some(w) = win.downcast_ref::<adw::ApplicationWindow>() {
-            w.visible_dialog()
-        } else {
-            win.downcast_ref::<adw::Window>().and_then(|w| w.visible_dialog())
-        }
-    };
-    wait_until("a dialog", || top().is_some());
-    top().expect("dialog")
+    wait_until("a dialog", || top_dialog(win).is_some());
+    top_dialog(win).expect("dialog")
 }
 
 fn wait_no_dialog(win: &gtk::Window) {
-    let top = || {
-        if let Some(w) = win.downcast_ref::<adw::ApplicationWindow>() {
-            w.visible_dialog()
-        } else {
-            win.downcast_ref::<adw::Window>().and_then(|w| w.visible_dialog())
-        }
-    };
-    wait_until("the dialog to close", || top().is_none());
+    let top = || top_dialog(win);
+    let start = Instant::now();
+    while top().is_some() && start.elapsed() < Duration::from_secs(3) {
+        pump();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    if let Some(d) = top() {
+        eprintln!(
+            "DIAG dialog still open: type {} title {:?} mapped {} visible {} can_close {}",
+            d.type_().name(),
+            d.title(),
+            d.is_mapped(),
+            d.is_visible(),
+            d.can_close()
+        );
+        d.force_close();
+        settle(500);
+        eprintln!("DIAG after force_close: still open = {}", top().is_some());
+        panic!("the dialog did not close");
+    }
 }
 
 fn string_items(model: &impl IsA<gio::ListModel>) -> Vec<String> {
@@ -830,10 +844,7 @@ fn add_rule(
     row::<adw::EntryRow>(&rule, "Value").set_text(value);
     pump();
     click(&add);
-    wait_until("the rule dialog to close", || {
-        let top = dialog_of(host);
-        top.is::<adw::PreferencesDialog>()
-    });
+    wait_until("the rule dialog to close", || top_dialog(host).is_some_and(|d| d.is::<adw::PreferencesDialog>()));
 }
 
 fn settings_dialog_tabs_and_routing(h: &Harness) {
@@ -938,7 +949,7 @@ fn settings_dialog_tabs_and_routing(h: &Harness) {
     pump();
     assert!(button(&sheet, "Add").is_sensitive());
     click(&button(&sheet, "Cancel"));
-    wait_until("the sheet to close", || dialog_of(&host).is::<adw::PreferencesDialog>());
+    wait_until("the sheet to close", || top_dialog(&host).is_some_and(|d| d.is::<adw::PreferencesDialog>()));
     assert_eq!(rule_values(&r), ["c.example", "a.example"], "Cancel adds nothing");
 
     // Advanced: Show Log… opens the log window
