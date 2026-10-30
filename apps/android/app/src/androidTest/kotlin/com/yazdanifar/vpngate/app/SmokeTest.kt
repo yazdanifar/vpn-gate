@@ -6,12 +6,18 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.hasText
+import android.Manifest
+import androidx.test.rule.GrantPermissionRule
 import org.junit.Rule
 import org.junit.Test
 
 /** Launch the app, agree to the disclaimer and see the bundled server list (the APK ships VPNGate.dat). */
 class SmokeTest {
-    @get:Rule
+    // Without this the system permission dialog takes the focus from the activity and Compose reports no hierarchy.
+    @get:Rule(order = 0)
+    val permission: GrantPermissionRule = GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS)
+
+    @get:Rule(order = 1)
     val rule = createAndroidComposeRule<MainActivity>()
 
     // On a cold emulator the first frame can come late, and querying before it throws "No compose hierarchies".
