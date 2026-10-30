@@ -105,6 +105,7 @@ pub async fn run_connect(
     host: &str,
     port: Option<i64>,
     allow_ipv6: bool,
+    socks_port: Option<i64>,
     shutdown: impl Future<Output = ()>,
 ) {
     let emit: EmitFn = Arc::new(|e| {
@@ -119,7 +120,12 @@ pub async fn run_connect(
         }
     });
     session.set_emit(Some(emit));
-    session.connect(simple_connect_config(host, port, ProxySettings::default(), false, !allow_ipv6));
+    let mut config = simple_connect_config(host, port, ProxySettings::default(), false, !allow_ipv6);
+    if let Some(p) = socks_port {
+        config.tunnel_mode = vpngate_core::ipc::TunnelMode::SocksProxy;
+        config.socks_port = p;
+    }
+    session.connect(config);
     shutdown.await;
     session.disconnect();
 }
@@ -198,7 +204,7 @@ mod tests {
     #[tokio::test]
     async fn connect_mode_connects_once_without_reconnecting() {
         let session = Arc::new(Fake::default());
-        run_connect(session.clone(), "1.2.3.4", Some(992), true, async {}).await;
+        run_connect(session.clone(), "1.2.3.4", Some(992), true, None, async {}).await;
         let cfgs = session.connects.lock().unwrap();
         assert_eq!(cfgs.len(), 1);
         assert_eq!(cfgs[0].host, "1.2.3.4");
