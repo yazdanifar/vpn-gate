@@ -46,7 +46,7 @@ jobs:
       - name: Release must be signed with the release key
         run: |
           ls -l dist
-          grep -q "Signer #1 certificate DN" dist/apk-certs.txt
+          grep -q "certificate DN" dist/apk-certs.txt   # apksigner prints "Signer #1 certificate DN" or "V2 Signer: certificate DN"
           if grep -q "Android Debug" dist/apk-certs.txt; then
             echo "::error::Release APK is signed with the debug key; set the ANDROID_KEYSTORE_* secrets"; exit 1
           fi
