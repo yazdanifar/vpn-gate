@@ -23,6 +23,10 @@ public class SecondaryWindowTests
         }
     }
 
+    /// <summary>The editor's real text boxes (a ComboBox's template also holds a hidden TextBox).</summary>
+    private static List<TextBox> EditorBoxes(DependencyObject dialog) =>
+        Probe.All<TextBox>(dialog).Where(t => Probe.Ancestor<ComboBox>(t) is null).ToList();
+
     private static ClientAccount Account(string name, string host, string hub) => new() { Name = name, Host = host, Hub = hub, Username = "alice" };
 
     // MARK: accounts
@@ -76,7 +80,7 @@ public class SecondaryWindowTests
             Assert.False(dialog.IsPrimaryButtonEnabled, "an empty form cannot be saved");
             await Probe.Shot(dialog, "account-editor-empty");
 
-            var boxes = Probe.All<TextBox>(dialog).ToList();
+            var boxes = EditorBoxes(dialog);
             boxes[0].Text = "Lab";           // Setting Name
             boxes[1].Text = "not a host!";   // Host Name / IP Address
             await Probe.Settle(200);
@@ -87,11 +91,15 @@ public class SecondaryWindowTests
             await Probe.Settle(200);
             Assert.True(dialog.IsPrimaryButtonEnabled, "name, host and user are enough");
             await Probe.Shot(dialog, "account-editor-filled");
+            // The sheet scrolls: also render the whole form (the content of its ScrollViewer).
+            var form = Probe.All<ScrollViewer>(dialog).Select(x => x.Content).OfType<FrameworkElement>().OrderByDescending(x => x.ActualHeight).First();
+            await Probe.Shot(form, "account-editor-form");
 
             Probe.Invoke(Probe.ButtonNamed(dialog, "Save"));
             await Probe.Until(() => rig.Accounts.Accounts.Count == 1, "the setting to be saved");
             Assert.Equal("Lab", rig.Accounts.Accounts[0].Name);
             Assert.Equal("lab.example.com", rig.Accounts.Accounts[0].Host);
+            Assert.Equal("alice", rig.Accounts.Accounts[0].Username);
             await Probe.Until(() => Probe.HasText(root, "lab.example.com:443"), "the list to show the new row");
         });
     });
@@ -107,7 +115,7 @@ public class SecondaryWindowTests
             var edit = AccountEditor.ShowAsync(w, root.XamlRoot, rig.Vm, rig.Accounts.Accounts[0]);
             var dialog = await Probe.OpenDialog(root.XamlRoot);
             Assert.Equal("Edit VPN Connection Setting", dialog.Title as string);
-            var boxes = Probe.All<TextBox>(dialog).ToList();
+            var boxes = EditorBoxes(dialog);
             Assert.Equal("Home", boxes[0].Text);
             Assert.Equal("vpn.example.com", boxes[1].Text);
             Assert.Equal("HOME", boxes[3].Text);

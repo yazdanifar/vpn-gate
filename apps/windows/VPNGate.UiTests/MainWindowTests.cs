@@ -154,7 +154,8 @@ public class MainWindowTests
     public async Task ConnectedStateShowsTheConnectionCard() => await WithMain(async (rig, w, root) =>
     {
         rig.Status = FakeDaemon.Snapshot("connected", ",\"server\":\"2.2.2.2\",\"virtualIP\":\"10.21.0.5\",\"bytesIn\":1000,\"bytesOut\":500");
-        await Probe.Until(() => rig.Vm.State == ConnectionState.Connected, "the status poll to report connected");
+        await rig.Vm.PollAsync();
+        await Probe.Until(() => rig.Vm.State == ConnectionState.Connected, "the status poll to report connected. Unhandled: " + string.Join(";", UiHost.Unhandled));
         await Probe.Settle();
         Assert.Equal(ConnectionState.Connected, rig.Vm.State);
         Assert.True(Probe.HasText(root, Fmt.Title(ConnectionState.Connected)));
@@ -162,5 +163,13 @@ public class MainWindowTests
         Assert.True(Probe.HasText(root, "Virtual IP 10.21.0.5"));
         Assert.Contains(Probe.All<Button>(root), b => b.Content as string == rig.Vm.ActionLabel);
         await Probe.Shot(root, "main-connected");
+    });
+
+    [Fact]
+    public async Task TheWindowPollsTheServiceOnATimer() => await WithMain(async (rig, w, root) =>
+    {
+        int Polls() => rig.Daemon.Requests.Count(r => (string?)r["cmd"] == "status");
+        var before = Polls();
+        await Probe.Until(() => Polls() >= before + 2, "two more status polls from the window's timer", seconds: 20);
     });
 }

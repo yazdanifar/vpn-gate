@@ -63,10 +63,10 @@ public class SmokeTests
         var dir = Path.Combine(Path.GetTempPath(), "vg-smoke-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(dir);
         await using var daemon = new FakeDaemon().Start();
-        var list = ListJson();
+        var listJson = ListJson();
         daemon.Respond = r => (string?)r["cmd"] switch
         {
-            "listServers" or "refreshServers" => new[] { $"{{\"reply\":\"{r["cmd"]}\",\"id\":{r["id"]},\"ok\":true,\"result\":{list}}}" },
+            "listServers" or "refreshServers" => new[] { $"{{\"reply\":\"{r["cmd"]}\",\"id\":{r["id"]},\"ok\":true,\"result\":{listJson}}}" },
             "status" => new[] { FakeDaemon.Snapshot("disconnected") },
             _ => Array.Empty<string>(),
         };
