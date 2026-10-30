@@ -40,7 +40,7 @@ Report anything that fails with the log (`install.log`, `%LocalAppData%\VPNGate`
 **Automated in CI** (the `deb` job, ubuntu-latest): `scripts/build-deb.sh` builds `vpn-gate_<version>_<arch>.deb`;
 `scripts/test-deb.sh` installs it, checks the `vpngate` group, the enabled and active unit, the installed files, a `status`
 reply over `/run/vpngate.sock`, the restart after `kill -9`, `remove` (unit gone, group kept) and `purge` (state and group gone).
-Not covered: a tun device and routes (CI has no relay), the GTK window, the tray.
+The group membership of the installing user in a fresh login session, socket access for members and refusal for others, and a real keyring round trip are covered too. A tun device and routes are covered by the `softether-netns` job. Not covered: the GTK window, the tray.
 
 Get `vpn-gate-deb` from the latest green `deb` CI job.
 

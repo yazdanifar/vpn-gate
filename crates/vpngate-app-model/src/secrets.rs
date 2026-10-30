@@ -154,4 +154,22 @@ mod tests {
         let s = SecretTool::with_runner(Gone);
         assert!(!s.set("k", "v") && s.get("k").is_none());
     }
+
+    /// Against a real Secret Service. The `deb` CI job runs it inside `dbus-run-session` with an unlocked
+    /// gnome-keyring-daemon:  cargo test -p vpngate-app-model real_secret_service -- --ignored
+    #[test]
+    #[ignore = "needs secret-tool and an unlocked Secret Service on the session bus"]
+    fn real_secret_service_round_trip() {
+        let s = SecretTool::new();
+        let key = format!("ci-roundtrip-{}", std::process::id());
+        assert_eq!(s.get(&key), None, "starts empty");
+        assert!(s.set(&key, "p@ss w0rd with spaces\nand a newline"), "the keyring accepted the secret");
+        assert_eq!(s.get(&key).as_deref(), Some("p@ss w0rd with spaces\nand a newline"));
+        let dynm: &dyn SecretStore = &s;
+        assert!(dynm.set_bytes(&format!("{key}-bin"), &[0, 1, 2, 254, 255]));
+        assert_eq!(dynm.get_bytes(&format!("{key}-bin")), Some(vec![0, 1, 2, 254, 255]));
+        s.delete(&key);
+        s.delete(&format!("{key}-bin"));
+        assert_eq!(s.get(&key), None, "deleted");
+    }
 }
