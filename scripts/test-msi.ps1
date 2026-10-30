@@ -68,4 +68,8 @@ Check ($p.ExitCode -eq 0) "msiexec uninstall exit code $($p.ExitCode)"
 Check ($null -eq (ServiceState)) 'service removed'
 Check (-not (Test-Path $prog)) 'program folder removed'
 Check (-not (Test-Path $data)) 'data folder removed'
+Check (-not (Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\VPN Gate.lnk")) 'Start menu shortcut removed'
+Check ($null -eq (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq 'VPN Gate' })) 'no Programs and Features entry left'
+Check (@(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'VPNGate*' -or $_.InterfaceDescription -like '*Wintun*' }).Count -eq 0) 'no VPNGate/Wintun adapter left'
+Check ($null -eq (Get-Process -Name 'vpngate-daemon', 'VPNGate' -ErrorAction SilentlyContinue)) 'no VPN Gate process left'
 Write-Host 'MSI smoke test passed'

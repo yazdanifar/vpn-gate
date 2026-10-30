@@ -47,6 +47,8 @@ jobs:
         run: scripts/build-pkg.sh
       - name: Test
         run: scripts/test.sh --each
+      - name: Install the .pkg, helper job, IPC, KeepAlive restart, reinstall (runner is a disposable machine)
+        run: scripts/test-pkg.sh
       - uses: actions/upload-artifact@v7
         with: { name: vpn-gate-pkg, path: build/VPN Gate.pkg }
   rust:
@@ -174,11 +176,15 @@ jobs:
           key: ${{ hashFiles('apps/linux/Cargo.lock') }}
           save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
       - name: GTK4 and libadwaita development files
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev desktop-file-utils
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev desktop-file-utils libsecret-tools gnome-keyring dbus-user-session
       - name: Build the .deb (daemon, GTK app, systemd unit, desktop file)
         run: scripts/build-deb.sh
       - name: Package contents
         run: dpkg-deb --info build/vpn-gate_*.deb && dpkg-deb --contents build/vpn-gate_*.deb
+      - name: Real Secret Service round trip (gnome-keyring unlocked inside a private session bus)
+        run: |
+          dbus-run-session -- bash -c 'echo -n ci | gnome-keyring-daemon --unlock --components=secrets >/dev/null &&
+            cargo test --locked -p vpngate-app-model real_secret_service -- --ignored --nocapture'
       - name: Install, group, unit, IPC, crash restart, remove, purge (runner is a disposable machine)
         run: scripts/test-deb.sh
       - uses: actions/upload-artifact@v7

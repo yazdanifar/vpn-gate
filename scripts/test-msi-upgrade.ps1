@@ -36,7 +36,15 @@ WaitFor 'old service running' { (Get-Service VPNGate -ErrorAction SilentlyContin
 $pid1 = ServicePid
 Set-Content "$data\marker.txt" 'state that must survive an upgrade'
 
-Check ((Msi @('/i', "`"$New`"") 'upgrade-install-new.log') -eq 0) 'newer version installs over it'
+# The app is running while the upgrade replaces its files (what a user with the window open does). Installer exit
+# 3010 means "done, restart needed to replace files in use"; anything else but 0 is a failure.
+$app = Start-Process "$prog\VPNGate.exe" -PassThru
+Start-Sleep -Seconds 8
+$appRunning = -not $app.HasExited
+Write-Host "app running before the upgrade: $appRunning"
+$code = Msi @('/i', "`"$New`"") 'upgrade-install-new.log'
+Check ($code -eq 0 -or $code -eq 3010) "newer version installs over it with the app open (exit code $code)"
+Get-Process -Name 'VPNGate' -ErrorAction SilentlyContinue | Stop-Process -Force
 Check (@(Installed).Count -eq 1) 'exactly one VPN Gate is installed'
 Check ((Installed).DisplayVersion -eq $NewVersion) "installed version went $oldVersion -> $((Installed).DisplayVersion)"
 WaitFor 'service running after the upgrade, as a new process' {
