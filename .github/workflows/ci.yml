@@ -191,6 +191,8 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       - uses: gradle/actions/setup-gradle@v4
+        with:      # its default saves only on main; save from the same pushes as rust-cache
+          cache-read-only: ${{ !(github.event_name == 'push' && github.ref_type == 'branch') }}
       - name: Release keystore (only when the ANDROID_KEYSTORE_BASE64 secret exists; otherwise the debug key signs)
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -229,6 +231,8 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       - uses: gradle/actions/setup-gradle@v4
+        with:      # its default saves only on main; save from the same pushes as rust-cache
+          cache-read-only: ${{ !(github.event_name == 'push' && github.ref_type == 'branch') }}
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
