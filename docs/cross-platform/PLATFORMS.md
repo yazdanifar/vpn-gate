@@ -57,3 +57,17 @@ Get `vpn-gate-deb` from the latest green `deb` CI job.
 6. **Uninstall.** `sudo apt remove vpn-gate` leaves no `vpngate0`, routes or DNS changes; `purge` removes `/var/lib/vpngate`.
 
 Report anything that fails with `journalctl -u vpngate` and the output of the script.
+
+## Android (U28) — a real phone, Android 7.0 or newer
+
+**Automated in CI** (`android-app` and `android-emulator`, ubuntu-latest): JVM tests, the debug APK, the release APK and AAB
+(`vpn-gate-android-release`), and an x86_64 emulator (API 34) smoke test: launch, agree to the disclaimer, the bundled list shows.
+Without secrets the release build is signed with the debug key (installable, not for distribution). For a real key set
+`VPNGATE_KEYSTORE` (path relative to `apps/android`), `VPNGATE_KEYSTORE_PASSWORD`, `VPNGATE_KEY_ALIAS`, `VPNGATE_KEY_PASSWORD`.
+Not covered: the VPN consent, a tunnel, always-on, the notification.
+
+1. **Install.** Sideload the APK from `vpn-gate-android-release`. Launch, agree, the list shows.
+2. **Connect.** Accept the VPN consent. The key icon appears, the public IP changes, DNS works, IPv6 does not leak.
+3. **Drop.** Toggle airplane mode on and off: it reconnects.
+4. **Always-on.** Settings > VPN > VPN Gate > Always-on, plus "Block connections without VPN": it starts after a reboot.
+5. **Compare** the screens with UI-SPEC.md. This is also the first run of U26/U27 on a device.
