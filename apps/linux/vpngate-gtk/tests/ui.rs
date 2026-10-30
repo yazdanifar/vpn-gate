@@ -187,28 +187,7 @@ fn dialog_of(win: &gtk::Window) -> adw::Dialog {
 
 fn wait_no_dialog(win: &gtk::Window) {
     let top = || top_dialog(win);
-    let start = Instant::now();
-    while top().is_some() && start.elapsed() < Duration::from_secs(3) {
-        pump();
-        std::thread::sleep(Duration::from_millis(10));
-    }
-    if let Some(d) = top() {
-        eprintln!(
-            "DIAG dialog still open: type {} title {:?} mapped {} visible {} can_close {}",
-            d.type_().name(),
-            d.title(),
-            d.is_mapped(),
-            d.is_visible(),
-            d.can_close()
-        );
-        let returned = d.close();
-        settle(500);
-        eprintln!("DIAG close() from the test returned {returned}, still open = {}", top().is_some());
-        d.force_close();
-        settle(500);
-        eprintln!("DIAG after force_close: still open = {}", top().is_some());
-        panic!("the dialog did not close");
-    }
+    wait_until("the dialog to close", || top().is_none());
 }
 
 fn string_items(model: &impl IsA<gio::ListModel>) -> Vec<String> {
@@ -517,13 +496,6 @@ fn search_and_clear_filters(h: &Harness) {
     assert!(r.text("list-status").contains("showing 1"), "{}", r.text("list-status"));
     // the country is searched too
     search.set_text("japan");
-    settle(1500);
-    eprintln!(
-        "DIAG search entry {:?}, model {:?}, visible {:?}",
-        search.text(),
-        r.ctl().read(|m| m.filter.search.clone()),
-        r.visible_ids()
-    );
     wait_until("the country search", || r.visible_ids().len() == 2);
     click(&clear);
     wait_until("the filters to clear", || r.visible_ids().len() == 5);

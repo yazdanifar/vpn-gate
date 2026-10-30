@@ -167,7 +167,11 @@ fn the_tray_registers_exposes_its_menu_and_dispatches_clicks() {
                 "{label:?} missing from {connected_entries:?}"
             );
         }
-        let title: String = item.get_property("Title").await.unwrap();
+        // a new proxy: the old one caches the properties it read
+        let fresh = zbus::Proxy::new(&conn, service.as_str(), "/StatusNotifierItem", "org.kde.StatusNotifierItem")
+            .await
+            .unwrap();
+        let title: String = fresh.get_property("Title").await.unwrap();
         assert_eq!(title, "VPN Gate — Connected");
         let (disconnect, _) = connected_entries.iter().find(|(_, t)| t.contains("Disconnect")).unwrap().clone();
         menu.call_method("Event", &(disconnect, "clicked", Value::from(0i32), 0u32)).await.unwrap();
