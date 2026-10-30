@@ -194,7 +194,8 @@ jobs:
           arch: x86_64
           target: google_apis
           working-directory: apps/android
-          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest
+          script: |
+            ./gradlew --no-daemon :app:connectedDebugAndroidTest || { adb logcat -d -t 3000 | grep -E 'AndroidRuntime|vpngate|FATAL|UniFFI|jna|System.err' | tail -80; exit 1; }
   coverage:
     runs-on: ubuntu-latest
     steps:

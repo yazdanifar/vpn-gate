@@ -53,7 +53,7 @@ android {
         // KGP compiles Kotlin files found in the java source dirs too.
         java.srcDir(engineDir.resolve("kotlin"))
         jniLibs.srcDir(engineDir.resolve("jniLibs"))
-        assets.srcDir(generatedAssets)
+        assets.srcDir(files(generatedAssets).builtBy(copyBundledList))
     }
 
     compileOptions {
