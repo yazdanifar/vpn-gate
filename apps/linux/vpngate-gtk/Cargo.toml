@@ -32,8 +32,8 @@ depends = "$auto, iproute2, systemd, libgtk-4-1, libadwaita-1-0 (>= 1.5)"
 recommends = "libsecret-tools"
 maintainer-scripts = "../../../packaging/linux"
 assets = [
-    ["../../../target/release/vpngate-daemon", "usr/bin/vpngate-daemon", "755"],
-    ["../target/release/vpngate-gtk", "usr/bin/vpngate-gtk", "755"],
+    ["target/release/vpngate-daemon", "usr/bin/vpngate-daemon", "755"],
+    ["target/release/vpngate-gtk", "usr/bin/vpngate-gtk", "755"],
     ["../../../assets/VPNGate.dat", "usr/share/vpngate/VPNGate.dat", "644"],
     ["../../../packaging/linux/vpngate.service", "lib/systemd/system/vpngate.service", "644"],
     ["../../../packaging/linux/net.vpngate.App.desktop", "usr/share/applications/net.vpngate.App.desktop", "644"],

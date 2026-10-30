@@ -17,9 +17,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install
+        run: rustup toolchain install      # no arguments: installs what rust-toolchain.toml names
       - name: Build the Rust daemon
         run: scripts/build.sh helper
       - name: Live tests (relays chosen from the bundled signed list unless overridden)
@@ -32,6 +32,6 @@ jobs:
         run: |
           set -o pipefail
           scripts/probe-sample.sh 20 | tee probe-report.txt
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: always()
         with: { name: live-reports, path: "*-report.txt" }

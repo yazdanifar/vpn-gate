@@ -16,7 +16,7 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Tag must match VERSION
         if: github.ref_type == 'tag'
         run: test "v$(tr -d '[:space:]' < VERSION)" = "${GITHUB_REF_NAME}"
@@ -36,9 +36,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # Exact names only: other vpn-gate-* artifacts (debug APK, android engine) must not leak in.
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           pattern: vpn-gate-{pkg,msi,deb,release-apk,release-aab,release-apk-certs}
           path: dist

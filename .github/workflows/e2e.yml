@@ -16,9 +16,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install
+        run: rustup toolchain install      # no arguments: installs what rust-toolchain.toml names
       - name: Build the Rust daemon
         run: scripts/build.sh helper
       - name: Pick a relay that answers
@@ -35,6 +35,6 @@ jobs:
         run: |
           trap 'sudo build/bin/vpngate-helper --daemon --uid 0 >/dev/null 2>&1 & sleep 2; kill $! 2>/dev/null; true' EXIT
           sudo timeout 600 scripts/e2e-tunnel.sh "${{ steps.relay.outputs.ip }}" 2>&1 | tee e2e-report.txt
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: always()
         with: { name: e2e-report, path: e2e-report.txt }
