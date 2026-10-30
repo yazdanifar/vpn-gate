@@ -37,6 +37,7 @@ enum Snapshot {
             .environment(\.locale, Locale(identifier: "en_US"))
             .environment(\.timeZone, TimeZone(identifier: "UTC")!)
             .frame(width: size.width, height: size.height)
+            .background(Color(nsColor: .windowBackgroundColor))
         let host = NSHostingView(rootView: root)
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
