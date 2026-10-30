@@ -79,7 +79,7 @@ jobs:
       - name: Tunnel test with the real utun and routes against a fake relay (macOS runner has passwordless sudo)
         if: runner.os == 'macOS'
         run: |
-          BIN=$(cargo test --locked -p vpngate-daemon --test tunnel_hermetic --no-run --message-format=json | jq -r 'select(.executable != null) | .executable')
+          BIN=$(cargo test --locked -p vpngate-daemon --test tunnel_hermetic --no-run --message-format=json | jq -r 'select(.profile.test and .target.name == "tunnel_hermetic") | .executable')
           sudo "$BIN" --ignored --nocapture
   gtk:
     timeout-minutes: 20
