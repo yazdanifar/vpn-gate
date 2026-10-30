@@ -40,8 +40,14 @@ class SmokeTest {
 
     @Test
     fun launchesAndShowsTheBundledList() {
-        eventually(90_000) { rule.onAllNodes(hasText("Agree and Continue")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithText("Agree and Continue").performClick()
+        // The other emulator tests leave the disclaimer agreed; a fresh install shows it.
+        eventually(90_000) {
+            rule.onAllNodes(hasText("Agree and Continue")).fetchSemanticsNodes().isNotEmpty() ||
+                rule.onAllNodes(hasText("Public VPN Relay Servers on the Earth!", substring = true)).fetchSemanticsNodes().isNotEmpty()
+        }
+        if (rule.onAllNodes(hasText("Agree and Continue")).fetchSemanticsNodes().isNotEmpty()) {
+            rule.onNodeWithText("Agree and Continue").performClick()
+        }
         eventually(90_000) {
             rule.onAllNodes(hasText("Public VPN Relay Servers on the Earth!", substring = true)).fetchSemanticsNodes().isNotEmpty()
         }

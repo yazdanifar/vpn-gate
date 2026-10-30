@@ -261,6 +261,10 @@ jobs:
           VPNGATE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           VPNGATE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew --no-daemon :core:test :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease :app:bundleRelease
+      - name: Merged manifest declares the always-on VPN service (SUPPORTS_ALWAYS_ON, BIND_VPN_SERVICE, android.net.VpnService)
+        run: |
+          (cd apps/android && ./gradlew --no-daemon -q :app:processDebugMainManifest)
+          scripts/check-android-manifest.py apps/android
       - uses: actions/upload-artifact@v7
         with: { name: vpn-gate-apk-debug, path: apps/android/app/build/outputs/apk/debug/*.apk }
       - name: Release APK signing certificate (recorded in the log; release.yml rejects the debug key)
@@ -274,8 +278,24 @@ jobs:
         with: { name: vpn-gate-release-aab, path: apps/android/app/build/outputs/bundle/release/*.aab }
       - uses: actions/upload-artifact@v7
         with: { name: vpn-gate-release-apk-certs, path: apk-certs.txt }
+      - name: Screenshot goldens of every screen (Paparazzi, on the JVM; src/test/snapshots)
+        id: golden
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :app:verifyPaparazziDebug
+      - name: Failing diffs (golden, new render and delta)
+        if: failure() && steps.golden.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with: { name: paparazzi-failures, path: apps/android/app/build/paparazzi/failures, if-no-files-found: ignore }
+      - name: Re-record the goldens from this run, to review and commit when the change is intended
+        if: failure() && steps.golden.outcome == 'failure'
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :app:recordPaparazziDebug
+      - name: Recorded goldens (copy over apps/android/app/src/test/snapshots/images)
+        if: failure() && steps.golden.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with: { name: paparazzi-recorded-goldens, path: apps/android/app/src/test/snapshots/images }
   android-emulator:
-    timeout-minutes: 30
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     needs: [android-engine]
     steps:
@@ -291,7 +311,7 @@ jobs:
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
-      - name: Smoke test on an x86_64 emulator (launch, agree, the bundled list shows)
+      - name: Emulator tests, API 34 x86_64 (smoke, manifest, VPN consent dialog, tunnel through a SoftEther container, always-on, airplane mode, process death)
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 34
@@ -301,8 +321,11 @@ jobs:
           # the pin keeps this copy from drifting silently: compare the defaults when bumping it
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
           working-directory: apps/android
-          script: |
-            ./gradlew --no-daemon :app:connectedDebugAndroidTest || { adb logcat -d -t 3000 | grep -E 'AndroidRuntime|vpngate|FATAL|UniFFI|jna|System.err' | tail -80; exit 1; }
+          script: bash ../../scripts/ci-android-emulator.sh
+      - name: Logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with: { name: android-emulator-logs, path: /tmp/android-emulator-logs, if-no-files-found: ignore }
   coverage:
     timeout-minutes: 20
     runs-on: ubuntu-latest
