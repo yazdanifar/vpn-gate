@@ -80,7 +80,7 @@ public sealed class JsonFileSettings : MemorySettings
     }
 
     public static string DefaultPath =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VPNGate", "settings.json");
+        Path.Combine(DataDir.Path, "settings.json");
 
     public override void Save()
     {

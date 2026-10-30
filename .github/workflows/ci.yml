@@ -159,6 +159,57 @@ jobs:
         run: dotnet test apps/windows/VPNGate.Tests --configuration Release
       - name: WinUI app builds (unpackaged, self-contained)
         run: dotnet build apps/windows/VPNGate.App --configuration Release -p:Platform=x64
+  winui-ui:
+    # U34: the real WinUI views in-process (own XAML Application on a UI thread, a fake daemon on a named pipe), rendered to PNG.
+    timeout-minutes: 30
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with: { dotnet-version: 8.0.x }
+      - name: Build the in-process UI tests (self-contained, unpackaged)
+        run: dotnet build apps/windows/VPNGate.UiTests --configuration Release -p:Platform=x64
+      - name: Run them (the desktop of the runner session is the window station)
+        shell: pwsh
+        run: |
+          $dir = "apps/windows/VPNGate.UiTests/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64"
+          $env:VPNGATE_SHOTS = Join-Path $PWD "shots/ui"
+          & "$dir/VPNGate.UiTests.exe" -xml ui-results.xml -parallel none
+          exit $LASTEXITCODE
+      - name: Tests that ran
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path ui-results.xml) {
+            [xml]$x = Get-Content ui-results.xml
+            $t = $x.SelectNodes('//test')
+            $t | ForEach-Object { "$($_.result)  $($_.name)" }
+            "total: $($t.Count)"
+          } else { "no results file" }
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with: { name: winui-ui-screenshots, path: shots/ui, if-no-files-found: warn }
+  winui-smoke:
+    # U34: FlaUI (UIA3) drives the real VPNGate.exe against a fake daemon: launch, disclaimer, list, filter, screenshot, close.
+    timeout-minutes: 30
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with: { dotnet-version: 8.0.x }
+      - run: dotnet build apps/windows/VPNGate.App --configuration Release -p:Platform=x64
+      - name: FlaUI smoke test of the built app
+        shell: pwsh
+        run: |
+          $env:VPNGATE_EXE = Join-Path $PWD "apps/windows/VPNGate.App/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64/VPNGate.exe"
+          $env:VPNGATE_SHOTS = Join-Path $PWD "shots/smoke"
+          dotnet test apps/windows/VPNGate.Smoke --configuration Release --logger "console;verbosity=detailed"
+          exit $LASTEXITCODE
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with: { name: winui-smoke-screenshots, path: shots/smoke, if-no-files-found: warn }
   msi:
     timeout-minutes: 30
     runs-on: windows-latest

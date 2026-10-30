@@ -128,7 +128,7 @@ public sealed class AccountStore
     }
 
     public static string DefaultPath =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VPNGate", "accounts.json");
+        Path.Combine(DataDir.Path, "accounts.json");
 
     public List<ClientAccount> Accounts { get; private set; } = new();
     /// <summary>Set when the file could not be read completely (the original is kept next to it).</summary>
