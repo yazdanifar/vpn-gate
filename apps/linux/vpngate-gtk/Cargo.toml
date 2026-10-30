@@ -21,7 +21,9 @@ uuid = { version = "1", features = ["v4"] }
 ksni = "0.3"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "time", "sync"] }
 
-# `cargo deb --no-build` (scripts/build-deb.sh): the daemon comes from the root workspace, the app from this one.
+# `cargo deb --no-build` (scripts/build-deb.sh): the daemon comes from the root workspace, the app from this one, and
+# both must be built into the same target dir (the script sets CARGO_TARGET_DIR to the root one), so run it through the
+# script. The assets start with target/release/ because cargo-deb only treats such paths as binaries.
 [package.metadata.deb]
 name = "vpn-gate"
 maintainer = "VPN Gate <noreply@users.noreply.github.com>"

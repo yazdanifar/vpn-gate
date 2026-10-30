@@ -39,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
-        run: rustup toolchain install      # no arguments: installs what rust-toolchain.toml names
+        uses: ./.github/actions/rust-toolchain
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
@@ -59,7 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
-        run: rustup toolchain install      # no arguments: installs what rust-toolchain.toml names
+        uses: ./.github/actions/rust-toolchain
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
@@ -79,7 +79,9 @@ jobs:
       - name: Tunnel test with the real utun and routes against a fake relay (macOS runner has passwordless sudo)
         if: runner.os == 'macOS'
         run: |
-          BIN=$(cargo test --locked -p vpngate-daemon --test tunnel_hermetic --no-run --message-format=json | jq -r 'select(.profile.test and .target.name == "tunnel_hermetic") | .executable')
+          set -o pipefail
+          BIN=$(cargo test --locked -p vpngate-daemon --test tunnel_hermetic --no-run --message-format=json-render-diagnostics | jq -r 'select(.profile.test and .target.name == "tunnel_hermetic") | .executable')
+          [ -n "$BIN" ] || { echo "tunnel_hermetic test binary not found in cargo's output"; exit 1; }
           sudo "$BIN" --ignored --nocapture
   gtk:
     timeout-minutes: 20
@@ -87,7 +89,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
-        run: rustup toolchain install      # no arguments: installs what rust-toolchain.toml names
+        uses: ./.github/actions/rust-toolchain
       - name: GTK4 and libadwaita development files
         run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev
       - uses: Swatinem/rust-cache@v2
@@ -118,7 +120,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
-        run: rustup toolchain install      # no arguments: installs what rust-toolchain.toml names
+        uses: ./.github/actions/rust-toolchain
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
@@ -148,12 +150,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
-        run: rustup toolchain install      # no arguments: installs what rust-toolchain.toml names
+        uses: ./.github/actions/rust-toolchain
       - uses: Swatinem/rust-cache@v2      # also keeps the installed cargo-deb (~/.cargo/bin)
         with:
-          workspaces: |
-            .
-            apps/linux -> target
+          workspaces: .      # apps/linux builds into the root target dir (scripts/build-deb.sh)
+          key: ${{ hashFiles('apps/linux/Cargo.lock') }}
           save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
       - name: GTK4 and libadwaita development files
         run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev desktop-file-utils
@@ -171,7 +172,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
-        run: rustup toolchain install      # no arguments: installs what rust-toolchain.toml names
+        uses: ./.github/actions/rust-toolchain
       - uses: Swatinem/rust-cache@v2      # also keeps the installed cargo-ndk (~/.cargo/bin)
         with:
           save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
@@ -216,6 +217,7 @@ jobs:
       - name: Release APK signing certificate (recorded in the log; release.yml rejects the debug key)
         run: |
           apksigner=$(printf '%s\n' "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          [ -x "$apksigner" ] || { echo "apksigner not found under $ANDROID_HOME/build-tools"; exit 1; }
           "$apksigner" verify --print-certs apps/android/app/build/outputs/apk/release/*.apk | tee apk-certs.txt
       - uses: actions/upload-artifact@v7
         with: { name: vpn-gate-release-apk, path: apps/android/app/build/outputs/apk/release/*.apk }
@@ -241,12 +243,13 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
       - name: Smoke test on an x86_64 emulator (launch, agree, the bundled list shows)
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 34
           arch: x86_64
           target: google_apis
-          # the runner's defaults plus -no-metrics: the emulator warns its metrics prompt will become blocking
+          # v2.38.0's default options plus -no-metrics (the emulator warns its metrics prompt will become blocking);
+          # the pin keeps this copy from drifting silently: compare the defaults when bumping it
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
           working-directory: apps/android
           script: |
@@ -257,7 +260,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
-        run: rustup toolchain install      # no arguments: installs what rust-toolchain.toml names
+        uses: ./.github/actions/rust-toolchain
       - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: Swatinem/rust-cache@v2
         with:
