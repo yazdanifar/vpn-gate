@@ -129,18 +129,26 @@ jobs:
         uses: actions/upload-artifact@v7
         with: { name: softether-netns-logs, path: /tmp/vpngate-netns*.log, if-no-files-found: ignore }
   gtk:
-    timeout-minutes: 20
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
         uses: ./.github/actions/rust-toolchain
-      - name: GTK4 and libadwaita development files
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev
+      - name: GTK4 and libadwaita, Xvfb and a session bus for the UI tests, fonts and icons for the screenshots
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev xvfb dbus-daemon adwaita-icon-theme fonts-dejavu-core
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/linux -> target
           save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+      - name: TEMP bootstrap (Cargo.lock and rustfmt output as a patch)
+        working-directory: apps/linux
+        run: |
+          cargo metadata --format-version 1 > /dev/null
+          cargo fmt --all
+          git diff > "$RUNNER_TEMP/bootstrap.patch"
+      - uses: actions/upload-artifact@v7
+        with: { name: bootstrap-patch, path: '${{ runner.temp }}/bootstrap.patch' }
       - name: GTK app (apps/linux has its own workspace)
         working-directory: apps/linux
         run: |
@@ -148,6 +156,17 @@ jobs:
           cargo clippy --all-targets --locked -- -D warnings
           cargo test --locked
           cargo build --locked
+      - name: UI tests (the real windows driven in-process under Xvfb, golden screenshots)
+        working-directory: apps/linux
+        env: { VPNGATE_UI_TESTS: '1' }
+        run: xvfb-run -a -s '-screen 0 1280x1024x24' cargo test --locked --test ui -- --nocapture
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with: { name: gtk-ui-actual, path: apps/linux/target/ui-out, if-no-files-found: ignore }
+      - name: Tray (ksni item and menu against a fake StatusNotifierWatcher on a private session bus)
+        working-directory: apps/linux
+        env: { VPNGATE_TRAY_TESTS: '1' }
+        run: dbus-run-session -- cargo test --locked --test tray -- --nocapture
   dotnet:
     timeout-minutes: 20
     runs-on: windows-latest

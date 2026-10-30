@@ -72,16 +72,20 @@ pub fn groups(cfg: Rc<RefCell<RoutingConfig>>, changed: Rc<dyn Fn()>) -> Vec<adw
     vec![defaults, ed.rules.clone()]
 }
 
+/// What a drop on another row does: the rule at `from` ends up at position `to`. `false` when nothing changes.
+pub fn move_rule(rules: &mut Vec<RoutingRule>, from: usize, to: usize) -> bool {
+    if from == to || from >= rules.len() || to >= rules.len() {
+        return false;
+    }
+    let rule = rules.remove(from);
+    rules.insert(to, rule);
+    true
+}
+
 impl Editor {
     /// Moves the rule at `from` to position `to`; `false` when nothing changes.
     fn move_rule(&self, from: usize, to: usize) -> bool {
-        let mut c = self.cfg.borrow_mut();
-        if from == to || from >= c.rules.len() || to >= c.rules.len() {
-            return false;
-        }
-        let rule = c.rules.remove(from);
-        c.rules.insert(to, rule);
-        true
+        move_rule(&mut self.cfg.borrow_mut().rules, from, to)
     }
 
     fn rebuild(self: &Rc<Self>) {

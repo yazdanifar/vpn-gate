@@ -13,7 +13,7 @@ use vpngate_app_model::format;
 use vpngate_app_model::history::History;
 use vpngate_app_model::model::{AppModel, Probe, SortKey};
 use vpngate_app_model::secrets::SecretTool;
-use vpngate_app_model::settings::FileSettings;
+use vpngate_app_model::settings::{FileSettings, SettingsStore};
 use vpngate_app_model::{now_ms, Controller, Stores, Timing};
 use vpngate_core::ipc::ConnectionState;
 use vpngate_core::server_list::VpnServer;
@@ -90,22 +90,44 @@ struct Shown {
     countries: Vec<String>,
 }
 
+/// What the window is built on. The app uses [`build`]; the UI tests pass in-memory stores and no tray.
+pub struct Env {
+    pub socket: String,
+    pub settings: Box<dyn SettingsStore>,
+    pub stores: Stores,
+    pub timing: Timing,
+    /// Whether to register the status-notifier tray icon (a test without a session bus turns it off).
+    pub tray: bool,
+}
+
+/// The window and its controller, for the tests.
+pub struct Built {
+    pub window: adw::ApplicationWindow,
+    pub ctl: Controller,
+}
+
+/// The real app: settings, accounts and history under the XDG config directory, secrets in the keyring.
 pub fn build(app: &adw::Application, rt: Arc<tokio::runtime::Runtime>, socket: String) {
-    let (tx, rx) = async_channel::unbounded::<Ui>();
-    let (ipc, events) = IpcClient::new(socket);
-    let notify = tx.clone();
-    let quit = tx.clone();
     let secrets: Arc<dyn vpngate_app_model::secrets::SecretStore> = Arc::new(SecretTool::new());
     let stores = Stores {
         accounts: AccountStore::new(AccountStore::default_path(), secrets.clone()),
         history: History::new(Some(History::default_path())),
         secrets,
     };
+    let settings = Box::new(FileSettings::new(FileSettings::default_path()));
+    build_with(app, rt, Env { socket, settings, stores, timing: Timing::default(), tray: true });
+}
+
+pub fn build_with(app: &adw::Application, rt: Arc<tokio::runtime::Runtime>, env: Env) -> Built {
+    let (tx, rx) = async_channel::unbounded::<Ui>();
+    let (ipc, events) = IpcClient::new(env.socket);
+    let notify = tx.clone();
+    let quit = tx.clone();
     let ctl = Controller::new(
         ipc,
-        Box::new(FileSettings::new(FileSettings::default_path())),
-        stores,
-        Timing::default(),
+        env.settings,
+        env.stores,
+        env.timing,
         move || {
             let _ = notify.try_send(Ui::Changed);
         },
@@ -130,12 +152,18 @@ pub fn build(app: &adw::Application, rt: Arc<tokio::runtime::Runtime>, socket: S
         AccountsWindow::new(&window, &ctx, move || w.present())
     };
     let history = HistoryWindow::new(&window, &ctx);
-    let tray_tx = {
+    let tray_tx = env.tray.then(|| {
         let tx = tx.clone();
         tray::spawn(rt.handle(), move |a| {
             let _ = tx.try_send(Ui::Tray(a));
         })
-    };
+    });
+    // The loops below stop with the window (the tests build and destroy many).
+    let alive = Rc::new(Cell::new(true));
+    {
+        let alive = alive.clone();
+        window.connect_destroy(move |_| alive.set(false));
+    }
 
     wire_table(&w, &ctl, &rt, &window);
     wire_filters(&w, &ctl);
@@ -161,7 +189,9 @@ pub fn build(app: &adw::Application, rt: Arc<tokio::runtime::Runtime>, socket: S
             }
             accounts.refresh();
             history.refresh();
-            let _ = tray_tx.send(tray_snapshot(&ctl));
+            if let Some(t) = &tray_tx {
+                let _ = t.send(tray_snapshot(&ctl));
+            }
             if ctl.read(|m| m.show_disclaimer) && !disclaimer_open.replace(true) {
                 show_disclaimer(&window, &ctl, &rt, disclaimer_open.clone());
             }
@@ -172,8 +202,12 @@ pub fn build(app: &adw::Application, rt: Arc<tokio::runtime::Runtime>, socket: S
     {
         let (sync, window, app, ctl, rt, log) =
             (sync.clone(), window.clone(), app.clone(), ctl.clone(), rt.clone(), log.clone());
+        let alive = alive.clone();
         glib::spawn_future_local(async move {
             while let Ok(msg) = rx.recv().await {
+                if !alive.get() {
+                    break;
+                }
                 let mut msgs = vec![msg];
                 while let Ok(m) = rx.try_recv() {
                     msgs.push(m);
@@ -193,6 +227,9 @@ pub fn build(app: &adw::Application, rt: Arc<tokio::runtime::Runtime>, socket: S
     {
         let sync = sync.clone();
         glib::timeout_add_seconds_local(1, move || {
+            if !alive.get() {
+                return glib::ControlFlow::Break;
+            }
             sync();
             glib::ControlFlow::Continue
         });
@@ -210,6 +247,7 @@ pub fn build(app: &adw::Application, rt: Arc<tokio::runtime::Runtime>, socket: S
     });
     sync();
     window.present();
+    Built { window, ctl }
 }
 
 fn widgets() -> Widgets {
@@ -231,7 +269,7 @@ fn widgets() -> Widgets {
     sort.set_tooltip_text(Some("Sort by"));
     let country = gtk::DropDown::new(Some(country_list.clone()), gtk::Expression::NONE);
     country.set_tooltip_text(Some("Country"));
-    Widgets {
+    let w = Widgets {
         state: label(&["title-3"]),
         spinner: gtk::Spinner::new(),
         server: label(&[]),
@@ -273,7 +311,32 @@ fn widgets() -> Widgets {
         store,
         table: gtk::ColumnView::new(Some(selection.clone())),
         selection,
+    };
+    // Names for the UI tests (tests/ui.rs finds widgets by them).
+    let named: [(&gtk::Widget, &str); 18] = [
+        (w.state.upcast_ref(), "state"),
+        (w.server.upcast_ref(), "server"),
+        (w.notice.upcast_ref(), "notice"),
+        (w.list_status.upcast_ref(), "list-status"),
+        (w.search.upcast_ref(), "search"),
+        (w.country.upcast_ref(), "country"),
+        (w.logging.upcast_ref(), "logging"),
+        (w.sort.upcast_ref(), "sort"),
+        (w.descending.upcast_ref(), "descending"),
+        (w.favorites_only.upcast_ref(), "favorites-only"),
+        (w.clear.upcast_ref(), "clear-filters"),
+        (w.refresh.upcast_ref(), "refresh"),
+        (w.favorite.upcast_ref(), "favorite"),
+        (w.details.upcast_ref(), "details"),
+        (w.test.upcast_ref(), "test"),
+        (w.columns_button.upcast_ref(), "columns"),
+        (w.action.upcast_ref(), "action"),
+        (w.table.upcast_ref(), "table"),
+    ];
+    for (widget, name) in named {
+        widget.set_widget_name(name);
     }
+    w
 }
 
 fn layout(w: &Widgets) -> adw::ToolbarView {
@@ -448,16 +511,22 @@ fn column_for(key: &'static str, title: &str, first: bool, ctl: &Controller) -> 
     col
 }
 
-/// The right-click menu of a row (UI-SPEC 4): Connect (when disconnected), Server Details, favorite toggle.
-fn row_menu(anchor: &gtk::Label, ctl: &Controller, x: f64, y: f64) {
+/// The entries of a row's context menu: Connect (when disconnected), Server Details, favorite toggle.
+pub fn row_menu_model(can_connect: bool, is_favorite: bool) -> gio::Menu {
     let menu = gio::Menu::new();
-    let (connect, favorite) =
-        ctl.read(|m| (m.state == ConnectionState::Disconnected, m.selected_server().is_some_and(|s| m.is_favorite(s))));
-    if connect {
+    if can_connect {
         menu.append(Some("Connect to the VPN Server"), Some("row.connect"));
     }
     menu.append(Some("Server Details…"), Some("row.details"));
-    menu.append(Some(if favorite { "Remove from Favorites" } else { "Add to Favorites" }), Some("row.favorite"));
+    menu.append(Some(if is_favorite { "Remove from Favorites" } else { "Add to Favorites" }), Some("row.favorite"));
+    menu
+}
+
+/// The right-click menu of a row (UI-SPEC 4).
+fn row_menu(anchor: &gtk::Label, ctl: &Controller, x: f64, y: f64) {
+    let (connect, favorite) =
+        ctl.read(|m| (m.state == ConnectionState::Disconnected, m.selected_server().is_some_and(|s| m.is_favorite(s))));
+    let menu = row_menu_model(connect, favorite);
     let popover = gtk::PopoverMenu::from_model(Some(&menu));
     popover.set_parent(anchor);
     popover.set_has_arrow(false);
@@ -559,6 +628,7 @@ fn wire_column_chooser(w: &Rc<Widgets>, ctl: &Controller) {
     let list = gtk::Box::new(gtk::Orientation::Vertical, 2);
     for def in columns::all() {
         let check = gtk::CheckButton::with_label(def.title);
+        check.set_widget_name(&format!("col-{}", def.key));
         let table = w.table.clone();
         let cols = w.table.columns();
         let visible = (0..cols.n_items())

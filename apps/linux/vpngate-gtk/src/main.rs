@@ -1,24 +1,14 @@
 //! VPN Gate for Linux: the GTK4 / libadwaita front end. All state and daemon logic lives in `vpngate-app-model`; this crate
-//! is widgets, the tray and the glue between the tokio runtime and the GTK main loop.
-
-mod account_editor;
-mod accounts_window;
-mod ctx;
-mod details;
-mod history_window;
-mod log_window;
-mod routing_editor;
-mod settings_window;
-mod tray;
-mod window;
+//! is widgets, the tray and the glue between the tokio runtime and the GTK main loop (the modules are in `lib.rs` so the
+//! UI tests in `tests/` can build the windows).
 
 use std::sync::Arc;
 
 use adw::prelude::*;
+use vpngate_gtk::{window, APP_ID};
 
 /// Where the daemon listens (`vpngate-daemon::backend::default_socket_path` on Linux); `VPNGATE_SOCKET` overrides it.
 const DEFAULT_SOCKET: &str = "/run/vpngate.sock";
-pub const APP_ID: &str = "net.vpngate.App";
 
 fn main() -> gtk::glib::ExitCode {
     let rt = Arc::new(
