@@ -16,7 +16,7 @@ pub struct AccountsWindow {
     notice: gtk::Label,
     buttons: [gtk::Button; 5],
     /// What the list shows now, to rebuild only on change.
-    shown: RefCell<Vec<String>>,
+    shown: RefCell<Option<Vec<String>>>,
     ids: RefCell<Vec<Uuid>>,
     ctx: Ctx,
 }
@@ -69,7 +69,7 @@ impl AccountsWindow {
             list,
             notice,
             buttons,
-            shown: RefCell::new(Vec::new()),
+            shown: RefCell::new(None),
             ids: RefCell::new(Vec::new()),
             ctx: ctx.clone(),
         });
@@ -175,7 +175,7 @@ impl AccountsWindow {
         });
         self.notice.set_visible(notice.is_some());
         self.notice.set_text(notice.as_deref().unwrap_or(""));
-        if *self.shown.borrow() != rows {
+        if self.shown.borrow().as_ref() != Some(&rows) {
             let keep = self.selected();
             while let Some(r) = self.list.first_child() {
                 self.list.remove(&r);
@@ -200,7 +200,7 @@ impl AccountsWindow {
                 }
                 self.list.append(&row);
             }
-            *self.shown.borrow_mut() = rows;
+            *self.shown.borrow_mut() = Some(rows);
             *self.ids.borrow_mut() = ids;
             if let Some(i) = keep.and_then(|k| self.ids.borrow().iter().position(|x| *x == k)) {
                 self.list.select_row(self.list.row_at_index(i as i32).as_ref());
