@@ -16,6 +16,9 @@ DAEMON=${VPNGATE_DAEMON:-target/release/vpngate-daemon}
 [[ -x $DAEMON ]] || { echo "$DAEMON not found: cargo build --release -p vpngate-daemon"; exit 2; }
 NS=vgtest HOST_IP=10.200.0.1 NS_IP=10.200.0.2
 CONTAINER=vgtest-softether
+# softethervpn/vpnserver:stable as pulled by the last green run (pinned so an upstream change cannot break CI unseen).
+IMAGE=softethervpn/vpnserver@sha256:0007de9b4e2a0aaf0d10da3401bb54ba0afe45929a2df8f26ea0b3b04d51cea7
+SOCKS_PORT=1080
 WEB_PORT=8080
 LOG=/tmp/vpngate-netns.log
 WEB_LOG=/tmp/vpngate-netns-web.log
@@ -42,7 +45,7 @@ trap cleanup EXIT
 
 echo "== SoftEther server"
 docker rm -f "$CONTAINER" >/dev/null 2>&1
-docker run -d --name "$CONTAINER" -p 443:443 softethervpn/vpnserver:stable >/dev/null || { echo "cannot start the container"; exit 2; }
+docker run -d --name "$CONTAINER" -p 443:443 $IMAGE >/dev/null || { echo "cannot start the container"; exit 2; }
 VPNCMD=$(docker exec "$CONTAINER" sh -c 'command -v vpncmd || find / -name vpncmd -type f 2>/dev/null | head -1')
 [[ -n $VPNCMD ]] || { echo "vpncmd not found in the image"; exit 2; }
 # The image sets no admin password (the server password is blank). stdin is /dev/null and a timeout bounds each call,
@@ -107,6 +110,14 @@ run_case() {   # $1 = how to stop: INT | TERM | KILL
   FIRST_NS=$(nsx grep -m1 '^nameserver' /etc/resolv.conf | awk '{print $2}')
   if [[ -n $FIRST_NS && $FIRST_NS != "$HOST_IP" ]]; then ok "resolv.conf points at the VPN resolver ($FIRST_NS)"
   else bad "resolv.conf still has '$FIRST_NS'"; echo "---- daemon log"; cat "$LOG"; fi
+  # IPv6 is blocked by pointing both halves of the v6 space at the tunnel (the tun drops it). Neither a global (::/1)
+  # nor a ULA/other (8000::/1) destination may leave via the namespace's physical link.
+  for a in 2001:db8::1 fd00::1; do
+    DEV=$(nsx ip -6 route get "$a" 2>&1 | grep -o 'dev [^ ]*' | head -1 | awk '{print $2}')
+    [[ -n $DEV && $DEV != vg-ns ]] && ok "IPv6 $a is routed to $DEV, not vg-ns (blocked)" || bad "IPv6 $a goes via '$DEV'"
+  done
+  if nsx curl -s -g -6 -m 3 -o /dev/null "http://[2001:db8::1]:$WEB_PORT/"; then bad "an IPv6 request succeeded while connected"
+  else ok "an IPv6 request fails while connected"; fi
   case $1 in
     INT) kill -INT $PID ;; TERM) kill -TERM $PID ;; KILL) kill -9 $PID ;;
   esac
@@ -129,6 +140,35 @@ run_case() {   # $1 = how to stop: INT | TERM | KILL
 run_case INT
 run_case TERM
 run_case KILL
+
+run_socks_case() {
+  echo "== SOCKS5 proxy mode (no routes captured), then stop with INT"
+  : > "$LOG"
+  in_ns "$DAEMON" --connect "$HOST_IP" --port 443 --socks "$SOCKS_PORT" > "$LOG" 2>&1 &
+  PID=$!
+  for _ in $(seq 1 60); do grep -q "\[connected\]" "$LOG" && break; kill -0 $PID 2>/dev/null || break; sleep 0.5; done
+  if ! grep -q "\[connected\]" "$LOG"; then bad "SOCKS mode never connected"; cat "$LOG"; kill -9 $PID 2>/dev/null; return; fi
+  ok "SOCKS mode connected: $(grep '\[connected\]' "$LOG" | head -1)"
+  sleep 2
+  ROUTES=$(nsx ip -4 route show)
+  grep -q "^0.0.0.0/1 \|^128.0.0.0/1 " <<< "$ROUTES" && { bad "SOCKS mode captured the default route"; echo "$ROUTES"; } || ok "SOCKS mode leaves the default route alone"
+  if nsx curl -s -m 15 -x "socks5h://127.0.0.1:$SOCKS_PORT" -o /dev/null "http://$DOCKER_GW:$WEB_PORT/socks-flow"; then
+    SRC=$(web_source socks-flow)
+    [[ -n $SRC && $SRC != "$NS_IP" ]] && ok "SOCKS5 TCP flow goes through SecureNAT (the server saw $SRC)" || bad "server saw '$SRC' for the SOCKS request"
+  else bad "request through the SOCKS5 proxy failed"; echo "---- daemon log"; cat "$LOG"; fi
+  curl_ns socks-direct && [[ $(web_source socks-direct) == "$NS_IP" ]] && ok "a direct request in SOCKS mode still goes out directly ($NS_IP)" || bad "direct request in SOCKS mode did not stay direct"
+  kill -INT $PID
+  for _ in $(seq 1 40); do kill -0 $PID 2>/dev/null || break; sleep 0.5; done
+  if kill -0 $PID 2>/dev/null; then bad "daemon still running 20 s after SIGINT (SOCKS)"; kill -9 $PID; fi
+  wait $PID 2>/dev/null
+  sleep 1
+  snap > /tmp/vpngate-netns.after
+  if diff -q /tmp/vpngate-netns.before /tmp/vpngate-netns.after >/dev/null; then ok "SOCKS mode: routes, rules and resolv.conf unchanged after stop"
+  else bad "routing/DNS differ after SOCKS mode:"; diff /tmp/vpngate-netns.before /tmp/vpngate-netns.after | head -20; fi
+  nsx curl -s -m 3 -x "socks5h://127.0.0.1:$SOCKS_PORT" -o /dev/null "http://$DOCKER_GW:$WEB_PORT/" && bad "the SOCKS port still answers after stop" || ok "the SOCKS port is closed after stop"
+}
+
+run_socks_case
 host_dns > /tmp/vpngate-netns.host-dns.after
 if diff -q /tmp/vpngate-netns.host-dns.before /tmp/vpngate-netns.host-dns.after >/dev/null; then ok "the host's own DNS configuration was never touched"
 else bad "host DNS configuration changed:"; diff /tmp/vpngate-netns.host-dns.before /tmp/vpngate-netns.host-dns.after | head -20; fi

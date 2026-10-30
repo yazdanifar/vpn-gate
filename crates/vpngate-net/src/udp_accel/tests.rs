@@ -482,23 +482,35 @@ async fn byte_counts_report_data_but_not_keepalives() {
     assert_eq!((bytes_in.load(Ordering::SeqCst), bytes_out.load(Ordering::SeqCst)), (5, 3));
 }
 
-// Timing under Tokio's paused clock: virtual time, so the 1-3 s / 0.5-1 s jitter windows are asserted exactly.
+// Timing under Tokio's paused clock: virtual time, so the 1-3 s / 0.5-1 s jitter windows are asserted without waiting.
+// The stand-in server is a non-blocking std socket polled every virtual millisecond: with a Tokio socket the runtime
+// may jump the clock ahead of the kernel delivering the datagram, which skews the gap on slow runners.
 async fn keepalive_gaps(fast: bool, packets: usize) -> Vec<Duration> {
-    let lb = LoopbackUdp::new().await;
-    let (u, _) = make_udp(Opts { server_port: lb.port, fast, ..Opts::default() }, 5000);
+    let server = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    server.set_nonblocking(true).unwrap();
+    let port = server.local_addr().unwrap().port();
+    let (u, _) = make_udp(Opts { server_port: port, fast, ..Opts::default() }, 5000);
     u.start();
     let mut gaps = Vec::new();
     let mut prev = None;
-    for _ in 0..packets {
-        lb.recv(10.0).await.expect("keep-alive datagram");
-        let now = tokio::time::Instant::now();
-        if let Some(p) = prev {
-            gaps.push(now - p);
+    let mut buf = [0u8; 2048];
+    while gaps.len() + 1 < packets {
+        tokio::time::sleep(Duration::from_millis(1)).await;
+        if server.recv_from(&mut buf).is_ok() {
+            let now = tokio::time::Instant::now();
+            if let Some(p) = prev {
+                gaps.push(now - p);
+            }
+            prev = Some(now);
         }
-        prev = Some(now);
     }
     u.stop();
     gaps
+}
+
+/// The 1 ms polling and task ordering at one instant blur a gap by a few milliseconds either way.
+fn within(g: Duration, lo_ms: u64, hi_ms: u64) -> bool {
+    g + Duration::from_millis(5) >= Duration::from_millis(lo_ms) && g < Duration::from_millis(hi_ms + 5)
 }
 
 #[tokio::test(start_paused = true)]
@@ -506,15 +518,16 @@ async fn keepalives_repeat_every_one_to_three_seconds() {
     let gaps = keepalive_gaps(false, 30).await;
     assert_eq!(gaps.len(), 29);
     for g in gaps {
-        assert!(g >= Duration::from_millis(1000) && g < Duration::from_millis(3000), "{g:?}");
+        assert!(within(g, 1000, 3000), "{g:?}");
     }
 }
 
 #[tokio::test(start_paused = true)]
 async fn fast_disconnect_keepalives_repeat_every_half_to_one_second() {
     let gaps = keepalive_gaps(true, 30).await;
+    assert_eq!(gaps.len(), 29);
     for g in gaps {
-        assert!(g >= Duration::from_millis(500) && g < Duration::from_millis(1000), "{g:?}");
+        assert!(within(g, 500, 1000), "{g:?}");
     }
 }
 
