@@ -20,6 +20,8 @@ pub enum Mode {
         host: String,
         port: Option<i64>,
         allow_ipv6: bool,
+        /// `--socks <port>`: serve a SOCKS5 proxy on 127.0.0.1 instead of capturing the machine.
+        socks_port: Option<i64>,
     },
     Daemon {
         uid: Option<u32>,
@@ -90,6 +92,7 @@ pub fn parse(args: &[String]) -> Args {
             host: host.to_string(),
             port: opt(args, "--port").and_then(|p| p.parse().ok()),
             allow_ipv6: has("--allow-ipv6"),
+            socks_port: opt(args, "--socks").and_then(|p| p.parse().ok()),
         }
     } else if has("--list") {
         Mode::List {
@@ -111,7 +114,7 @@ pub fn parse(args: &[String]) -> Args {
 }
 
 pub const USAGE: &str = "usage: vpngate-daemon --daemon [--uid <uid>] [--socket <path>] [--bundle <VPNGate.dat>] [--cache <VPNGate.dat>] | --connect <host> [--port N] \
-[--allow-ipv6] | --probe <host> [--port N] [--watch-udp [N]] | --list [--bundle <VPNGate.dat>] [--cache <VPNGate.dat>] | --service | --version";
+[--allow-ipv6] [--socks <port>] | --probe <host> [--port N] [--watch-udp [N]] | --list [--bundle <VPNGate.dat>] [--cache <VPNGate.dat>] | --service | --version";
 
 #[cfg(test)]
 mod tests {
@@ -160,7 +163,7 @@ mod tests {
         assert_eq!(a.socket.as_deref(), Some("/tmp/s"));
         assert_eq!(
             parse(&v(&["--connect", "h", "--port", "992", "--allow-ipv6"])).mode,
-            Mode::Connect { host: "h".into(), port: Some(992), allow_ipv6: true }
+            Mode::Connect { host: "h".into(), port: Some(992), allow_ipv6: true, socks_port: None }
         );
         assert_eq!(
             parse(&v(&["--probe", "h", "--watch-udp", "5"])).mode,
