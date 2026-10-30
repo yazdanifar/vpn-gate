@@ -6,7 +6,8 @@
 #
 # The daemon connects to 10.200.0.1:443 (the published container port), captures 0.0.0.0/1 and 128.0.0.0/1 inside the
 # namespace and must reach a web server on the docker0 address *through* SecureNAT: the server then sees the
-# container's address, not the namespace's. SIGINT, SIGTERM and kill -9 + restart must leave routes, rules and
+# container's address, not the namespace's. The namespace gets a private /run and an overlay on /etc, so the daemon
+# can neither reach the host's systemd-resolved nor rewrite the host's /etc/resolv.conf (both would cut the runner off). SIGINT, SIGTERM and kill -9 + restart must leave routes, rules and
 # resolv.conf of the namespace exactly as they were.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -21,14 +22,19 @@ WEB_LOG=/tmp/vpngate-netns-web.log
 FAILS=0
 ok()   { echo "  ok   $*"; }
 bad()  { echo "  FAIL $*"; FAILS=$((FAILS+1)); }
-nsx()  { ip netns exec "$NS" "$@"; }
+PRIV=/tmp/vgpriv
+mkdir -p "$PRIV/run" "$PRIV/up" "$PRIV/work"
+# Every command in the namespace runs in a private mount namespace (ip netns exec) with these two mounts. If a mount
+# fails the command does not run at all.
+NS_PRIV="mount --bind $PRIV/run /run && mount -t overlay overlay -o lowerdir=/etc,upperdir=$PRIV/up,workdir=$PRIV/work /etc"
+nsx()  { ip netns exec "$NS" bash -c "$NS_PRIV && exec \"\$@\"" _ "$@"; }
 
 cleanup() {
   [[ -n ${WEB_PID:-} ]] && kill "$WEB_PID" 2>/dev/null
   pkill -f "$DAEMON --connect $HOST_IP" 2>/dev/null
   ip netns del "$NS" 2>/dev/null
   ip link del vg-host 2>/dev/null
-  rm -rf "/etc/netns/$NS"
+  rm -rf "$PRIV"
   docker logs "$CONTAINER" > /tmp/vpngate-netns-softether.log 2>&1
   docker rm -f "$CONTAINER" >/dev/null 2>&1
 }
@@ -60,10 +66,12 @@ ip addr add "$HOST_IP/24" dev vg-host && ip link set vg-host up
 nsx ip addr add "$NS_IP/24" dev vg-ns
 nsx ip link set vg-ns up; nsx ip link set lo up
 nsx ip route add default via "$HOST_IP"
-mkdir -p "/etc/netns/$NS" && echo "nameserver $HOST_IP" > "/etc/netns/$NS/resolv.conf"
 python3 -m http.server "$WEB_PORT" --bind 0.0.0.0 -d /tmp > "$WEB_LOG" 2>&1 &
 WEB_PID=$!
 sleep 1
+nsx bash -c 'rm -f /etc/resolv.conf && echo "nameserver '"$HOST_IP"'" > /etc/resolv.conf'
+host_dns() { { readlink -f /etc/resolv.conf; cat /etc/resolv.conf; resolvectl status 2>/dev/null; } | grep -v -E 'Current Scopes|DNSSEC|Protocols:'; }
+host_dns > /tmp/vpngate-netns.host-dns.before
 
 # Routes, rules and the namespace's resolv.conf without the volatile parts.
 snap() {
@@ -71,10 +79,8 @@ snap() {
     nsx cat /etc/resolv.conf
   } 2>/dev/null | grep -v -E "^(broadcast|local|multicast|anycast) |tun[0-9]*|vpngate|expires|fe80::" | sed -E 's/ +/ /g; s/ (pref|metric) [0-9]+//' | sort
 }
-# The namespace has no systemd-resolved: mask its sockets so `resolvectl` cannot touch the host's links, whose
-# interface indexes differ from the namespace's. The daemon then takes its resolv.conf fallback.
 # Only for background use (`in_ns cmd &`): it execs, so $! is the daemon itself and kill reaches it.
-in_ns() { exec ip netns exec "$NS" bash -c 'mount -t tmpfs tmpfs /run/dbus 2>/dev/null; mount -t tmpfs tmpfs /run/systemd/resolve 2>/dev/null; exec "$@"' _ "$@"; }
+in_ns() { exec ip netns exec "$NS" bash -c "$NS_PRIV && exec \"\$@\"" _ "$@"; }
 web_source() {   # who the web server saw for the request named $1
   sleep 1; grep "GET /$1 " "$WEB_LOG" | tail -1 | awk '{print $1}'
 }
@@ -109,7 +115,7 @@ run_case() {   # $1 = how to stop: INT | TERM | KILL
   wait $PID 2>/dev/null
   if [[ $1 == KILL ]]; then
     echo "  (daemon killed hard; stale state must be cleaned by the next start)"
-    [[ -s /run/vpngate.state ]] && ok "state file left for recovery" || bad "no state file after kill -9"
+    [[ -s $PRIV/run/vpngate.state ]] && ok "state file left for recovery" || bad "no state file after kill -9"
     in_ns "$DAEMON" --daemon --socket /tmp/vpngate-netns.sock --uid 0 > /tmp/vpngate-netns-daemon.log 2>&1 & DPID=$!
     sleep 2; kill -TERM $DPID 2>/dev/null; wait $DPID 2>/dev/null
   fi
@@ -123,6 +129,9 @@ run_case() {   # $1 = how to stop: INT | TERM | KILL
 run_case INT
 run_case TERM
 run_case KILL
+host_dns > /tmp/vpngate-netns.host-dns.after
+if diff -q /tmp/vpngate-netns.host-dns.before /tmp/vpngate-netns.host-dns.after >/dev/null; then ok "the host's own DNS configuration was never touched"
+else bad "host DNS configuration changed:"; diff /tmp/vpngate-netns.host-dns.before /tmp/vpngate-netns.host-dns.after | head -20; fi
 echo
 [[ $FAILS == 0 ]] && echo "NETNS E2E PASSED" || echo "NETNS E2E FAILED ($FAILS)"
 exit $((FAILS>0))
