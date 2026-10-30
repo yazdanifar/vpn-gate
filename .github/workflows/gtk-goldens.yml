@@ -1,0 +1,29 @@
+name: GTK goldens
+# Re-records the screenshots that apps/linux/vpngate-gtk/tests/ui.rs compares against, on the CI runner image (fonts, theme and
+# Cairo decide the pixels, so they cannot be recorded on a developer machine). Run it from the Actions tab (any branch), download
+# the 'gtk-goldens' artifact, look at the images, and commit them to apps/linux/vpngate-gtk/tests/golden/. A human approves them
+# in the review of that commit; the gating `gtk` job in ci.yml then fails on any visual change.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        uses: ./.github/actions/rust-toolchain
+      - name: GTK4 and libadwaita, Xvfb, fonts and icons (same as the gtk job)
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev xvfb dbus-daemon adwaita-icon-theme fonts-dejavu-core
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: 'apps/linux -> target', save-if: 'false' }
+      - name: Render every window and write the images
+        working-directory: apps/linux
+        env: { VPNGATE_UI_TESTS: '1', VPNGATE_UI_RECORD: '1' }
+        run: xvfb-run -a -s '-screen 0 1280x1024x24' cargo test --locked --test ui -- --nocapture
+      - uses: actions/upload-artifact@v7
+        with: { name: gtk-goldens, path: apps/linux/vpngate-gtk/tests/golden/*.png }

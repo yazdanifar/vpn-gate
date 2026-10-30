@@ -247,7 +247,8 @@ impl Rig {
     }
 
     fn with_stores(h: &Harness, agreed: bool, setup: impl FnOnce(&mut Stores)) -> Rig {
-        let sock = PathBuf::from(format!("/tmp/vgui-{}-{}.sock", std::process::id(), SEQ.fetch_add(1, Ordering::SeqCst)));
+        let sock =
+            PathBuf::from(format!("/tmp/vgui-{}-{}.sock", std::process::id(), SEQ.fetch_add(1, Ordering::SeqCst)));
         let daemon = {
             let _in_runtime = h.rt.enter();
             FakeDaemon::start(&sock).expect("fake daemon")
@@ -263,7 +264,10 @@ impl Rig {
         setup(&mut stores);
         let env = Env {
             socket: sock.to_string_lossy().into_owned(),
-            settings: Box::new(MemorySettings::with(Settings { has_agreed_to_disclaimer: agreed, ..Settings::default() })),
+            settings: Box::new(MemorySettings::with(Settings {
+                has_agreed_to_disclaimer: agreed,
+                ..Settings::default()
+            })),
             stores,
             timing: Timing::default(),
             tray: false,
@@ -321,7 +325,7 @@ impl Rig {
     }
 
     fn open(&self, action: &str, title: &str) -> gtk::Window {
-        self.win().activate_action(action, None).expect("window action");
+        gtk::prelude::WidgetExt::activate_action(self.win(), action, None).expect("window action");
         toplevel(title)
     }
 }
@@ -489,7 +493,9 @@ fn country_and_logging_filters(h: &Harness) {
     select_string(&logging, "No logs only");
     wait_until("the no-logs filter", || r.visible_ids() == ["osaka.opengw.net"]);
     select_string(&logging, "2 weeks or less");
-    wait_until("the two-weeks filter", || r.visible_ids() == ["tokyo1.opengw.net", "osaka.opengw.net", "paris.opengw.net"]);
+    wait_until("the two-weeks filter", || {
+        r.visible_ids() == ["tokyo1.opengw.net", "osaka.opengw.net", "paris.opengw.net"]
+    });
     select_string(&logging, "Any logging policy");
     wait_until("any logging policy", || r.visible_ids().len() == 5);
 }
@@ -500,7 +506,8 @@ fn sort_drop_down_and_direction(h: &Harness) {
     let sort: gtk::DropDown = named(r.win(), "sort");
     assert_eq!(selected_string(&sort), "Total Score");
     select_string(&sort, "Host name");
-    let by_host = ["berlin.opengw.net", "osaka.opengw.net", "paris.opengw.net", "seoul.opengw.net", "tokyo1.opengw.net"];
+    let by_host =
+        ["berlin.opengw.net", "osaka.opengw.net", "paris.opengw.net", "seoul.opengw.net", "tokyo1.opengw.net"];
     wait_until("the host sort", || r.table_ids() == by_host);
     let desc: gtk::ToggleButton = named(r.win(), "descending");
     assert!(!desc.is_active(), "text columns start ascending");
@@ -523,11 +530,15 @@ fn header_click_sorts(h: &Harness) {
     // What a header click does: the column view sorts by that column, its sorter reports the change.
     table.sort_by_column(Some(&speed), gtk::SortType::Ascending);
     wait_until("the model to sort by speed", || r.ctl().read(|m| m.sort_key == SortKey::Speed && !m.sort_descending));
-    let ascending = ["berlin.opengw.net", "paris.opengw.net", "osaka.opengw.net", "seoul.opengw.net", "tokyo1.opengw.net"];
+    let ascending =
+        ["berlin.opengw.net", "paris.opengw.net", "osaka.opengw.net", "seoul.opengw.net", "tokyo1.opengw.net"];
     wait_until("the rows", || r.table_ids() == ascending);
     assert_eq!(selected_string(&named(r.win(), "sort")), "Line Speed", "the drop-down follows the header");
     table.sort_by_column(Some(&speed), gtk::SortType::Descending);
-    wait_until("the descending speed order", || r.table_ids() == ["tokyo1.opengw.net", "seoul.opengw.net", "osaka.opengw.net", "paris.opengw.net", "berlin.opengw.net"]);
+    wait_until("the descending speed order", || {
+        r.table_ids()
+            == ["tokyo1.opengw.net", "seoul.opengw.net", "osaka.opengw.net", "paris.opengw.net", "berlin.opengw.net"]
+    });
     assert!(r.ctl().read(|m| m.sort_descending));
 }
 
@@ -591,7 +602,9 @@ fn row_context_menu_and_actions(h: &Harness) {
     // row.favorite: the favorite toggle of the menu
     table.activate_action("row.favorite", None).expect("row.favorite");
     wait_until("the favorite", || r.ctl().read(|m| m.filter.favorites.contains("tokyo1.opengw.net")));
-    wait_until("the button label", || named::<gtk::Button>(r.win(), "favorite").label().as_deref() == Some("Remove from Favorites"));
+    wait_until("the button label", || {
+        named::<gtk::Button>(r.win(), "favorite").label().as_deref() == Some("Remove from Favorites")
+    });
     let only: gtk::ToggleButton = named(r.win(), "favorites-only");
     click(only.upcast_ref());
     wait_until("favorites only", || r.visible_ids() == ["tokyo1.opengw.net"]);
@@ -745,7 +758,9 @@ fn accounts_window_and_editor(h: &Harness) {
     wait_no_dialog(&win);
     click(&button(&win, "Duplicate"));
     wait_until("the copy", || r.ctl().with_stores(|s| s.accounts.accounts.len()) == 2);
-    wait_until("the copy in the list", || all::<adw::ActionRow>(&win).iter().filter(|r| r.title().starts_with("Home")).count() == 2);
+    wait_until("the copy in the list", || {
+        all::<adw::ActionRow>(&win).iter().filter(|r| r.title().starts_with("Home")).count() == 2
+    });
     list.select_row(list.row_at_index(0).as_ref());
     pump();
     click(&button(&win, "Delete"));
@@ -762,7 +777,13 @@ fn rule_values(r: &Rig) -> Vec<String> {
     r.ctl().settings().routing.rules.iter().map(|x| x.value.clone()).collect()
 }
 
-fn add_rule(settings: &adw::PreferencesDialog, host: &gtk::Window, kind: Option<u32>, action: Option<u32>, value: &str) {
+fn add_rule(
+    settings: &adw::PreferencesDialog,
+    host: &gtk::Window,
+    kind: Option<u32>,
+    action: Option<u32>,
+    value: &str,
+) {
     click(&button(settings, "Add Rule…"));
     let rule = dialog_of(host);
     assert_eq!(rule.title(), "New Rule");
@@ -786,7 +807,7 @@ fn add_rule(settings: &adw::PreferencesDialog, host: &gtk::Window, kind: Option<
 fn settings_dialog_tabs_and_routing(h: &Harness) {
     let r = Rig::new(h, true);
     r.loaded();
-    r.win().activate_action("win.settings", None).expect("win.settings");
+    gtk::prelude::WidgetExt::activate_action(r.win(), "win.settings", None).expect("win.settings");
     let host = r.top();
     let settings = dialog_of(&host).downcast::<adw::PreferencesDialog>().expect("the settings dialog");
     let titles: Vec<String> = all::<adw::PreferencesPage>(&settings).iter().map(|p| p.title().to_string()).collect();
@@ -1001,7 +1022,7 @@ fn golden_account_editor(h: &Harness) {
 fn golden_settings(h: &Harness) {
     let r = Rig::new(h, true);
     r.loaded();
-    r.win().activate_action("win.settings", None).expect("win.settings");
+    gtk::prelude::WidgetExt::activate_action(r.win(), "win.settings", None).expect("win.settings");
     let settings = dialog_of(&r.top()).downcast::<adw::PreferencesDialog>().expect("settings");
     golden("settings-general", &r.top());
     let page = find(&settings, "Routing", |p: &adw::PreferencesPage| p.title() == "Routing");
@@ -1024,7 +1045,12 @@ fn golden_log(h: &Harness) {
     let r = Rig::new(h, true);
     r.loaded();
     r.ctl().change(|m| {
-        for l in ["Connecting to tokyo1.opengw.net (1.1.1.1:443)", "TLS handshake done", "Authenticated as anonymous", "DHCP lease 10.21.0.7"] {
+        for l in [
+            "Connecting to tokyo1.opengw.net (1.1.1.1:443)",
+            "TLS handshake done",
+            "Authenticated as anonymous",
+            "DHCP lease 10.21.0.7",
+        ] {
             m.append_log(l.to_string());
         }
     });
@@ -1066,7 +1092,8 @@ fn main() {
     settings.set_property("gtk-xft-rgba", "none");
     adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceLight);
 
-    let rt = Arc::new(tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().expect("tokio"));
+    let rt =
+        Arc::new(tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().expect("tokio"));
     let app = adw::Application::builder()
         .application_id("net.vpngate.UiTest")
         .flags(gio::ApplicationFlags::NON_UNIQUE)
@@ -1117,7 +1144,11 @@ fn main() {
             }
         }
     }
-    println!("\nui test result: {}. {passed} passed; {} failed", if failed.is_empty() { "ok" } else { "FAILED" }, failed.len());
+    println!(
+        "\nui test result: {}. {passed} passed; {} failed",
+        if failed.is_empty() { "ok" } else { "FAILED" },
+        failed.len()
+    );
     if !failed.is_empty() {
         println!("failed: {}", failed.join(", "));
         std::process::exit(1);

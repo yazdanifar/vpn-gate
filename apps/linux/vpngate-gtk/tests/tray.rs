@@ -107,7 +107,9 @@ fn the_tray_registers_exposes_its_menu_and_dispatches_clicks() {
         // the item registers itself with the watcher
         let service = wait_for("the item to register", || items.lock().unwrap().first().cloned()).await;
         let conn = zbus::Connection::session().await.unwrap();
-        let item = zbus::Proxy::new(&conn, service.as_str(), "/StatusNotifierItem", "org.kde.StatusNotifierItem").await.unwrap();
+        let item = zbus::Proxy::new(&conn, service.as_str(), "/StatusNotifierItem", "org.kde.StatusNotifierItem")
+            .await
+            .unwrap();
         let id: String = item.get_property("Id").await.unwrap();
         assert_eq!(id, "net.vpngate.App");
         let title: String = item.get_property("Title").await.unwrap();
@@ -117,7 +119,8 @@ fn the_tray_registers_exposes_its_menu_and_dispatches_clicks() {
 
         // its menu
         let menu_path: zbus::zvariant::OwnedObjectPath = item.get_property("Menu").await.unwrap();
-        let menu = zbus::Proxy::new(&conn, service.as_str(), menu_path.as_str(), "com.canonical.dbusmenu").await.unwrap();
+        let menu =
+            zbus::Proxy::new(&conn, service.as_str(), menu_path.as_str(), "com.canonical.dbusmenu").await.unwrap();
         let layout: Layout = menu.call("GetLayout", &(0i32, -1i32, Vec::<String>::new())).await.unwrap();
         let shown = entries(&layout);
         let has = |text: &str| shown.iter().any(|(_, t)| t.contains(text));
@@ -159,7 +162,10 @@ fn the_tray_registers_exposes_its_menu_and_dispatches_clicks() {
         tx.send(connected).unwrap();
         let connected_entries = wait_for_layout(&menu, |e| e.iter().any(|(_, t)| t.contains("Disconnect"))).await;
         for label in ["Virtual IP 10.21.0.7", "tokyo1.opengw.net (1.1.1.1)", "Disconnect", "Reconnect"] {
-            assert!(connected_entries.iter().any(|(_, t)| t.contains(label)), "{label:?} missing from {connected_entries:?}");
+            assert!(
+                connected_entries.iter().any(|(_, t)| t.contains(label)),
+                "{label:?} missing from {connected_entries:?}"
+            );
         }
         let title: String = item.get_property("Title").await.unwrap();
         assert_eq!(title, "VPN Gate — Connected");
