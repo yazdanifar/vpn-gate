@@ -4,8 +4,9 @@
 #   emulator --10.0.2.2--> runner:443 --docker--> SoftEther container (hub VPNGATE, anonymous user "vpn", SecureNAT)
 #   emulator --172.17.0.1:8080--> runner's web server (answers with the caller's address)
 #
-# Phases: (1) smoke, manifest and the VPN consent dialog, (2) connect/always-on/airplane against the container,
-# (3) the real process death: kill -9 the app and see the system restart the sticky VPN service, which reconnects.
+# Phases: (1) smoke, manifest and the VPN consent dialog, (2) connect/always-on/airplane against the container.
+# A real kill -9 + system restart of the sticky service cannot be tested here: the shell may not start a BIND_VPN_SERVICE
+# service, and the end of an instrumentation run force-stops the package, which cancels the restart (DECISIONS U35).
 # The container setup mirrors scripts/test-tunnel-netns.sh. Logs go to $OUT.
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -79,36 +80,6 @@ run_instr() {
 run_instr smoke-manifest-consent "$T.SmokeTest,$T.ManifestTest,$T.ConsentTest"
 run_instr tunnel "$T.TunnelTest" -e hermeticWeb "$WEB_URL" -e hermeticServer 10.0.2.2
 
-echo "== the system restarts the sticky VPN service after the process is killed"
-# From the app's own uid (debug build), so the request takes the VPN's path like the app's traffic does.
-peer() { adb shell "run-as $PKG sh -c 'printf \"GET / HTTP/1.0\n\n\" | toybox nc -w 5 $DOCKER_GW $WEB_PORT'" 2>/dev/null | tr -d '\r' | tail -1; }
-await_peer() {   # $1 = what; waits for an answer that differs from the direct one
-  for _ in $(seq 1 90); do
-    got=$(peer)
-    [[ -n $got && $got != "$DIRECT" ]] && { ok "$1: the web server saw $got (direct: $DIRECT)"; return 0; }
-    sleep 2
-  done
-  bad "$1: no tunnelled answer (last '$got', direct '$DIRECT')"; return 1
-}
-DIRECT=$(peer)
-[[ -n $DIRECT ]] && ok "direct answer from the web server: $DIRECT" || bad "no direct answer from the web server"
-# The shell may not start a BIND_VPN_SERVICE service itself (Permission Denial), so an instrumentation run connects
-# and holds the tunnel; killing the app process then ends that run too, and what is left is the system's restart.
-adb shell am instrument -w -e class "$T.HoldTunnelTest" -e hermeticWeb "$WEB_URL" -e hermeticServer 10.0.2.2 "$RUNNER" > "$OUT/hold.txt" 2>&1 &
-HOLD_PID=$!
-await_peer "connected (held by the instrumentation)"
-PID=$(adb shell pidof $PKG | tr -d '\r')
-echo "killing pid $PID"
-DIRECT_BEFORE=$DIRECT
-adb shell run-as $PKG kill -9 "$PID"
-for _ in $(seq 1 30); do
-  NEW=$(adb shell pidof $PKG | tr -d '\r'); [[ -n $NEW && $NEW != "$PID" ]] && break; sleep 1
-done
-[[ -n ${NEW:-} && $NEW != "$PID" ]] && ok "the system restarted the service in a new process ($PID -> $NEW)" || bad "the VPN service was not restarted after kill -9"
-await_peer "reconnected after the restart"
-
-kill "$HOLD_PID" 2>/dev/null
-adb shell dumpsys activity services $PKG | head -40 > "$OUT/services.txt"
 echo
 [[ $FAILS == 0 ]] && echo "ANDROID EMULATOR TESTS PASSED" || echo "ANDROID EMULATOR TESTS FAILED ($FAILS)"
 exit $((FAILS>0))
