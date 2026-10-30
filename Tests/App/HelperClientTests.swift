@@ -62,9 +62,8 @@ func registerHelperClientTests() {
             chmod(url.path, 0o755)
             return url
         }
-        let ok = try stub("""
-        echo '{"servers":[],"source":"Built-in","isFresh":false,"outcome":"synced","serverCount":0}'
-        """)
+        let json = #"{"servers":[],"source":"Built-in","isFresh":false,"outcome":"synced","serverCount":0}"#
+        let ok = try stub("echo '\(json)'")
         let r = await HelperClient.bundledList(binary: ok, list: nil)
         expectEqual(r?.source, .bundle)
         let failing = try stub("echo nope >&2; exit 1")
