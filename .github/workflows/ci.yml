@@ -4,6 +4,9 @@ on:
   pull_request:
   workflow_call:      # release.yml runs the whole suite as its gate and reuses the artifacts
 
+permissions:
+  contents: read      # explicit so the standalone and the release.yml-called runs have the same ceiling
+
 jobs:
   lint:
     runs-on: macos-15
@@ -168,8 +171,8 @@ jobs:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > apps/android/release.jks
-            echo "VPNGATE_KEYSTORE=release.jks" >> "$GITHUB_ENV"
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"   # outside the checkout: never committable or uploadable
+            echo "VPNGATE_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
           fi
       - name: Core tests (JVM), the debug APK, and the release APK + AAB (the runner ships the Android SDK)
         working-directory: apps/android
@@ -180,12 +183,16 @@ jobs:
         run: ./gradlew --no-daemon :core:test :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease :app:bundleRelease
       - uses: actions/upload-artifact@v5
         with: { name: vpn-gate-apk-debug, path: apps/android/app/build/outputs/apk/debug/*.apk }
+      - name: Release APK signing certificate (recorded in the log; release.yml rejects the debug key)
+        run: |
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --print-certs apps/android/app/build/outputs/apk/release/*.apk | tee apk-certs.txt
       - uses: actions/upload-artifact@v5
-        with:
-          name: vpn-gate-android-release
-          path: |
-            apps/android/app/build/outputs/apk/release/*.apk
-            apps/android/app/build/outputs/bundle/release/*.aab
+        with: { name: vpn-gate-release-apk, path: apps/android/app/build/outputs/apk/release/*.apk }
+      - uses: actions/upload-artifact@v5
+        with: { name: vpn-gate-release-aab, path: apps/android/app/build/outputs/bundle/release/*.aab }
+      - uses: actions/upload-artifact@v5
+        with: { name: vpn-gate-release-apk-certs, path: apk-certs.txt }
   android-emulator:
     runs-on: ubuntu-latest
     needs: [android-engine]

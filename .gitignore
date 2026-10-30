@@ -62,3 +62,7 @@ target/
 # .NET
 bin/
 obj/
+
+# Signing keys
+*.jks
+*.keystore
