@@ -99,6 +99,27 @@ connection setting can use its own rules instead of the app-wide list (its edito
 - Not implemented: privacy/stable addresses, DHCPv6, DNS over IPv6/RDNSS, router reachability tracking. When an address
   lifetime expires it is only no longer used; it stays on the utun until disconnect.
 
+### Per-platform features
+The engine is the same Rust code everywhere; the table shows what each app offers. Only macOS has had a live tunnel run
+(see [verification](#what-has-and-has-not-been-verified)); the other platforms are verified by CI and the checklists in
+[PLATFORMS.md](cross-platform/PLATFORMS.md).
+
+| Feature | macOS | Windows | Linux | Android |
+|---|---|---|---|---|
+| Server list, search, filter, sort, favorites | yes | yes | yes | yes |
+| Test Connection (handshake probe column) | yes | not yet | yes | yes |
+| Saved connection settings (accounts), all auth types | yes | yes | yes | yes |
+| Certificate import | PEM/DER/PKCS#12 | PEM/DER/PKCS#12 | PEM/DER/PKCS#12 | PEM/DER/PKCS#12 |
+| Secrets stored in | Keychain | Credential Manager | Secret Service (`secret-tool`) | Keystore (AES-GCM) |
+| Routing rules | all kinds | all kinds | all kinds | IPv4 IP/CIDR bypass only |
+| SOCKS5-only mode | yes | yes | yes | no |
+| IPv6 block, proxy, auto-reconnect | yes | yes | yes | yes (always-on VPN too) |
+| Connection history, server details, log | yes | yes | yes | yes |
+| Run at login | yes | yes | yes | always-on VPN |
+| Privileged process | LaunchDaemon | Windows service | systemd unit | in-process (`VpnService`) |
+| Installer | `.pkg` | `.msi` | `.deb` | `.apk` / `.aab` |
+| Opt-in diagnostics upload | yes | no | no | no |
+
 ### What has and has not been verified
 **Nothing has run against a real VPN Gate server, the real list API, or a live tunnel yet.** Everything is tested with
 in-memory fakes and loopback sockets: a fake SoftEther server (real wire format), a fake hub for DHCP/ARP, recording
