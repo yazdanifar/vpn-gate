@@ -1,7 +1,6 @@
 //! Privileged daemon: `--daemon`, `--connect`, `--probe`, `--version`.
 
 use std::io::Write;
-#[cfg(unix)]
 use std::path::PathBuf;
 use std::process::ExitCode;
 #[cfg(unix)]
@@ -11,7 +10,6 @@ use vpngate_core::ipc::HELPER_VERSION;
 use vpngate_core::validation;
 use vpngate_daemon::args::{self, Mode};
 use vpngate_daemon::backend;
-#[cfg(unix)]
 use vpngate_daemon::engine::Engine;
 use vpngate_daemon::{daemon, probe};
 
@@ -60,6 +58,26 @@ async fn run(parsed: args::Args) -> u8 {
             0
         }
         Mode::Daemon { uid, bundle, cache } => run_daemon_mode(socket, uid, bundle, cache).await,
+        Mode::List { bundle, cache } => {
+            let engine = Engine::production(
+                PathBuf::from(cache.unwrap_or_else(|| backend::default_cache_path().to_string())),
+                bundle.into_iter().map(PathBuf::from).collect(),
+            );
+            match engine.list_servers().map(|r| serde_json::to_string(&r)) {
+                Ok(Ok(json)) => {
+                    println!("{json}");
+                    0
+                }
+                Ok(Err(e)) => {
+                    eprintln!("{e}");
+                    1
+                }
+                Err(e) => {
+                    eprintln!("{e}");
+                    1
+                }
+            }
+        }
         Mode::Service => 2, // handled in `main`
     }
 }

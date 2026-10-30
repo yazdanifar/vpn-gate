@@ -34,6 +34,8 @@ data class UiState(
     val sortDescending: Boolean = true,
     val selectedId: String? = null,
     val logLines: List<String> = emptyList(),
+    val probes: Map<String, Probe> = emptyMap(),
+    val isTesting: Boolean = false,
     val accounts: List<ClientAccount> = emptyList(),
     val accountsNotice: String? = null,
     val history: List<ConnectionLogEntry> = emptyList(),
@@ -43,7 +45,7 @@ data class UiState(
     val globalRouting: RoutingConfig = RoutingConfig(),
 ) {
     /** The filtered, sorted rows. */
-    val servers: List<VpnServer> get() = filter.apply(allServers, favorites).sortedBy(sortKey, sortDescending)
+    val servers: List<VpnServer> get() = filter.apply(allServers, favorites).sortedBy(sortKey, sortDescending, probes)
 
     val countries: List<String> get() = allServers.map { it.countryLong }.filter { it.isNotEmpty() }.distinct().sorted()
 
@@ -179,6 +181,30 @@ class MainModel(
         } catch (e: EngineRequestException) {
             _state.update { it.copy(isLoading = false, listError = e.message) }
             null
+        }
+    }
+
+    /** "Test Connection": a real handshake with every server in the current view, eight at a time. */
+    fun testConnections() {
+        if (_state.value.isTesting) return
+        val targets = _state.value.servers.map { it.id to ProbeTarget(it.ip, it.prioritizedSslPorts.takeIf { p -> p.isNotEmpty() }) }
+        if (targets.isEmpty()) return
+        _state.update { s -> s.copy(isTesting = true, probes = s.probes + targets.associate { it.first to Probe.Queued }) }
+        scope.launch {
+            val proxy = settings.proxy
+            for (batch in targets.chunked(PROBE_BATCH)) {
+                _state.update { s -> s.copy(probes = s.probes + batch.associate { it.first to Probe.Testing }) }
+                val results: Map<String, Probe> = try {
+                    val r = ipc.probe(batch.map { it.second }, proxy)
+                    batch.zip(r.results).associate { (t, e) ->
+                        t.first to if (e.ok && e.connectMs != null) Probe.Ok(e.connectMs, e.helloMs, e.port) else Probe.Failed(e.error ?: "failed")
+                    }
+                } catch (e: EngineRequestException) {
+                    batch.associate { it.first to Probe.Failed(e.message ?: "failed") }
+                }
+                _state.update { s -> s.copy(probes = s.probes + results) }
+            }
+            _state.update { it.copy(isTesting = false) }
         }
     }
 
@@ -466,5 +492,6 @@ class MainModel(
 
     companion object {
         const val MAX_LOG_LINES = 300
+        const val PROBE_BATCH = 8
     }
 }

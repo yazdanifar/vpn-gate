@@ -95,6 +95,25 @@ object RoutingRuleValidation {
 
     fun error(rule: RoutingRule): String? = error(rule.type, rule.value)
 
+    /** Rule types the Android tunnel can apply (see [RoutingConfig.forAndroid]). */
+    val androidTypes = types.filter { it.type == RoutingRuleType.Ip || it.type == RoutingRuleType.Cidr }
+
+    /** Null when the Android tunnel can honour [rule]: an IPv4 address or range sent around the VPN. */
+    fun androidError(rule: RoutingRule): String? {
+        if (rule.type != RoutingRuleType.Ip && rule.type != RoutingRuleType.Cidr) return "Only IP address and range rules work on Android."
+        if (rule.action != RoutingAction.Direct) return "Only rules that bypass the VPN work on Android."
+        if (!rule.enabled) return "disabled"
+        error(rule)?.let { return it }
+        val addr = rule.value.trim().substringBefore('/')
+        return if (InputValidation.isIPv4Literal(addr)) null else "Only IPv4 addresses work on Android."
+    }
+
+    /** Message for the editor's value field: the generic check plus the IPv4-only limit. */
+    fun androidValueError(type: RoutingRuleType, value: String): String? {
+        error(type, value)?.let { return it }
+        return if (InputValidation.isIPv4Literal(value.trim().substringBefore('/'))) null else "Only IPv4 addresses work on Android."
+    }
+
     private fun isPlausibleDomain(s: String) =
         s.length <= 253 && s.first() != '.' && s.last() != '.' && ".." !in s &&
             s.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '-' || it == '.' }

@@ -68,3 +68,20 @@ fn usage_exits_2() {
     let out = Command::new(env!("CARGO_BIN_EXE_vpngate-daemon")).output().unwrap();
     assert_eq!(out.status.code(), Some(2));
 }
+
+#[test]
+fn list_mode_prints_the_shipped_list_without_a_daemon() {
+    let bin = env!("CARGO_BIN_EXE_vpngate-daemon");
+    let bundle = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/VPNGate.dat");
+    let cache = format!("/tmp/vg-list-cache-{}.dat", std::process::id());
+    let out = Command::new(bin).args(["--list", "--bundle", bundle, "--cache", &cache]).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("one JSON object");
+    assert!(v["servers"].as_array().is_some_and(|s| !s.is_empty()), "{v}");
+    assert_eq!(v["source"], "Built-in");
+
+    // nothing stored and no bundle: a readable failure, not an empty list
+    let out = Command::new(bin).args(["--list", "--cache", &cache]).output().unwrap();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("No server list"));
+}

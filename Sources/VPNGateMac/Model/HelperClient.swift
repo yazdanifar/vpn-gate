@@ -99,6 +99,29 @@ final class HelperClient: @unchecked Sendable {
 
     private func takeID() -> Int { lock.lock(); defer { lock.unlock() }; nextID += 1; return nextID - 1 }
 
+    /// The shipped list straight from the helper binary inside the app (`--list`: no daemon, no root, no network). Used
+    /// before the helper is installed, when `listServers` has nobody to ask. Nil when the binary is missing or fails.
+    static func bundledList(
+        binary: URL? = Bundle.main.resourceURL?.appendingPathComponent("vpngate-helper"),
+        list: URL? = Bundle.main.resourceURL?.appendingPathComponent("VPNGate.dat"),
+        cache: URL = FileManager.default.temporaryDirectory.appendingPathComponent("vpngate-list-\(getpid()).dat")
+    ) async -> ServerListResult? {
+        guard let binary, FileManager.default.isExecutableFile(atPath: binary.path) else { return nil }
+        return await Task.detached {
+            let p = Process()
+            p.executableURL = binary
+            p.arguments = ["--list", "--cache", cache.path] + (list.map { ["--bundle", $0.path] } ?? [])
+            let out = Pipe()
+            p.standardOutput = out
+            p.standardError = FileHandle.nullDevice
+            do { try p.run() } catch { return nil }
+            let data = out.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            guard p.terminationStatus == 0 else { return nil }
+            return try? JSONDecoder().decode(ServerListResult.self, from: data)
+        }.value
+    }
+
     func listServers() async throws -> ServerListResult {
         try await request(HelperRequest(cmd: "listServers"), timeout: 30).decode(ServerListResult.self)
     }

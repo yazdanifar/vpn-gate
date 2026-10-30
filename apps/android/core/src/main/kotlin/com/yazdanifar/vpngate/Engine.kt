@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -124,6 +125,15 @@ class IpcClient(private val channel: EngineChannel, private val scope: Coroutine
     /** Runs the sync pipeline (HTTP API, relay P2P, cached/built-in) and returns the list. */
     suspend fun refreshServers(proxy: ProxySettings? = null): ServerListResult =
         Ipc.json.decodeFromJsonElement(request("refreshServers", proxyBody(proxy)))
+
+    /** A real SoftEther handshake with each target; results come back in the order of [targets]. */
+    suspend fun probe(targets: List<ProbeTarget>, proxy: ProxySettings? = null): ProbeResult {
+        val body = buildJsonObject {
+            put("targets", Ipc.json.encodeToJsonElement(ListSerializer(ProbeTarget.serializer()), targets))
+            if (proxy != null && proxy.kind != ProxyKind.None) put("proxy", Ipc.json.encodeToJsonElement(proxy))
+        }
+        return Ipc.json.decodeFromJsonElement(request("probe", body, timeoutMs = 120_000))
+    }
 
     fun connect(request: ConnectRequest) = channel.send(Ipc.json.encodeToString(ConnectRequest.serializer(), request))
 

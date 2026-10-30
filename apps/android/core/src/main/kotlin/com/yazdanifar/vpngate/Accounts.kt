@@ -76,6 +76,17 @@ data class RoutingConfig(
 ) {
     /** True when the config changes nothing: everything through the tunnel, no rules. */
     val isEmpty: Boolean get() = rules.isEmpty() && defaultAction == RoutingAction.Proxy && !bypassPrivateNetworks
+
+    /**
+     * What the Android tunnel can honour: the engine refuses a connect that has domain rules, and `plan_for` turns only
+     * enabled "direct" IPv4 IP/CIDR rules into excluded routes. Everything else is dropped here so a saved rule never
+     * breaks a connection or promises a block that does not happen.
+     */
+    fun forAndroid(): RoutingConfig = RoutingConfig(
+        rules = rules.filter { RoutingRuleValidation.androidError(it) == null },
+        defaultAction = RoutingAction.Proxy,
+        bypassPrivateNetworks = bypassPrivateNetworks,
+    )
 }
 
 /** The `config` of a `connect` request (crates/vpngate-core/src/ipc.rs `ConnectConfig`); `Data` fields are base64. */
@@ -170,7 +181,7 @@ data class ClientAccount(
         serverCertFingerprint = serverCertFingerprint,
         mtu = mtu,
         virtualMacAddress = virtualMacAddress,
-        routing = routing ?: globalRouting?.takeUnless { it.isEmpty },
+        routing = (routing ?: globalRouting)?.forAndroid()?.takeUnless { it.isEmpty },
     )
 }
 
@@ -365,6 +376,10 @@ data class AccountEditorState(
             else "Fingerprint must be 40 (SHA-1) or 64 (SHA-256) hex digits."
         }
 
+    /** The engine's "system trust" check needs the platform verifier, which is not set up on Android: pin a fingerprint. */
+    val trustError: String?
+        get() = if (checkServerCert && fingerprint.isBlank()) "On Android, enter the server's certificate fingerprint to check it." else null
+
     val certificateReady: Boolean
         get() = authType != AuthTypes.CERTIFICATE || (certDer != null && privateKeyDer != null) || hasStoredIdentity
 
@@ -384,7 +399,7 @@ data class AccountEditorState(
 
     val canSave: Boolean
         get() = name.trim().isNotEmpty() && host.trim().isNotEmpty() && InputValidation.isValidHost(host.trim()) &&
-            fingerprintError == null && certificateReady && mtuError == null && macError == null &&
+            fingerprintError == null && trustError == null && certificateReady && mtuError == null && macError == null &&
             InputValidation.isValidIdentityField(hub) && InputValidation.isValidIdentityField(username)
 
     /** Starts from [base] (when editing) so fields the form does not show survive. */

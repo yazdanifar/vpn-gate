@@ -191,7 +191,7 @@ fun AccountEditorScreen(
             }
             Section("Server certificate") {
                 SwitchRow("Check the server certificate", s.checkServerCert, { s = s.copy(checkServerCert = it) })
-                Field("Fingerprint (SHA-1 or SHA-256)", s.fingerprint, { s = s.copy(fingerprint = it) }, error = s.fingerprintError)
+                Field("Fingerprint (SHA-1 or SHA-256)", s.fingerprint, { s = s.copy(fingerprint = it) }, error = s.fingerprintError ?: s.trustError)
             }
             Section("Proxy") { ProxyFields(s.proxy) { s = s.copy(proxy = it) } }
             Section("Advanced") {
