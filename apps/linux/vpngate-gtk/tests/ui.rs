@@ -55,6 +55,11 @@ fn start_watchdog() {
         if let Some((at, what)) = last {
             if at.elapsed() > Duration::from_secs(60) {
                 eprintln!("watchdog: no progress for 60 s, last step: {what}");
+                // Where every thread is, when gdb is installed (CI installs it; ptrace_scope must allow attaching).
+                let pid = std::process::id().to_string();
+                let _ = std::process::Command::new("gdb")
+                    .args(["-p", &pid, "-batch", "-ex", "thread apply all bt 40"])
+                    .status();
                 std::process::exit(3);
             }
         }
