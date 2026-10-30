@@ -73,7 +73,8 @@ snap() {
 }
 # The namespace has no systemd-resolved: mask its sockets so `resolvectl` cannot touch the host's links, whose
 # interface indexes differ from the namespace's. The daemon then takes its resolv.conf fallback.
-in_ns() { nsx bash -c 'mount -t tmpfs tmpfs /run/dbus 2>/dev/null; mount -t tmpfs tmpfs /run/systemd/resolve 2>/dev/null; exec "$@"' _ "$@"; }
+# Only for background use (`in_ns cmd &`): it execs, so $! is the daemon itself and kill reaches it.
+in_ns() { exec ip netns exec "$NS" bash -c 'mount -t tmpfs tmpfs /run/dbus 2>/dev/null; mount -t tmpfs tmpfs /run/systemd/resolve 2>/dev/null; exec "$@"' _ "$@"; }
 web_source() {   # who the web server saw for the request named $1
   sleep 1; grep "GET /$1 " "$WEB_LOG" | tail -1 | awk '{print $1}'
 }
@@ -98,10 +99,13 @@ run_case() {   # $1 = how to stop: INT | TERM | KILL
     [[ -n $SRC && $SRC != "$NS_IP" ]] && ok "traffic goes through the tunnel (the server saw $SRC)" || bad "server saw '$SRC', not the SecureNAT address"
   else bad "request through the tunnel failed"; fi
   FIRST_NS=$(nsx grep -m1 '^nameserver' /etc/resolv.conf | awk '{print $2}')
-  [[ -n $FIRST_NS && $FIRST_NS != "$HOST_IP" ]] && ok "resolv.conf points at the VPN resolver ($FIRST_NS)" || bad "resolv.conf still has '$FIRST_NS'"
+  if [[ -n $FIRST_NS && $FIRST_NS != "$HOST_IP" ]]; then ok "resolv.conf points at the VPN resolver ($FIRST_NS)"
+  else bad "resolv.conf still has '$FIRST_NS'"; echo "---- daemon log"; cat "$LOG"; fi
   case $1 in
     INT) kill -INT $PID ;; TERM) kill -TERM $PID ;; KILL) kill -9 $PID ;;
   esac
+  for _ in $(seq 1 40); do kill -0 $PID 2>/dev/null || break; sleep 0.5; done
+  if kill -0 $PID 2>/dev/null; then bad "daemon still running 20 s after SIG$1"; kill -9 $PID; fi
   wait $PID 2>/dev/null
   if [[ $1 == KILL ]]; then
     echo "  (daemon killed hard; stale state must be cleaned by the next start)"
