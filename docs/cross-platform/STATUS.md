@@ -47,7 +47,7 @@ Update at the end of every session (see the session protocol in [PLAN.md](PLAN.m
 | U33 | GTK UI automation + goldens | ⬜ | | |
 | U34 | WinUI UI tests + goldens | ⬜ | | |
 | U35 | Android UI, consent, always-on | ⬜ | | |
-| U36 | macOS app goldens, sanitizers, timing | ⬜ | | |
+| U36 | macOS app goldens, sanitizers, timing | 🔄 | xp/U36-sanitizers | Step 1: `sanitizers` CI job (`scripts/test.sh --tsan` / `--asan` on macos-15). Goldens, paused-time timing tests and the leftover vectors are still open. |
 
 ## Follow-ups found during implementation
 

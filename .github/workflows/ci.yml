@@ -51,6 +51,17 @@ jobs:
         run: scripts/test-pkg.sh
       - uses: actions/upload-artifact@v7
         with: { name: vpn-gate-pkg, path: build/VPN Gate.pkg }
+  sanitizers:
+    timeout-minutes: 30
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [tsan, asan]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Swift app tests under ${{ matrix.sanitizer }} (the suite compiles only Sources/VPNGateMac/Model, so no Rust build)
+        run: scripts/test.sh --${{ matrix.sanitizer }}
   rust:
     timeout-minutes: 30
     strategy:
