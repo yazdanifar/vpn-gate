@@ -1,5 +1,4 @@
 import SwiftUI
-import VPNGateCore
 
 /// Settings window: three small tabs instead of one long form.
 struct SettingsView: View {

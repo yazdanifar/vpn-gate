@@ -1,6 +1,5 @@
 import Combine
 import Foundation
-import VPNGateCore
 
 /// Form state of the connection-setting editor. Kept free of SwiftUI so the save logic can be tested.
 final class AccountEditorState: ObservableObject {

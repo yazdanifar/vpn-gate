@@ -1,0 +1,72 @@
+{
+  "cases" : [
+    {
+      "headers" : {
+        "content-length" : "12",
+        "content-type" : "text/html"
+      },
+      "hex" : "485454502f312e3120323030204f4b0d0a436f6e74656e742d547970653a20746578742f68746d6c0d0a436f6e74656e742d4c656e6774683a203132",
+      "name" : "head",
+      "status" : "HTTP/1.1 200 OK",
+      "statusCode" : 200
+    },
+    {
+      "headers" : {
+
+      },
+      "hex" : "485454502f312e3120343034204e6f7420466f756e64",
+      "name" : "head",
+      "status" : "HTTP/1.1 404 Not Found",
+      "statusCode" : 404
+    },
+    {
+      "headers" : {
+        "location" : "https://x/y",
+        "set-cookie" : "a=b: c",
+        "x-odd" : "spaced value"
+      },
+      "hex" : "485454502f312e302033303220466f756e640d0a4c6f636174696f6e3a2068747470733a2f2f782f790d0a582d4f64643a2020207370616365642076616c756520200d0a6e6f2d636f6c6f6e2d6c696e650d0a5365742d436f6f6b69653a20613d623a2063",
+      "name" : "head",
+      "status" : "HTTP/1.0 302 Found",
+      "statusCode" : 302
+    },
+    {
+      "headers" : {
+
+      },
+      "hex" : "67617262616765",
+      "name" : "head",
+      "status" : "garbage",
+      "statusCode" : null
+    },
+    {
+      "headers" : {
+        "a" : "1"
+      },
+      "hex" : "485454502f312e31206162630d0a413a2031",
+      "name" : "head",
+      "status" : "HTTP/1.1 abc",
+      "statusCode" : null
+    },
+    {
+      "headers" : {
+        "a" : "2"
+      },
+      "hex" : "485454502f312e31203230300d0a413a20310d0a613a2032",
+      "name" : "head",
+      "status" : "HTTP/1.1 200",
+      "statusCode" : 200
+    },
+    {
+      "headers" : {
+
+      },
+      "hex" : "",
+      "name" : "head",
+      "status" : "",
+      "statusCode" : null
+    }
+  ],
+  "module" : "httphead",
+  "note" : "HTTPHead.parse over the header block (bytes before the blank line)."
+}

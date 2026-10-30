@@ -17,17 +17,21 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
-      - name: Build
-        run: scripts/build.sh all
+      - uses: actions/checkout@v7
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        uses: ./.github/actions/rust-toolchain
+      - name: Build the Rust daemon
+        run: scripts/build.sh helper
       - name: Live tests (relays chosen from the bundled signed list unless overridden)
         env:
           VPNGATE_LIVE_RELAYS: ${{ inputs.relays }}
-        run: scripts/test.sh --live live/ 2>&1 | tee live-report.txt
+        run: |
+          set -o pipefail
+          cargo test --locked -p vpngate-daemon --test live -- --ignored --nocapture 2>&1 | tee live-report.txt
       - name: Probe sample of relays from the bundled list
         run: |
           set -o pipefail
           scripts/probe-sample.sh 20 | tee probe-report.txt
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: always()
         with: { name: live-reports, path: "*-report.txt" }

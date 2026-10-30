@@ -1,0 +1,21 @@
+[package]
+name = "vpngate-ipc-client"
+description = "Rust client for the daemon IPC (GTK app, integration tests)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+vpngate-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { version = "1.54.1", features = ["net", "io-util", "time", "sync", "rt"] }
+
+[dev-dependencies]
+vpngate-testkit.workspace = true
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "test-util"] }

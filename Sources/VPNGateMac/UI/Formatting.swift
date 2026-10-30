@@ -1,5 +1,4 @@
 import Foundation
-import VPNGateCore
 
 enum Fmt {
     static func speed(_ bps: Int) -> String { String(format: "%.1f Mbps", Double(bps) / 1_000_000) }

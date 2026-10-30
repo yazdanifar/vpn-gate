@@ -1,0 +1,179 @@
+<Window
+    x:Class="VPNGate.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:VPNGate.App"
+    xmlns:core="using:VPNGate.Core"
+    xmlns:tb="using:H.NotifyIcon"
+    Title="VPN Gate Public VPN Relay Servers">
+
+    <Grid x:Name="Root" Padding="16,8,16,16" RowSpacing="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <tb:TaskbarIcon x:Name="Tray" ToolTipText="VPN Gate" ContextMenuMode="PopupMenu" NoLeftClickDelay="True">
+            <tb:TaskbarIcon.ContextFlyout>
+                <MenuFlyout>
+                    <MenuFlyoutItem x:Name="TrayState" Text="Disconnected" IsEnabled="False" />
+                    <MenuFlyoutItem x:Name="TrayServer" Text="" IsEnabled="False" Visibility="Collapsed" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem x:Name="TrayVirtualIp" Text="" IsEnabled="False" Visibility="Collapsed" />
+                    <MenuFlyoutItem x:Name="TrayTraffic" Text="" IsEnabled="False" Visibility="Collapsed" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem x:Name="TrayConnect" Text="Connect" Click="OnTrayConnect" Visibility="Collapsed" />
+                    <MenuFlyoutItem x:Name="TrayDisconnect" Text="Disconnect" Click="OnTrayDisconnect" />
+                    <MenuFlyoutItem x:Name="TrayReconnect" Text="Reconnect" Click="OnTrayReconnect" Visibility="Collapsed" />
+                    <MenuFlyoutItem Text="Show VPN Gate" Click="OnTrayShow" />
+                    <MenuFlyoutItem Text="VPN Connection Settings…" Click="OnShowAccounts" />
+                    <MenuFlyoutItem Text="Settings…" Click="OnShowSettings" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem Text="Quit" Click="OnTrayQuit" />
+                </MenuFlyout>
+            </tb:TaskbarIcon.ContextFlyout>
+        </tb:TaskbarIcon>
+
+        <MenuBar Grid.Row="0">
+            <MenuBarItem Title="File">
+                <MenuFlyoutItem Text="Refresh List" Click="OnRefresh" />
+                <MenuFlyoutItem Text="Disconnect" Click="OnTrayDisconnect" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem Text="Settings…" Click="OnShowSettings" />
+                <MenuFlyoutItem Text="Quit" Click="OnTrayQuit" />
+            </MenuBarItem>
+            <MenuBarItem Title="View">
+                <MenuFlyoutItem Text="Show VPN Gate" Click="OnTrayShow" />
+                <MenuFlyoutItem Text="Show VPN Connection Settings" Click="OnShowAccounts" />
+                <MenuFlyoutItem Text="Show Connection History" Click="OnShowHistory" />
+                <MenuFlyoutItem Text="Show Connection Log" Click="OnShowLog" />
+            </MenuBarItem>
+            <MenuBarItem Title="Help">
+                <MenuFlyoutItem Text="VPN Gate Web Site" Click="OnWebSite" />
+            </MenuBarItem>
+        </MenuBar>
+
+        <!-- Header and connection card -->
+        <Grid Grid.Row="1" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="280" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="4">
+                <TextBlock Text="VPN Gate Public VPN Relay Servers" Style="{StaticResource TitleTextBlockStyle}" />
+                <TextBlock TextWrapping="Wrap" Opacity="0.8"
+                           Text="Gain freedom access to Internet by using VPN connection via Public VPN Servers provided by volunteers around the world. Bypass your local malfunctioning firewall's packet blocking, and hide your IP address safely." />
+            </StackPanel>
+            <Border Grid.Column="1" Padding="12" CornerRadius="8" Background="{x:Bind local:Cols.CardBrush(Vm.State), Mode=OneWay}">
+                <StackPanel Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Glyph="{x:Bind local:Cols.Glyph(Vm.State), Mode=OneWay}" />
+                        <TextBlock Text="{x:Bind local:Cols.CardTitle(Vm.State), Mode=OneWay}" FontWeight="SemiBold" />
+                        <ProgressRing Width="16" Height="16" IsActive="{x:Bind Vm.IsBusy, Mode=OneWay}" />
+                    </StackPanel>
+                    <TextBlock Text="{x:Bind Vm.ServerName, Mode=OneWay}" Visibility="{x:Bind local:Cols.VisNotNull(Vm.ServerName), Mode=OneWay}" />
+                    <TextBlock Text="{x:Bind local:Cols.VirtualIp(Vm.VirtualIp), Mode=OneWay}" Opacity="0.8" />
+                    <TextBlock Text="{x:Bind Vm.TrafficText, Mode=OneWay}" Visibility="{x:Bind local:Cols.Vis(Vm.IsConnected), Mode=OneWay}" />
+                    <TextBlock Text="{x:Bind local:Cols.Hint(Vm.Notice), Mode=OneWay}" TextWrapping="Wrap" MaxLines="3" Opacity="0.8"
+                               Visibility="{x:Bind local:Cols.Vis(Vm.IsDisconnected), Mode=OneWay}" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- List status -->
+        <TextBlock Grid.Row="2" Text="{x:Bind Vm.ListStatus, Mode=OneWay}" TextWrapping="Wrap" Opacity="0.8" />
+
+        <!-- Toolbar -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8">
+            <TextBox x:Name="SearchBox" Width="260" PlaceholderText="Search host, IP, country, operator" TextChanged="OnSearchChanged" />
+            <ComboBox x:Name="CountryBox" Width="180" SelectionChanged="OnCountryChanged" />
+            <ComboBox x:Name="LoggingBox" Width="170" SelectedIndex="0" SelectionChanged="OnLoggingChanged">
+                <ComboBoxItem Content="Any logging policy" Tag="-1" />
+                <ComboBoxItem Content="2 weeks or less" Tag="2" />
+                <ComboBoxItem Content="Up to 1 month" Tag="5" />
+                <ComboBoxItem Content="No logs only" Tag="0" />
+            </ComboBox>
+            <ToggleButton x:Name="FavoritesToggle" Content="Favorites only" Click="OnFavoritesToggled" />
+            <Button Content="Clear Filters" Click="OnClearFilters" Visibility="{x:Bind local:Cols.Vis(Vm.FilterActive), Mode=OneWay}" />
+            <Button Content="Details" Click="OnDetails" IsEnabled="{x:Bind local:Cols.NotNull(Vm.Selected), Mode=OneWay}" />
+            <Button Content="Refresh List" Click="OnRefresh" IsEnabled="{x:Bind Vm.IsNotLoading, Mode=OneWay}" />
+            <Button Content="Settings" Click="OnShowSettings" />
+        </StackPanel>
+
+        <!-- Column headers -->
+        <Grid Grid.Row="4" Padding="12,0" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2.4*" />
+                <ColumnDefinition Width="1.6*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="1.3*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="0.8*" />
+            </Grid.ColumnDefinitions>
+            <HyperlinkButton Grid.Column="0" Content="IP Address (Hostname)" Tag="Host" Click="OnSort" Padding="0" />
+            <HyperlinkButton Grid.Column="1" Content="Region" Tag="Country" Click="OnSort" Padding="0" />
+            <HyperlinkButton Grid.Column="2" Content="Uptime" Tag="Uptime" Click="OnSort" Padding="0" />
+            <HyperlinkButton Grid.Column="3" Content="VPN Sessions" Tag="Sessions" Click="OnSort" Padding="0" />
+            <HyperlinkButton Grid.Column="4" Content="Line Speed" Tag="Speed" Click="OnSort" Padding="0" />
+            <HyperlinkButton Grid.Column="5" Content="Ping (Google, SE)" Tag="Ping" Click="OnSort" Padding="0" />
+            <HyperlinkButton Grid.Column="6" Content="Logging Policy" Tag="Logging" Click="OnSort" Padding="0" />
+            <HyperlinkButton Grid.Column="7" Content="Total Score" Tag="Score" Click="OnSort" Padding="0" />
+        </Grid>
+
+        <!-- Table -->
+        <ListView Grid.Row="5" x:Name="ServerList" ItemsSource="{x:Bind Vm.Servers, Mode=OneWay}"
+                  SelectedItem="{x:Bind Vm.Selected, Mode=TwoWay}" DoubleTapped="OnRowDoubleTapped">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="core:VpnServer">
+                    <Grid ColumnSpacing="8" Tag="{x:Bind}">
+                        <Grid.ContextFlyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem Text="Connect to the VPN Server" Tag="{x:Bind}" Click="OnRowConnect" />
+                                <MenuFlyoutItem Text="Server Details…" Tag="{x:Bind}" Click="OnRowDetails" />
+                                <MenuFlyoutItem Text="Add or remove favorite" Tag="{x:Bind}" Click="OnRowFavorite" />
+                            </MenuFlyout>
+                        </Grid.ContextFlyout>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2.4*" />
+                            <ColumnDefinition Width="1.6*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="1.3*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="0.8*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="{x:Bind HostName}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{x:Bind Ip}" Opacity="0.7" FontFamily="Consolas" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{x:Bind local:Cols.Region(Flag, CountryLong)}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="2" Text="{x:Bind local:Cols.Uptime(UptimeMs)}" />
+                        <TextBlock Grid.Column="3" Text="{x:Bind local:Cols.Sessions(Sessions)}" />
+                        <TextBlock Grid.Column="4" Text="{x:Bind local:Cols.Speed(Speed)}" />
+                        <TextBlock Grid.Column="5" Text="{x:Bind local:Cols.Pings(PingToGoogle, Ping)}" />
+                        <TextBlock Grid.Column="6" Text="{x:Bind local:Cols.Logging(LogType)}" />
+                        <TextBlock Grid.Column="7" Text="{x:Bind Score}" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- Bottom bar -->
+        <Grid Grid.Row="6">
+            <Button HorizontalAlignment="Right" MinWidth="220" Click="OnPrimaryAction" IsEnabled="{x:Bind Vm.CanAct, Mode=OneWay}"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Content="{x:Bind Vm.ActionLabel, Mode=OneWay}" />
+        </Grid>
+        <TextBlock Grid.Row="7" Opacity="0.6" TextWrapping="Wrap"
+                   Text="Academic project at University of Tsukuba, Japan. A server with a higher Line Speed and a smaller Ping is usually more comfortable to use." />
+    </Grid>
+</Window>

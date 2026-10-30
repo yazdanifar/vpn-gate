@@ -11,7 +11,7 @@ VERSION=$(tr -d '[:space:]' < VERSION)
 STAGE=build/pkg; rm -rf "$STAGE"; mkdir -p "$STAGE/helper-root/Library/PrivilegedHelperTools" \
   "$STAGE/helper-root/Library/LaunchDaemons" "$STAGE/app-root/Applications"
 
-scripts/build.sh all
+scripts/build-app.sh >/dev/null    # runs scripts/build.sh all, then assembles build/VPN Gate.app
 # 1. helper component: binary + LaunchDaemon plist, scripts restart the daemon
 cp build/bin/vpngate-helper "$STAGE/helper-root/Library/PrivilegedHelperTools/vpngate-helper"
 cp packaging/com.yazdanifar.vpngate.helper.plist "$STAGE/helper-root/Library/LaunchDaemons/"
@@ -21,7 +21,6 @@ quiet pkgbuild --root "$STAGE/helper-root" --identifier com.yazdanifar.vpngate.h
   --install-location / --scripts packaging/scripts --ownership recommended "$STAGE/helper.pkg" >/dev/null
 
 # 2. app (with the helper installer inside it), signed after everything is in place
-scripts/build-app.sh >/dev/null
 APP="build/VPN Gate.app"
 cp "$STAGE/helper.pkg" "$APP/Contents/Resources/VPN Gate Helper.pkg"
 codesign --force -s - "$APP"

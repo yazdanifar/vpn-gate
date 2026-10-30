@@ -3,7 +3,6 @@ import Foundation
 import Network
 import ServiceManagement
 import SwiftUI
-import VPNGateCore
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -26,6 +25,8 @@ final class AppModel: ObservableObject {
     /// True from the moment the installer is opened until the helper answers.
     @Published var waitingForInstaller = false
     private var pendingServer: VPNServer?
+    /// The list is asked for once per helper connection, as soon as a v9 helper has identified itself.
+    private var listRequested = false
 
     @Published var favorites: Set<String> { didSet { save("favorites", Array(favorites)) } }
     @Published var autoReconnect: Bool { didSet { defaults.set(autoReconnect, forKey: "autoReconnect") } }
@@ -80,13 +81,14 @@ final class AppModel: ObservableObject {
     private var lastEventAt = Date.distantPast
     private var retry: Timer?
     private var pollTimer: Timer?
-    private let datFetcher: VGDatFetcher
     /// Wait between reconnect attempts of a VPN Gate connection: the stock account's RetryInterval 0xF
     /// (client_exe.c:27590s). Tests shorten it.
     nonisolated static let reconnectInterval: TimeInterval = 15
     private let reconnectDelay: TimeInterval
     /// The old servers.json cache lives in ~/Library/Caches; tests (autoStart false) never write it.
     private let persistsServerCache: Bool
+    /// Ask the helper for the list as soon as it identifies itself as v9 (tests opt in; they never write the cache file).
+    private let listOnConnect: Bool
     /// Delay chosen for the pending list poll (seconds), for tests and the log.
     private(set) var scheduledPollDelay: TimeInterval?
     /// The VPN Gate server the user asked for and has not disconnected from (nil = nothing to keep alive).
@@ -101,13 +103,12 @@ final class AppModel: ObservableObject {
         openInstaller: @escaping () -> Bool = { HelperInstaller.openInstaller() },
         loginItem: LoginItemControlling = SMAppLoginItem(),
         accountManager: AccountManager? = nil, connectionLog: ConnectionLogStore? = nil,
-        datFetcher: VGDatFetcher? = nil, reconnectDelay: TimeInterval = 15
+        reconnectDelay: TimeInterval = 15, listOnConnect: Bool? = nil
     ) {
         self.helper = HelperClient(path: socketPath)
-        // `alternativeMode` (hidden: defaults write ... alternativeMode -bool YES) is the original's "alt mode".
-        self.datFetcher = datFetcher ?? VGDatFetcher(defaults: defaults, alternativeMode: defaults.bool(forKey: "alternativeMode"))
         self.reconnectDelay = reconnectDelay
         self.persistsServerCache = autoStart
+        self.listOnConnect = listOnConnect ?? autoStart
         self.defaults = defaults
         self.openInstaller = openInstaller
         self.loginItem = loginItem
@@ -136,28 +137,22 @@ final class AppModel: ObservableObject {
         forwarded = [statistics.objectWillChange, self.accountManager.objectWillChange, self.connectionLog.objectWillChange]
             .map { $0.sink { [weak self] _ in self?.objectWillChange.send() } }
         if autoStart {
-            if let cached = self.datFetcher.loadCached() {
-                self.datFetcher.adopt(cached)
-                servers = cached.servers
-                listSource = .cache
-                listTimestamp = cached.timestamp
-                listIsFresh = cached.isFresh
-            } else if let bundled = self.datFetcher.loadBundleDat() {
-                self.datFetcher.adopt(bundled)
-                servers = bundled.servers
-                listSource = .bundle
-                listTimestamp = bundled.timestamp
-                listIsFresh = bundled.isFresh
-            } else {
-                servers = Self.loadCache()
-            }
+            // Until the helper answers `listServers`, show what the last run saved.
+            servers = Self.loadCache()
             migrateFavorites()
+            if servers.isEmpty {
+                // First launch, helper not installed yet: show the shipped list instead of an empty window.
+                Task { @MainActor [weak self] in
+                    if let r = await HelperClient.bundledList(), let self, self.servers.isEmpty { self.apply(r, downloaded: false) }
+                }
+            }
         }
 
         helper.onEvent = { [weak self] e in Task { @MainActor in self?.handle(e) } }
         helper.onDisconnect = { [weak self] in
             Task { @MainActor in
                 self?.helperRunning = false
+                self?.listRequested = false
                 self?.cancelReconnect()
                 self?.endHistory(error: nil)
                 self?.event = HelperEvent(state: .disconnected)
@@ -184,6 +179,7 @@ final class AppModel: ObservableObject {
             let running = helper.connect()
             if helperRunning != running { helperRunning = running }
         }
+
         resumeAfterSetup()
     }
 
@@ -224,6 +220,10 @@ final class AppModel: ObservableObject {
         traffic.set(e.bytesIn, e.bytesOut)
         if let l = e.log { appendLog(l) }
         if let err = e.error { appendLog("Error: \(err)"); notice = err }
+        if listOnConnect, !listRequested, (e.ipcVersion ?? 0) >= ipcVersion {
+            listRequested = true
+            loadListFromHelper()
+        }
         if e.state == .connected && connectedAt == nil { connectedAt = Date(); notice = nil }
         if e.state != .connected { connectedAt = nil }
         trackHistory(e)
@@ -336,7 +336,10 @@ final class AppModel: ObservableObject {
     var isConnected: Bool { event.state == .connected }
 
     /// True when the installed helper predates this app (it then lacks fixes or IPC fields).
-    var helperOutdated: Bool { helperRunning && lastEventAt > .distantPast && (event.helperVersion ?? 0) < helperVersion }
+    var helperOutdated: Bool {
+        helperRunning && lastEventAt > .distantPast
+            && ((event.helperVersion ?? 0) < helperVersion || (event.ipcVersion ?? 0) < ipcVersion)
+    }
 
     func connect(_ s: VPNServer) {
         guard requireAgreement({ [weak self] in self?.connect(s) }) else { return }
@@ -432,35 +435,51 @@ final class AppModel: ObservableObject {
 
     // MARK: server list
 
-    func refresh() {
-        guard !loading else { return }
-        loading = true; loadError = nil
-        let mirror = URL(string: mirrorURL)
+    /// The cached or built-in list, no network: shown at once while `refresh` runs.
+    private func loadListFromHelper() {
         Task {
-            let res = await datFetcher.sync(currentServers: servers, proxy: currentProxy, mirror: mirror)
-            if !res.servers.isEmpty {
-                servers = res.servers
-                listSource = res.source
-                listTimestamp = res.timestamp
-                listIsFresh = res.isFresh
-                if res.source != .cache && res.source != .bundle {
-                    listFetchedAt = Date()
-                    if persistsServerCache { defaults.set(listFetchedAt, forKey: "listFetchedAt") }
-                }
-                migrateFavorites()
-                if persistsServerCache { Self.saveCache(res.servers) }
-            } else if servers.isEmpty {
-                loadError = "Failed to load servers"
-            }
-            loading = false
-            scheduleNextPoll(res.servers.isEmpty ? .noRelays : res.outcome)
+            if let r = try? await helper.listServers(), !r.servers.isEmpty, servers.isEmpty || !loading { apply(r, downloaded: false) }
+            refresh()
         }
     }
 
-    /// Uniformly random in [0, interval) like the original, so clients do not poll in lockstep.
-    private func scheduleNextPoll(_ outcome: SyncOutcome) {
+    private func apply(_ r: ServerListResult, downloaded: Bool) {
+        servers = r.servers
+        listSource = r.source
+        listTimestamp = r.timestamp
+        listIsFresh = r.isFresh
+        if downloaded, r.source != .cache && r.source != .bundle {
+            listFetchedAt = Date()
+            if persistsServerCache { defaults.set(listFetchedAt, forKey: "listFetchedAt") }
+        }
+        migrateFavorites()
+        if persistsServerCache { Self.saveCache(r.servers) }
+    }
+
+    func refresh() {
+        guard !loading else { return }
+        loading = true; loadError = nil
+        let proxy = currentProxy, mirror = mirrorURL
+        Task {
+            var next: TimeInterval = Self.retryPollSeconds
+            do {
+                let r = try await helper.refreshServers(proxy: proxy, mirror: mirror)
+                if !r.servers.isEmpty { apply(r, downloaded: true) } else if servers.isEmpty { loadError = "Failed to load servers" }
+                next = r.nextPollSeconds ?? next
+            } catch {
+                if servers.isEmpty { loadError = "Failed to load servers: \(error.localizedDescription)" }
+            }
+            loading = false
+            scheduleNextPoll(after: next)
+        }
+    }
+
+    /// Wait before asking again when the helper could not be reached (the daemon picks the delay otherwise).
+    nonisolated static let retryPollSeconds: TimeInterval = 600
+
+    /// The daemon picks the delay (a random point of the interval for the outcome), the app owns the timer.
+    private func scheduleNextPoll(after interval: TimeInterval) {
         pollTimer?.invalidate()
-        let interval = datFetcher.nextPollDelay(after: outcome)
         scheduledPollDelay = interval
         pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
@@ -507,38 +526,30 @@ final class AppModel: ObservableObject {
         favorites = migrated
     }
 
-    /// Tests every given server (all rows of the current view, in order) from this Mac with a real SoftEther handshake (not just a ping or a TCP connect),
-    /// a few at a time. Results land in `probes`; a new run replaces earlier results for the same servers.
+    /// Tests every given server (all rows of the current view, in order) from this Mac with a real SoftEther handshake
+    /// (not just a ping or a TCP connect). The daemon tests a few at a time; results land in `probes`, and a new run
+    /// replaces earlier results for the same servers.
     func measure(_ list: [VPNServer]) {
         probeTask?.cancel()
         let targets = list
         for s in targets { probes[s.id] = .queued }
         let proxy = currentProxy
         probeTask = Task { [weak self] in
-            await withTaskGroup(of: Void.self) { group in
-                var next = 0
-                func launch() {
-                    guard next < targets.count else { return }
-                    let s = targets[next]; next += 1
-                    group.addTask {
-                        await MainActor.run { [weak self] in if !Task.isCancelled { self?.probes[s.id] = .testing } }
-                        let r = await ServerProbe.run(host: s.ip, ports: ServerProbe.ports(for: s), proxy: proxy) { h, p, px in
-                            TLSStream(host: h, port: p, proxy: px)
-                        }
-                        await MainActor.run { [weak self] in
-                            // A cancelled run must not overwrite the state of a newer one.
-                            if !Task.isCancelled { self?.probes[s.id] = r }
-                        }
-                    }
-                }
-                for _ in 0..<8 { launch() }
-                while await group.next() != nil { if Task.isCancelled { group.cancelAll() } else { launch() } }
-            }
-            // Nothing may stay "queued"/"testing" once the run is over (a new run has replaced them if cancelled).
-            guard !Task.isCancelled else { return }
-            await MainActor.run { [weak self] in
-                for s in targets where self?.probes[s.id] == .queued || self?.probes[s.id] == .testing {
-                    self?.probes[s.id] = .failed("Test did not finish")
+            guard let self else { return }
+            // 200 relays per request is the daemon's cap.
+            let chunks = stride(from: 0, to: targets.count, by: 200).map { Array(targets[$0..<min($0 + 200, targets.count)]) }
+            for chunk in chunks {
+                if Task.isCancelled { return }
+                for s in chunk { probes[s.id] = .testing }
+                do {
+                    let entries = try await helper.probe(
+                        chunk.map { ProbeTarget(host: $0.ip, ports: ServerProbe.ports(for: $0).map(Int.init)) }, proxy: proxy)
+                    // A cancelled run must not overwrite the state of a newer one.
+                    if Task.isCancelled { return }
+                    for (s, e) in zip(chunk, entries) { probes[s.id] = e.outcome }
+                } catch {
+                    if Task.isCancelled { return }
+                    for s in chunk { probes[s.id] = .failed(error.localizedDescription) }
                 }
             }
         }

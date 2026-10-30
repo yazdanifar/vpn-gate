@@ -1,0 +1,2167 @@
+{
+  "cases" : [
+    {
+      "count" : 10,
+      "file" : "vpngate-snapshot.csv",
+      "name" : "parse-snapshot",
+      "servers" : [
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Thailand",
+          "countryShort" : "TH",
+          "fqdn" : "vpn927125019",
+          "hostName" : "vpn927125019",
+          "ip" : "183.88.237.254",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1596,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "DESKTOP-M7QAGP8's owner",
+          "os" : null,
+          "owner" : null,
+          "ping" : 7,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 687114,
+          "sendSize" : 0,
+          "sessions" : 57,
+          "soft" : null,
+          "speed" : 581748844,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 14070454176069,
+          "totalUsers" : 79603,
+          "udpPort" : null,
+          "uptimeMs" : 0
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Thailand",
+          "countryShort" : "TH",
+          "fqdn" : "vpn654658565",
+          "hostName" : "vpn654658565",
+          "ip" : "183.88.237.254",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1219,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "DESKTOP-GPPDU5Q's owner",
+          "os" : null,
+          "owner" : null,
+          "ping" : 6,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 674368,
+          "sendSize" : 0,
+          "sessions" : 42,
+          "soft" : null,
+          "speed" : 528313795,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 6573898886037,
+          "totalUsers" : 33387,
+          "udpPort" : null,
+          "uptimeMs" : 0
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "vpn542282524",
+          "hostName" : "vpn542282524",
+          "ip" : "125.30.13.52",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1525,
+          "listedProto" : "udp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "mayu's owner",
+          "os" : null,
+          "owner" : null,
+          "ping" : 30,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 604204,
+          "sendSize" : 0,
+          "sessions" : 12,
+          "soft" : null,
+          "speed" : 43210972,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 3114478907723,
+          "totalUsers" : 31731,
+          "udpPort" : null,
+          "uptimeMs" : 65674165
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "vpn813691071",
+          "hostName" : "vpn813691071",
+          "ip" : "125.30.13.52",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1889,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "rena's owner",
+          "os" : null,
+          "owner" : null,
+          "ping" : 7,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 600573,
+          "sendSize" : 0,
+          "sessions" : 4,
+          "soft" : null,
+          "speed" : 204606305,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 1299757034983,
+          "totalUsers" : 16509,
+          "udpPort" : null,
+          "uptimeMs" : 0
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "public-vpn-43",
+          "hostName" : "public-vpn-43",
+          "ip" : "219.100.37.7",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 443,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "Daiyuu Nobori_ Japan. Academic Use Only.",
+          "os" : null,
+          "owner" : null,
+          "ping" : 17,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 2141844,
+          "sendSize" : 0,
+          "sessions" : 103,
+          "soft" : null,
+          "speed" : 145487032,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 722004285888230,
+          "totalUsers" : 14286899,
+          "udpPort" : null,
+          "uptimeMs" : 316675743
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "public-vpn-221",
+          "hostName" : "public-vpn-221",
+          "ip" : "219.100.37.184",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 443,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "Daiyuu Nobori_ Japan. Academic Use Only.",
+          "os" : null,
+          "owner" : null,
+          "ping" : 9,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 2128135,
+          "sendSize" : 0,
+          "sessions" : 50,
+          "soft" : null,
+          "speed" : 167033547,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 72891209426261,
+          "totalUsers" : 1386364,
+          "udpPort" : null,
+          "uptimeMs" : 316661413
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "public-vpn-199",
+          "hostName" : "public-vpn-199",
+          "ip" : "219.100.37.196",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 443,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "Daiyuu Nobori_ Japan. Academic Use Only.",
+          "os" : null,
+          "owner" : null,
+          "ping" : 26,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 2097521,
+          "sendSize" : 0,
+          "sessions" : 130,
+          "soft" : null,
+          "speed" : 172155126,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 841872271798464,
+          "totalUsers" : 12114430,
+          "udpPort" : null,
+          "uptimeMs" : 316650629
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "public-vpn-186",
+          "hostName" : "public-vpn-186",
+          "ip" : "219.100.37.163",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 443,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "Daiyuu Nobori_ Japan. Academic Use Only.",
+          "os" : null,
+          "owner" : null,
+          "ping" : 12,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 2075846,
+          "sendSize" : 0,
+          "sessions" : 196,
+          "soft" : null,
+          "speed" : 199132777,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 1367805202533036,
+          "totalUsers" : 20353274,
+          "udpPort" : null,
+          "uptimeMs" : 316679812
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "United States",
+          "countryShort" : "US",
+          "fqdn" : "vpn485732490",
+          "hostName" : "vpn485732490",
+          "ip" : "97.75.131.91",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1825,
+          "listedProto" : "udp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "KILLTROCITY's owner",
+          "os" : null,
+          "owner" : null,
+          "ping" : 15,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 1868241,
+          "sendSize" : 0,
+          "sessions" : 65,
+          "soft" : null,
+          "speed" : 131010827,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 5191528188217,
+          "totalUsers" : 60620,
+          "udpPort" : null,
+          "uptimeMs" : 0
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "public-vpn-164",
+          "hostName" : "public-vpn-164",
+          "ip" : "219.100.37.128",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 443,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "Daiyuu Nobori_ Japan. Academic Use Only.",
+          "os" : null,
+          "owner" : null,
+          "ping" : 14,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 1786115,
+          "sendSize" : 0,
+          "sessions" : 62,
+          "soft" : null,
+          "speed" : 136938294,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 795606373145300,
+          "totalUsers" : 15008588,
+          "udpPort" : null,
+          "uptimeMs" : 316653598
+        }
+      ]
+    },
+    {
+      "csv" : "*vpn_servers\n#HostName,IP,...\n\nh1,1.2.3.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,Y2xpZW50DQpwcm90byB0Y3ANCnJlbW90ZSAxLjIuMy40IDE0NDMNCg==\nh1,1.2.3.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,a,b,c,cHJvdG8gdWRwCnJlbW90ZSA1LjYuNy44IDExOTQK\nh1,1.2.3.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,!!!not base64\nh1,1.2.3.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,cmVtb3RlIDEuMS4xLjEgMApwcm90byB0Y3AtY2xpZW50Cg==\nh1,1.2.3.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,cmVtb3RlIDEuMS4xLjEgNzAwMDAK\nh1,1.2.3.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,cmVtb3RlIHgKcHJvdG8K\nh2,not.an.ip,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,Y2xpZW50DQpwcm90byB0Y3ANCnJlbW90ZSAxLjIuMy40IDE0NDMNCg==\nh3,9.9.9.9,x,y,z,Japan,JP,3,60000,10,2000,2weeks,op,msg,Y2xpZW50DQpwcm90byB0Y3ANCnJlbW90ZSAxLjIuMy40IDE0NDMNCg==\nshort,1.2.3.4,1\n,4.4.4.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,Y2xpZW50DQpwcm90byB0Y3ANCnJlbW90ZSAxLjIuMy40IDE0NDMNCg==\n# comment\nh1,1.2.3.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,Y2xpZW50DQpwcm90byB0Y3ANCnJlbW90ZSAxLjIuMy40IDE0NDMNCg==\r",
+      "name" : "parse-edge-lines",
+      "servers" : [
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h1",
+          "hostName" : "h1",
+          "ip" : "1.2.3.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1443,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h1",
+          "hostName" : "h1",
+          "ip" : "1.2.3.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1194,
+          "listedProto" : "udp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "a,b,c",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h1",
+          "hostName" : "h1",
+          "ip" : "1.2.3.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 0,
+          "listedProto" : "",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h1",
+          "hostName" : "h1",
+          "ip" : "1.2.3.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 0,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h1",
+          "hostName" : "h1",
+          "ip" : "1.2.3.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 0,
+          "listedProto" : "",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h1",
+          "hostName" : "h1",
+          "ip" : "1.2.3.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 0,
+          "listedProto" : "",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h3",
+          "hostName" : "h3",
+          "ip" : "9.9.9.9",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1443,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 0,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 0,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 0,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "",
+          "hostName" : "",
+          "ip" : "4.4.4.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1443,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h1",
+          "hostName" : "h1",
+          "ip" : "1.2.3.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1443,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        }
+      ]
+    },
+    {
+      "csv" : "*vpn_servers\r\n#HostName,IP,...\r\n\r\nh1,1.2.3.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,Y2xpZW50DQpwcm90byB0Y3ANCnJlbW90ZSAxLjIuMy40IDE0NDMNCg==\r\nh1,1.2.3.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,a,b,c,cHJvdG8gdWRwCnJlbW90ZSA1LjYuNy44IDExOTQK\r\nh1,1.2.3.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,!!!not base64\r\nh1,1.2.3.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,cmVtb3RlIDEuMS4xLjEgMApwcm90byB0Y3AtY2xpZW50Cg==\r\nh1,1.2.3.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,cmVtb3RlIDEuMS4xLjEgNzAwMDAK\r\nh1,1.2.3.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,cmVtb3RlIHgKcHJvdG8K\r\nh2,not.an.ip,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,Y2xpZW50DQpwcm90byB0Y3ANCnJlbW90ZSAxLjIuMy40IDE0NDMNCg==\r\nh3,9.9.9.9,x,y,z,Japan,JP,3,60000,10,2000,2weeks,op,msg,Y2xpZW50DQpwcm90byB0Y3ANCnJlbW90ZSAxLjIuMy40IDE0NDMNCg==\r\nshort,1.2.3.4,1\r\n,4.4.4.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,Y2xpZW50DQpwcm90byB0Y3ANCnJlbW90ZSAxLjIuMy40IDE0NDMNCg==\r\n# comment\r\nh1,1.2.3.4,100,5,1000,Japan,JP,3,60000,10,2000,2weeks,op,msg,Y2xpZW50DQpwcm90byB0Y3ANCnJlbW90ZSAxLjIuMy40IDE0NDMNCg==\r",
+      "name" : "parse-crlf",
+      "servers" : [
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h1",
+          "hostName" : "h1",
+          "ip" : "1.2.3.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1443,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h1",
+          "hostName" : "h1",
+          "ip" : "1.2.3.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1194,
+          "listedProto" : "udp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "a,b,c",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h1",
+          "hostName" : "h1",
+          "ip" : "1.2.3.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 0,
+          "listedProto" : "",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h1",
+          "hostName" : "h1",
+          "ip" : "1.2.3.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 0,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h1",
+          "hostName" : "h1",
+          "ip" : "1.2.3.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 0,
+          "listedProto" : "",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h1",
+          "hostName" : "h1",
+          "ip" : "1.2.3.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 0,
+          "listedProto" : "",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h3",
+          "hostName" : "h3",
+          "ip" : "9.9.9.9",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1443,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 0,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 0,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 0,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "",
+          "hostName" : "",
+          "ip" : "4.4.4.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1443,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "JP",
+          "fqdn" : "h1",
+          "hostName" : "h1",
+          "ip" : "1.2.3.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 1443,
+          "listedProto" : "tcp",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "msg",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "op",
+          "os" : null,
+          "owner" : null,
+          "ping" : 5,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 100,
+          "sendSize" : 0,
+          "sessions" : 3,
+          "soft" : null,
+          "speed" : 1000,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 2000,
+          "totalUsers" : 10,
+          "udpPort" : null,
+          "uptimeMs" : 60000
+        }
+      ]
+    },
+    {
+      "cases" : [
+        {
+          "connectPort" : 995,
+          "input" : "{\"hostName\":\"old\",\"ip\":\"1.1.1.1\",\"tcpPort\":995}",
+          "server" : {
+            "abuse" : null,
+            "build" : null,
+            "countryLong" : "",
+            "countryShort" : "",
+            "fqdn" : "old",
+            "hostName" : "old",
+            "ip" : "1.1.1.1",
+            "isKernelModeNAT" : false,
+            "l2tp" : false,
+            "listedPort" : 995,
+            "listedProto" : "",
+            "logPermanent" : false,
+            "logType" : "",
+            "message" : "",
+            "noLog" : false,
+            "numLogin" : null,
+            "openVpnUdpPorts" : [
+
+            ],
+            "operatorName" : "",
+            "os" : null,
+            "owner" : null,
+            "ping" : 0,
+            "pingToGoogle" : 0,
+            "recvSize" : 0,
+            "score" : 0,
+            "sendSize" : 0,
+            "sessions" : 0,
+            "soft" : null,
+            "speed" : 0,
+            "sslPorts" : [
+
+            ],
+            "totalTraffic" : 0,
+            "totalUsers" : 0,
+            "udpPort" : null,
+            "uptimeMs" : 0
+          }
+        },
+        {
+          "connectPort" : null,
+          "input" : "{\"hostName\":\"min\",\"ip\":\"2.2.2.2\"}",
+          "server" : {
+            "abuse" : null,
+            "build" : null,
+            "countryLong" : "",
+            "countryShort" : "",
+            "fqdn" : "min",
+            "hostName" : "min",
+            "ip" : "2.2.2.2",
+            "isKernelModeNAT" : false,
+            "l2tp" : false,
+            "listedPort" : 0,
+            "listedProto" : "",
+            "logPermanent" : false,
+            "logType" : "",
+            "message" : "",
+            "noLog" : false,
+            "numLogin" : null,
+            "openVpnUdpPorts" : [
+
+            ],
+            "operatorName" : "",
+            "os" : null,
+            "owner" : null,
+            "ping" : 0,
+            "pingToGoogle" : 0,
+            "recvSize" : 0,
+            "score" : 0,
+            "sendSize" : 0,
+            "sessions" : 0,
+            "soft" : null,
+            "speed" : 0,
+            "sslPorts" : [
+
+            ],
+            "totalTraffic" : 0,
+            "totalUsers" : 0,
+            "udpPort" : null,
+            "uptimeMs" : 0
+          }
+        },
+        {
+          "connectPort" : null,
+          "input" : "{\"ip\":\"3.3.3.3\"}",
+          "server" : {
+            "abuse" : null,
+            "build" : null,
+            "countryLong" : "",
+            "countryShort" : "",
+            "fqdn" : "",
+            "hostName" : "",
+            "ip" : "3.3.3.3",
+            "isKernelModeNAT" : false,
+            "l2tp" : false,
+            "listedPort" : 0,
+            "listedProto" : "",
+            "logPermanent" : false,
+            "logType" : "",
+            "message" : "",
+            "noLog" : false,
+            "numLogin" : null,
+            "openVpnUdpPorts" : [
+
+            ],
+            "operatorName" : "",
+            "os" : null,
+            "owner" : null,
+            "ping" : 0,
+            "pingToGoogle" : 0,
+            "recvSize" : 0,
+            "score" : 0,
+            "sendSize" : 0,
+            "sessions" : 0,
+            "soft" : null,
+            "speed" : 0,
+            "sslPorts" : [
+
+            ],
+            "totalTraffic" : 0,
+            "totalUsers" : 0,
+            "udpPort" : null,
+            "uptimeMs" : 0
+          }
+        }
+      ],
+      "name" : "server-json-decode"
+    },
+    {
+      "connectPort" : 443,
+      "flag" : "🇯🇵",
+      "name" : "server-json-encode",
+      "prioritizedSslPorts" : [
+        443,
+        992,
+        995,
+        22,
+        1443
+      ],
+      "server" : {
+        "abuse" : "a@b",
+        "build" : 9800,
+        "countryLong" : "Japan",
+        "countryShort" : "jp",
+        "fqdn" : "vpn1.opengw.net",
+        "hostName" : "vpn1",
+        "ip" : "1.2.3.4",
+        "isKernelModeNAT" : true,
+        "l2tp" : true,
+        "listedPort" : 1443,
+        "listedProto" : "tcp",
+        "logPermanent" : false,
+        "logType" : "2weeks",
+        "message" : "m",
+        "name" : "n",
+        "noLog" : true,
+        "numLogin" : 12,
+        "openVpnUdpPorts" : [
+          1194
+        ],
+        "operatorName" : "op",
+        "os" : "Linux",
+        "owner" : "o",
+        "ping" : 2,
+        "pingToGoogle" : 8,
+        "recvSize" : 11,
+        "score" : 9,
+        "sendSize" : 10,
+        "sessions" : 4,
+        "soft" : "v4.43",
+        "speed" : 3,
+        "sslPorts" : [
+          22,
+          995,
+          443,
+          1443,
+          992
+        ],
+        "totalTraffic" : 7,
+        "totalUsers" : 6,
+        "udpPort" : 4000,
+        "uptimeMs" : 5
+      }
+    },
+    {
+      "cases" : [
+        {
+          "ports" : [
+
+          ],
+          "result" : [
+
+          ]
+        },
+        {
+          "ports" : [
+            443
+          ],
+          "result" : [
+            443
+          ]
+        },
+        {
+          "ports" : [
+            22,
+            993,
+            443
+          ],
+          "result" : [
+            443,
+            993,
+            22
+          ]
+        },
+        {
+          "ports" : [
+            1443,
+            5555
+          ],
+          "result" : [
+            1443,
+            5555
+          ]
+        },
+        {
+          "ports" : [
+            5555,
+            22,
+            995,
+            1443,
+            443,
+            992,
+            465,
+            585,
+            993
+          ],
+          "result" : [
+            443,
+            992,
+            995,
+            465,
+            585,
+            993,
+            22,
+            5555,
+            1443
+          ]
+        },
+        {
+          "ports" : [
+            0
+          ],
+          "result" : [
+            0
+          ]
+        },
+        {
+          "ports" : [
+            443,
+            443
+          ],
+          "result" : [
+            443
+          ]
+        }
+      ],
+      "name" : "port-priority"
+    },
+    {
+      "cases" : [
+        {
+          "listedPort" : 0,
+          "result" : null,
+          "sslPorts" : [
+
+          ]
+        },
+        {
+          "listedPort" : 443,
+          "result" : 443,
+          "sslPorts" : [
+
+          ]
+        },
+        {
+          "listedPort" : 70000,
+          "result" : null,
+          "sslPorts" : [
+
+          ]
+        },
+        {
+          "listedPort" : -1,
+          "result" : null,
+          "sslPorts" : [
+
+          ]
+        },
+        {
+          "listedPort" : 1194,
+          "result" : 22,
+          "sslPorts" : [
+            22
+          ]
+        },
+        {
+          "listedPort" : 995,
+          "result" : 995,
+          "sslPorts" : [
+            0
+          ]
+        },
+        {
+          "listedPort" : 1,
+          "result" : 995,
+          "sslPorts" : [
+            0,
+            995
+          ]
+        }
+      ],
+      "name" : "connect-port"
+    },
+    {
+      "cases" : [
+        {
+          "countryShort" : "jp",
+          "flag" : "🇯🇵"
+        },
+        {
+          "countryShort" : "US",
+          "flag" : "🇺🇸"
+        },
+        {
+          "countryShort" : "",
+          "flag" : ""
+        },
+        {
+          "countryShort" : "x",
+          "flag" : "🇽"
+        },
+        {
+          "countryShort" : "123",
+          "flag" : "🇖🇗🇘"
+        },
+        {
+          "countryShort" : "ΩΩ",
+          "flag" : "🕎🕎"
+        }
+      ],
+      "name" : "flag"
+    },
+    {
+      "cases" : [
+        {
+          "ms" : -5,
+          "text" : "0 mins"
+        },
+        {
+          "ms" : 0,
+          "text" : "0 mins"
+        },
+        {
+          "ms" : 59999,
+          "text" : "0 mins"
+        },
+        {
+          "ms" : 60000,
+          "text" : "1 min"
+        },
+        {
+          "ms" : 119999,
+          "text" : "1 min"
+        },
+        {
+          "ms" : 3599999,
+          "text" : "59 mins"
+        },
+        {
+          "ms" : 3600000,
+          "text" : "60 mins"
+        },
+        {
+          "ms" : 3600001,
+          "text" : "1 hour"
+        },
+        {
+          "ms" : 3660000,
+          "text" : "1 hour"
+        },
+        {
+          "ms" : 7200000,
+          "text" : "2 hours"
+        },
+        {
+          "ms" : 86399999,
+          "text" : "23 hours"
+        },
+        {
+          "ms" : 86400000,
+          "text" : "24 hours"
+        },
+        {
+          "ms" : 86400001,
+          "text" : "1 day"
+        },
+        {
+          "ms" : 172800000,
+          "text" : "2 days"
+        },
+        {
+          "ms" : 31536000000,
+          "text" : "365 days"
+        }
+      ],
+      "name" : "format-uptime"
+    },
+    {
+      "cases" : [
+        {
+          "n" : 0,
+          "text" : "0 sessions"
+        },
+        {
+          "n" : 1,
+          "text" : "1 session"
+        },
+        {
+          "n" : 2,
+          "text" : "2 sessions"
+        },
+        {
+          "n" : 1000,
+          "text" : "1000 sessions"
+        }
+      ],
+      "name" : "format-sessions"
+    },
+    {
+      "cases" : [
+        {
+          "n" : 0,
+          "text" : "0 logins"
+        },
+        {
+          "n" : 1,
+          "text" : "1 login"
+        },
+        {
+          "n" : 2,
+          "text" : "2 logins"
+        },
+        {
+          "n" : 999,
+          "text" : "999 logins"
+        },
+        {
+          "n" : 1000,
+          "text" : "1,000 logins"
+        },
+        {
+          "n" : 1234567,
+          "text" : "1,234,567 logins"
+        },
+        {
+          "n" : -1234,
+          "text" : "-1,234 logins"
+        }
+      ],
+      "name" : "format-logins"
+    },
+    {
+      "cases" : [
+        {
+          "logType" : "",
+          "text" : "-"
+        },
+        {
+          "logType" : "no",
+          "text" : "No Logs"
+        },
+        {
+          "logType" : "No",
+          "text" : "No Logs"
+        },
+        {
+          "logType" : "none",
+          "text" : "No Logs"
+        },
+        {
+          "logType" : "2weeks",
+          "text" : "2 Weeks"
+        },
+        {
+          "logType" : "2 weeks",
+          "text" : "2 Weeks"
+        },
+        {
+          "logType" : "12weeks",
+          "text" : "2 Weeks"
+        },
+        {
+          "logType" : "permanent",
+          "text" : "Permanent"
+        },
+        {
+          "logType" : "Perm",
+          "text" : "Permanent"
+        },
+        {
+          "logType" : "3months",
+          "text" : "3months"
+        },
+        {
+          "logType" : "x",
+          "text" : "x"
+        }
+      ],
+      "name" : "format-logging"
+    },
+    {
+      "cases" : [
+        {
+          "google" : 0,
+          "japan" : 0,
+          "text" : "-, -"
+        },
+        {
+          "google" : 5,
+          "japan" : 0,
+          "text" : "5 ms, -"
+        },
+        {
+          "google" : 0,
+          "japan" : 7,
+          "text" : "-, 7 ms"
+        },
+        {
+          "google" : 12,
+          "japan" : 34,
+          "text" : "12 ms, 34 ms"
+        }
+      ],
+      "name" : "format-pings"
+    },
+    {
+      "cases" : [
+        {
+          "port" : null,
+          "text" : "-"
+        },
+        {
+          "port" : 0,
+          "text" : "UDP OK"
+        },
+        {
+          "port" : 4000,
+          "text" : "UDP OK"
+        }
+      ],
+      "name" : "format-udp"
+    },
+    {
+      "cases" : [
+        {
+          "ageSeconds" : 0,
+          "ok" : true
+        },
+        {
+          "ageSeconds" : 86399,
+          "ok" : true
+        },
+        {
+          "ageSeconds" : 86400,
+          "ok" : true
+        },
+        {
+          "ageSeconds" : 86400.001000000004,
+          "ok" : false
+        },
+        {
+          "ageSeconds" : -86399,
+          "ok" : true
+        },
+        {
+          "ageSeconds" : -90000,
+          "ok" : false
+        }
+      ],
+      "name" : "format-list-ok"
+    },
+    {
+      "cases" : [
+        {
+          "input" : "no",
+          "weeks" : 0
+        },
+        {
+          "input" : "None",
+          "weeks" : 0
+        },
+        {
+          "input" : "nolog",
+          "weeks" : 0
+        },
+        {
+          "input" : "0",
+          "weeks" : 0
+        },
+        {
+          "input" : "2weeks",
+          "weeks" : 2
+        },
+        {
+          "input" : "2 weeks",
+          "weeks" : 2
+        },
+        {
+          "input" : "1week",
+          "weeks" : 1
+        },
+        {
+          "input" : "1day",
+          "weeks" : 1
+        },
+        {
+          "input" : "7days",
+          "weeks" : 1
+        },
+        {
+          "input" : "8days",
+          "weeks" : 2
+        },
+        {
+          "input" : "3months",
+          "weeks" : 13
+        },
+        {
+          "input" : "1 month",
+          "weeks" : 5
+        },
+        {
+          "input" : "12months",
+          "weeks" : 52
+        },
+        {
+          "input" : "1year",
+          "weeks" : 52
+        },
+        {
+          "input" : "2years",
+          "weeks" : 104
+        },
+        {
+          "input" : "",
+          "weeks" : null
+        },
+        {
+          "input" : "abc",
+          "weeks" : null
+        },
+        {
+          "input" : "10",
+          "weeks" : null
+        },
+        {
+          "input" : "5 fortnights",
+          "weeks" : null
+        },
+        {
+          "input" : " 4weeks ",
+          "weeks" : 4
+        }
+      ],
+      "name" : "log-weeks"
+    },
+    {
+      "name" : "filter-pool",
+      "servers" : [
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "",
+          "fqdn" : "tokyo-1",
+          "hostName" : "tokyo-1",
+          "ip" : "1.1.1.1",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 0,
+          "listedProto" : "",
+          "logPermanent" : false,
+          "logType" : "2weeks",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "Alice",
+          "os" : null,
+          "owner" : null,
+          "ping" : 0,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 0,
+          "sendSize" : 0,
+          "sessions" : 0,
+          "soft" : null,
+          "speed" : 0,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 0,
+          "totalUsers" : 0,
+          "udpPort" : null,
+          "uptimeMs" : 0
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Japan",
+          "countryShort" : "",
+          "fqdn" : "osaka-2",
+          "hostName" : "osaka-2",
+          "ip" : "2.2.2.2",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 0,
+          "listedProto" : "",
+          "logPermanent" : false,
+          "logType" : "no",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "Müller",
+          "os" : null,
+          "owner" : null,
+          "ping" : 0,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 0,
+          "sendSize" : 0,
+          "sessions" : 0,
+          "soft" : null,
+          "speed" : 0,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 0,
+          "totalUsers" : 0,
+          "udpPort" : null,
+          "uptimeMs" : 0
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "Korea Republic of",
+          "countryShort" : "",
+          "fqdn" : "seoul-3",
+          "hostName" : "seoul-3",
+          "ip" : "3.3.3.3",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 0,
+          "listedProto" : "",
+          "logPermanent" : false,
+          "logType" : "3months",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "bob",
+          "os" : null,
+          "owner" : null,
+          "ping" : 0,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 0,
+          "sendSize" : 0,
+          "sessions" : 0,
+          "soft" : null,
+          "speed" : 0,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 0,
+          "totalUsers" : 0,
+          "udpPort" : null,
+          "uptimeMs" : 0
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "United States",
+          "countryShort" : "",
+          "fqdn" : "NYC-4",
+          "hostName" : "NYC-4",
+          "ip" : "4.4.4.4",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 0,
+          "listedProto" : "",
+          "logPermanent" : false,
+          "logType" : "permanent",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "Carol",
+          "os" : null,
+          "owner" : null,
+          "ping" : 0,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 0,
+          "sendSize" : 0,
+          "sessions" : 0,
+          "soft" : null,
+          "speed" : 0,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 0,
+          "totalUsers" : 0,
+          "udpPort" : null,
+          "uptimeMs" : 0
+        },
+        {
+          "abuse" : null,
+          "build" : null,
+          "countryLong" : "France",
+          "countryShort" : "",
+          "fqdn" : "paris-5",
+          "hostName" : "paris-5",
+          "ip" : "5.5.5.5",
+          "isKernelModeNAT" : false,
+          "l2tp" : false,
+          "listedPort" : 0,
+          "listedProto" : "",
+          "logPermanent" : false,
+          "logType" : "",
+          "message" : "",
+          "noLog" : false,
+          "numLogin" : null,
+          "openVpnUdpPorts" : [
+
+          ],
+          "operatorName" : "ÉLODIE",
+          "os" : null,
+          "owner" : null,
+          "ping" : 0,
+          "pingToGoogle" : 0,
+          "recvSize" : 0,
+          "score" : 0,
+          "sendSize" : 0,
+          "sessions" : 0,
+          "soft" : null,
+          "speed" : 0,
+          "sslPorts" : [
+
+          ],
+          "totalTraffic" : 0,
+          "totalUsers" : 0,
+          "udpPort" : null,
+          "uptimeMs" : 0
+        }
+      ]
+    },
+    {
+      "name" : "filter-none",
+      "params" : {
+
+      },
+      "result" : [
+        "tokyo-1",
+        "osaka-2",
+        "seoul-3",
+        "NYC-4",
+        "paris-5"
+      ]
+    },
+    {
+      "name" : "filter-search-host",
+      "params" : {
+        "search" : "tok"
+      },
+      "result" : [
+        "tokyo-1"
+      ]
+    },
+    {
+      "name" : "filter-search-case",
+      "params" : {
+        "search" : "NYC"
+      },
+      "result" : [
+        "NYC-4"
+      ]
+    },
+    {
+      "name" : "filter-search-ip",
+      "params" : {
+        "search" : "3.3"
+      },
+      "result" : [
+        "seoul-3"
+      ]
+    },
+    {
+      "name" : "filter-search-country",
+      "params" : {
+        "search" : "korea"
+      },
+      "result" : [
+        "seoul-3"
+      ]
+    },
+    {
+      "name" : "filter-search-operator-umlaut",
+      "params" : {
+        "search" : "MÜLLER"
+      },
+      "result" : [
+        "osaka-2"
+      ]
+    },
+    {
+      "name" : "filter-search-operator-accent-fold",
+      "params" : {
+        "search" : "elodie"
+      },
+      "result" : [
+
+      ]
+    },
+    {
+      "name" : "filter-search-none",
+      "params" : {
+        "search" : "zzz"
+      },
+      "result" : [
+
+      ]
+    },
+    {
+      "name" : "filter-country",
+      "params" : {
+        "country" : "Japan"
+      },
+      "result" : [
+        "tokyo-1",
+        "osaka-2"
+      ]
+    },
+    {
+      "name" : "filter-country-all",
+      "params" : {
+        "country" : "All"
+      },
+      "result" : [
+        "tokyo-1",
+        "osaka-2",
+        "seoul-3",
+        "NYC-4",
+        "paris-5"
+      ]
+    },
+    {
+      "name" : "filter-favorites",
+      "params" : {
+        "favorites" : [
+          "osaka-2",
+          "NYC-4",
+          "gone"
+        ],
+        "favoritesOnly" : true
+      },
+      "result" : [
+        "osaka-2",
+        "NYC-4"
+      ]
+    },
+    {
+      "name" : "filter-favorites-empty",
+      "params" : {
+        "favorites" : [
+
+        ],
+        "favoritesOnly" : true
+      },
+      "result" : [
+
+      ]
+    },
+    {
+      "name" : "filter-max-log-0",
+      "params" : {
+        "maxLogWeeks" : 0
+      },
+      "result" : [
+        "osaka-2"
+      ]
+    },
+    {
+      "name" : "filter-max-log-2",
+      "params" : {
+        "maxLogWeeks" : 2
+      },
+      "result" : [
+        "tokyo-1",
+        "osaka-2"
+      ]
+    },
+    {
+      "name" : "filter-max-log-13",
+      "params" : {
+        "maxLogWeeks" : 13
+      },
+      "result" : [
+        "tokyo-1",
+        "osaka-2",
+        "seoul-3"
+      ]
+    },
+    {
+      "name" : "filter-combined",
+      "params" : {
+        "country" : "Japan",
+        "maxLogWeeks" : 2,
+        "search" : "o"
+      },
+      "result" : [
+        "tokyo-1",
+        "osaka-2"
+      ]
+    }
+  ],
+  "module" : "serverlist",
+  "note" : "ServerList.parse, ListFormat, ports and ServerFilter."
+}

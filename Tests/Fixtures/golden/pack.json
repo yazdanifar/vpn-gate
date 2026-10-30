@@ -1,0 +1,415 @@
+{
+  "cases" : [
+    {
+      "elements" : [
+        {
+          "name" : "a",
+          "values" : [
+            {
+              "int" : 1
+            }
+          ]
+        },
+        {
+          "name" : "s",
+          "values" : [
+            {
+              "str" : "hi"
+            }
+          ]
+        }
+      ],
+      "hex" : "00000002000000026100000000000000010000000100000002730000000200000001000000026869",
+      "name" : "int-and-str",
+      "op" : "serialize"
+    },
+    {
+      "elements" : [
+        {
+          "name" : "u",
+          "values" : [
+            {
+              "unistr" : "é"
+            }
+          ]
+        },
+        {
+          "name" : "l",
+          "values" : [
+            {
+              "int64" : 72623859790382856
+            }
+          ]
+        }
+      ],
+      "hex" : "000000020000000275000000030000000100000003c3a900000000026c00000004000000010102030405060708",
+      "name" : "unistr-and-int64",
+      "op" : "serialize"
+    },
+    {
+      "elements" : [
+        {
+          "name" : "i",
+          "values" : [
+            {
+              "int" : 3735928559
+            }
+          ]
+        },
+        {
+          "name" : "d",
+          "values" : [
+            {
+              "data" : "010203"
+            }
+          ]
+        },
+        {
+          "name" : "s",
+          "values" : [
+            {
+              "str" : "héllo"
+            }
+          ]
+        },
+        {
+          "name" : "u",
+          "values" : [
+            {
+              "unistr" : "ünï"
+            }
+          ]
+        },
+        {
+          "name" : "l",
+          "values" : [
+            {
+              "int64" : 1234605616436508552
+            }
+          ]
+        },
+        {
+          "name" : "ip@ipv6_bool",
+          "values" : [
+            {
+              "int" : 0
+            }
+          ]
+        },
+        {
+          "name" : "ip@ipv6_array",
+          "values" : [
+            {
+              "data" : "00000000000000000000000000000000"
+            }
+          ]
+        },
+        {
+          "name" : "ip@ipv6_scope_id",
+          "values" : [
+            {
+              "int" : 0
+            }
+          ]
+        },
+        {
+          "name" : "ip",
+          "values" : [
+            {
+              "int" : 167772161
+            }
+          ]
+        },
+        {
+          "name" : "b",
+          "values" : [
+            {
+              "int" : 1
+            }
+          ]
+        }
+      ],
+      "hex" : "0000000a00000002690000000000000001deadbeef0000000264000000010000000100000003010203000000027300000002000000010000000668c3a96c6c6f0000000275000000030000000100000006c3bc6ec3af00000000026c000000040000000111223344556677880000000d697040697076365f626f6f6c0000000000000001000000000000000e697040697076365f61727261790000000100000001000000100000000000000000000000000000000000000011697040697076365f73636f70655f696400000000000000010000000000000003697000000000000000010a0000010000000262000000000000000100000001",
+      "name" : "all-types",
+      "op" : "serialize"
+    },
+    {
+      "elements" : [
+        {
+          "name" : "hubname",
+          "values" : [
+            {
+              "int" : 2
+            }
+          ]
+        }
+      ],
+      "hex" : "00000001000000086875626e616d65000000000000000100000002",
+      "name" : "duplicate-name-replaced",
+      "op" : "serialize"
+    },
+    {
+      "elements" : [
+        {
+          "name" : "Port",
+          "values" : [
+            {
+              "int" : 443
+            },
+            {
+              "int" : 992
+            },
+            {
+              "int" : 5555
+            }
+          ]
+        },
+        {
+          "name" : "empty",
+          "values" : [
+            {
+              "data" : ""
+            }
+          ]
+        }
+      ],
+      "hex" : "0000000200000005506f72740000000000000003000001bb000003e0000015b300000006656d707479000000010000000100000000",
+      "name" : "multi-value-and-empty",
+      "op" : "serialize"
+    },
+    {
+      "elements" : [
+        {
+          "name" : "Port",
+          "values" : [
+            {
+              "int" : 443
+            },
+            {
+              "int" : 992
+            },
+            {
+              "int" : 5555
+            }
+          ]
+        },
+        {
+          "name" : "empty",
+          "values" : [
+            {
+              "data" : ""
+            }
+          ]
+        }
+      ],
+      "hex" : "0000000200000005506f72740000000000000003000001bb000003e0000015b300000006656d707479000000010000000100000000",
+      "name" : "roundtrip",
+      "op" : "parse",
+      "reserialized" : "0000000200000005506f72740000000000000003000001bb000003e0000015b300000006656d707479000000010000000100000000"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "",
+      "name" : "truncated-0",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "00",
+      "name" : "truncated-1",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "0000",
+      "name" : "truncated-2",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "000000",
+      "name" : "truncated-3",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "00000001",
+      "name" : "truncated-4",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "0000000100",
+      "name" : "truncated-5",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "000000010000",
+      "name" : "truncated-6",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "00000001000000",
+      "name" : "truncated-7",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "0000000100000002",
+      "name" : "truncated-8",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "000000010000000273",
+      "name" : "truncated-9",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "00000001000000027300",
+      "name" : "truncated-10",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "0000000100000002730000",
+      "name" : "truncated-11",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "000000010000000273000000",
+      "name" : "truncated-12",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "00000001000000027300000002",
+      "name" : "truncated-13",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "0000000100000002730000000200",
+      "name" : "truncated-14",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "000000010000000273000000020000",
+      "name" : "truncated-15",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "00000001000000027300000002000000",
+      "name" : "truncated-16",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "0000000100000002730000000200000001",
+      "name" : "truncated-17",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "000000010000000273000000020000000100",
+      "name" : "truncated-18",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "00000001000000027300000002000000010000",
+      "name" : "truncated-19",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "0000000100000002730000000200000001000000",
+      "name" : "truncated-20",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "000000010000000273000000020000000100000005",
+      "name" : "truncated-21",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "00000001000000027300000002000000010000000568",
+      "name" : "truncated-22",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "0000000100000002730000000200000001000000056865",
+      "name" : "truncated-23",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "00000001000000027300000002000000010000000568656c",
+      "name" : "truncated-24",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "00000001000000027300000002000000010000000568656c6c",
+      "name" : "truncated-25",
+      "op" : "parse"
+    },
+    {
+      "error" : "badType(9)",
+      "hex" : "000000010000000261000000090000000100000000",
+      "name" : "bad-type",
+      "op" : "parse"
+    },
+    {
+      "error" : "badName",
+      "hex" : "0000000100000000",
+      "name" : "name-length-zero",
+      "op" : "parse"
+    },
+    {
+      "error" : "badName",
+      "hex" : "0000000100000100",
+      "name" : "name-length-256",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "ffffffff",
+      "name" : "huge-element-count",
+      "op" : "parse"
+    },
+    {
+      "error" : "truncated",
+      "hex" : "00000001000000026100000000ffffffff",
+      "name" : "huge-value-count",
+      "op" : "parse"
+    },
+    {
+      "elements" : [
+        {
+          "name" : "a",
+          "values" : [
+            {
+              "unistr" : "hi"
+            }
+          ]
+        }
+      ],
+      "hex" : "0000000100000002610000000300000001000000026869",
+      "name" : "unistr-without-nul",
+      "op" : "parse",
+      "reserialized" : "000000010000000261000000030000000100000003686900"
+    }
+  ],
+  "module" : "pack",
+  "note" : "serialize = encode; parse = decode. error = PackError case."
+}

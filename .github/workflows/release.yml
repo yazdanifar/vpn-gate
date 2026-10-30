@@ -2,25 +2,61 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:      # dry run: runs the gate and collects the installers, never publishes
+
+permissions:
+  contents: read
+
+# One release run per ref; a re-pushed tag queues behind the running one instead of racing it.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: macos-15
-    permissions:
-      contents: write
+  checks:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Tag must match VERSION
+        if: github.ref_type == 'tag'
         run: test "v$(tr -d '[:space:]' < VERSION)" = "${GITHUB_REF_NAME}"
       - name: CHANGELOG must mention this version
         run: grep -q "$(tr -d '[:space:]' < VERSION)" CHANGELOG.md
-      - run: scripts/lint.sh
-      - name: Package.swift still builds
-        run: swift build
-      - run: scripts/build.sh all
-      - run: scripts/test.sh --each
-      - run: scripts/build-pkg.sh
+
+  # Every lint, test and packaging job of ci.yml (all platforms); the installers come from its artifacts.
+  # ci.yml does not trigger on tag pushes itself, so the suite runs exactly once per release.
+  ci:
+    needs: checks
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  publish:
+    needs: [checks, ci]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      # Exact names only: other vpn-gate-* artifacts (debug APK, android engine) must not leak in.
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: vpn-gate-{pkg,msi,deb,release-apk,release-aab,release-apk-certs}
+          path: dist
+          merge-multiple: true
+      - name: Release must be signed with the release key
+        run: |
+          ls -l dist
+          grep -q "certificate DN" dist/apk-certs.txt   # apksigner prints "Signer #1 certificate DN" or "V2 Signer: certificate DN"
+          if grep -q "Android Debug" dist/apk-certs.txt; then
+            echo "::error::Release APK is signed with the debug key; set the ANDROID_KEYSTORE_* secrets"; exit 1
+          fi
+      - name: Collect the installers
+        run: |
+          mkdir -p out
+          cp "dist/VPN Gate.pkg" dist/VPN-Gate.msi dist/*.deb dist/*.apk dist/*.aab out/
+          ls -l out
       - name: Publish
+        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "build/VPN Gate.pkg" --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" out/* --title "$GITHUB_REF_NAME" --generate-notes

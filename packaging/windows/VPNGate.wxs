@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WiX v4. Built by scripts/build-msi.ps1, which passes Version, AppFragment, DaemonExe, WintunDll, DatFile and IconFile. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package Name="VPN Gate" Manufacturer="yazdanifar" Version="$(Version)" Scope="perMachine"
+           UpgradeCode="55DC82C8-90E6-4C99-8636-A9BEDAC85D7E" Compressed="yes">
+    <!-- afterInstallExecute: the new files go in before the old product is removed, so components both versions share (and
+         the data folder with them) are not uninstalled during an upgrade. -->
+    <MajorUpgrade Schedule="afterInstallExecute" DowngradeErrorMessage="A newer version of VPN Gate is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="AppIcon.ico" SourceFile="$(IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="VPN Gate" />
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DATADIR" Name="VPNGate" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <!-- The service: privileged daemon (vpngate-daemon with the service argument), started at boot, restarted when it crashes. -->
+    <ComponentGroup Id="ServiceFiles" Directory="INSTALLFOLDER">
+      <Component Id="DaemonExe" Bitness="always64">
+        <File Id="DaemonExeFile" Source="$(DaemonExe)" Name="vpngate-daemon.exe" KeyPath="yes" />
+        <ServiceInstall Id="VPNGateService" Name="VPNGate" DisplayName="VPN Gate"
+                        Description="Creates the VPN Gate adapter, routes and DNS for the VPN Gate app."
+                        Type="ownProcess" Start="auto" ErrorControl="normal" Arguments="--service">
+          <util:ServiceConfig FirstFailureActionType="restart" SecondFailureActionType="restart"
+                              ThirdFailureActionType="restart" RestartServiceDelayInSeconds="5" ResetPeriodInDays="1" />
+        </ServiceInstall>
+        <ServiceControl Id="VPNGateServiceControl" Name="VPNGate" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+      </Component>
+      <Component Id="WintunDll" Bitness="always64">
+        <File Source="$(WintunDll)" Name="wintun.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="BundledList" Bitness="always64">
+        <File Source="$(DatFile)" Name="VPNGate.dat" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- The WinUI app (self-contained publish output): ComponentGroup AppFiles is generated into $(AppFragment) by the script. -->
+
+
+    <!-- State: %ProgramData%\VPNGate holds the server cache and host id. Created here, locked to SYSTEM and Administrators
+         below, removed on uninstall. -->
+    <ComponentGroup Id="StateFiles" Directory="DATADIR">
+      <Component Id="DataDir" Bitness="always64" Guid="*">
+        <CreateFolder />
+        <RegistryValue Root="HKLM" Key="Software\VPNGate" Name="DataDir" Type="string" Value="[DATADIR]" KeyPath="yes" />
+        <util:RemoveFolderEx On="uninstall" Property="DATADIR_PATH" />
+      </Component>
+    </ComponentGroup>
+    <!-- RemoveFolderEx runs early on uninstall, so its path comes from the registry value the install wrote (AppSearch). -->
+    <Property Id="DATADIR_PATH">
+      <RegistrySearch Id="DataDirSearch" Root="HKLM" Key="Software\VPNGate" Name="DataDir" Type="raw" Bitness="always64" />
+    </Property>
+
+    <CustomAction Id="LockDataDir" Directory="SystemFolder" Execute="deferred" Impersonate="no" Return="check"
+                  ExeCommand="&quot;[SystemFolder]icacls.exe&quot; &quot;[DATADIR]&#92;&quot; /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F" />
+
+    <ComponentGroup Id="Shortcuts" Directory="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut" Bitness="always64">
+        <Shortcut Id="AppShortcut" Name="VPN Gate" Target="[INSTALLFOLDER]VPNGate.exe" WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKCU" Key="Software\VPNGate" Name="Shortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Main" Title="VPN Gate" Level="1">
+      <ComponentGroupRef Id="ServiceFiles" />
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentGroupRef Id="StateFiles" />
+      <ComponentGroupRef Id="Shortcuts" />
+    </Feature>
+
+    <InstallExecuteSequence>
+      <Custom Action="LockDataDir" After="InstallFiles" Condition="NOT REMOVE" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>

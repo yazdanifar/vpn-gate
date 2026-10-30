@@ -1,33 +1,269 @@
 name: CI
 on:
-  push: { branches: [main] }
+  # cross-platform too: PRs can only restore caches saved on their base branch (or main), and only push runs save them
+  push:
+    branches: [main, cross-platform]
+    paths-ignore: ['**.md', 'docs/**']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_call:      # release.yml runs the whole suite as its gate and reuses the artifacts
+
+permissions:
+  contents: read      # explicit so the standalone and the release.yml-called runs have the same ceiling
+
+# A new push to a PR cancels its running suite. Other runs (and release.yml's call) get a group of their own.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   lint:
+    timeout-minutes: 10
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: scripts/lint.sh
   swiftpm:
+    timeout-minutes: 15
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Package.swift still builds (guards against drift from scripts/build.sh)
         run: swift build
   test:
+    timeout-minutes: 30
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v5
-      - name: Build
-        run: scripts/build.sh all
+      - uses: actions/checkout@v7
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        uses: ./.github/actions/rust-toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+      - name: Build and package (scripts/build.sh all, then the .pkg)
+        run: scripts/build-pkg.sh
       - name: Test
         run: scripts/test.sh --each
-  package:
-    runs-on: macos-15
-    needs: test
-    steps:
-      - uses: actions/checkout@v5
-      - run: scripts/build-pkg.sh
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with: { name: vpn-gate-pkg, path: build/VPN Gate.pkg }
+  rust:
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        uses: ./.github/actions/rust-toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+      - if: runner.os == 'Linux'      # formatting is the same on every OS
+        run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - name: Tunnel tests with the real Wintun adapter, routes and DNS against a fake relay (runner is a disposable admin machine)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo test --locked -p vpngate-daemon --test tunnel_windows --no-run
+          $exe = Get-ChildItem target/debug/deps/tunnel_windows-*.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          scripts/get-wintun.ps1 -Dest $exe.DirectoryName
+          & $exe.FullName --ignored --nocapture --test-threads=1
+          if ($LASTEXITCODE) { throw "tunnel_windows failed ($LASTEXITCODE)" }
+      - name: Tunnel test with the real utun and routes against a fake relay (macOS runner has passwordless sudo)
+        if: runner.os == 'macOS'
+        run: |
+          set -o pipefail
+          BIN=$(cargo test --locked -p vpngate-daemon --test tunnel_hermetic --no-run --message-format=json-render-diagnostics | jq -r 'select(.profile.test and .target.name == "tunnel_hermetic") | .executable')
+          [ -n "$BIN" ] || { echo "tunnel_hermetic test binary not found in cargo's output"; exit 1; }
+          sudo "$BIN" --ignored --nocapture
+  gtk:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        uses: ./.github/actions/rust-toolchain
+      - name: GTK4 and libadwaita development files
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/linux -> target
+          save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+      - name: GTK app (apps/linux has its own workspace)
+        working-directory: apps/linux
+        run: |
+          cargo fmt --all --check
+          cargo clippy --all-targets --locked -- -D warnings
+          cargo test --locked
+          cargo build --locked
+  dotnet:
+    timeout-minutes: 20
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with: { dotnet-version: 8.0.x }
+      - name: VPNGate.Core tests (golden IPC JSON, client and view models against a fake daemon on a named pipe)
+        run: dotnet test apps/windows/VPNGate.Tests --configuration Release
+      - name: WinUI app builds (unpackaged, self-contained)
+        run: dotnet build apps/windows/VPNGate.App --configuration Release -p:Platform=x64
+  msi:
+    timeout-minutes: 30
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        uses: ./.github/actions/rust-toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+      - uses: actions/setup-dotnet@v6
+        with: { dotnet-version: 8.0.x }
+      - run: dotnet tool install --global wix --version 4.0.5
+      - name: Build the MSI (service, wintun.dll, WinUI app)
+        run: scripts/build-msi.ps1
+        shell: pwsh
+      - name: Install, check service, ACL, IPC and crash restart, uninstall (runner is a disposable admin machine)
+        run: scripts/test-msi.ps1
+        shell: pwsh
+      - name: Upgrade from this MSI to a newer one, refuse a downgrade, uninstall
+        shell: pwsh
+        run: |
+          scripts/build-msi.ps1 -Reuse -Version 99.0.0 -Output build/VPN-Gate-next.msi
+          scripts/test-msi-upgrade.ps1 -Old build/VPN-Gate.msi -New build/VPN-Gate-next.msi -NewVersion 99.0.0
+      - name: Installer logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with: { name: msi-logs, path: "*.log", if-no-files-found: ignore }
+      - uses: actions/upload-artifact@v7
+        with: { name: vpn-gate-msi, path: build/VPN-Gate.msi }
+  deb:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        uses: ./.github/actions/rust-toolchain
+      - uses: Swatinem/rust-cache@v2      # also keeps the installed cargo-deb (~/.cargo/bin)
+        with:
+          workspaces: .      # apps/linux builds into the root target dir (scripts/build-deb.sh)
+          key: ${{ hashFiles('apps/linux/Cargo.lock') }}
+          save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+      - name: GTK4 and libadwaita development files
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev desktop-file-utils
+      - name: Build the .deb (daemon, GTK app, systemd unit, desktop file)
+        run: scripts/build-deb.sh
+      - name: Package contents
+        run: dpkg-deb --info build/vpn-gate_*.deb && dpkg-deb --contents build/vpn-gate_*.deb
+      - name: Install, group, unit, IPC, crash restart, remove, purge (runner is a disposable machine)
+        run: scripts/test-deb.sh
+      - uses: actions/upload-artifact@v7
+        with: { name: vpn-gate-deb, path: build/vpn-gate_*.deb }
+  android-engine:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        uses: ./.github/actions/rust-toolchain
+      - uses: Swatinem/rust-cache@v2      # also keeps the installed cargo-ndk (~/.cargo/bin)
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+      - name: Cross-compile for arm64-v8a, armeabi-v7a and x86_64 and generate the Kotlin bindings (the runner ships the NDK)
+        run: |
+          # cargo-ndk warns when the two differ, and the runner points ANDROID_NDK_ROOT at an older NDK
+          ndk="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          export ANDROID_NDK_HOME="$ndk" ANDROID_NDK_ROOT="$ndk"
+          scripts/build-android-engine.sh
+      - uses: actions/upload-artifact@v7
+        with: { name: vpn-gate-android-engine, path: build/android-engine }
+  android-app:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    needs: [android-engine]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with: { name: vpn-gate-android-engine, path: build/android-engine }
+      - uses: actions/setup-java@v6
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v5
+        with:      # its default saves only on main; save from the same pushes as rust-cache
+          cache-read-only: ${{ !(github.event_name == 'push' && github.ref_type == 'branch') }}
+      - name: Release keystore (only when the ANDROID_KEYSTORE_BASE64 secret exists; otherwise the debug key signs)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"   # outside the checkout: never committable or uploadable
+            echo "VPNGATE_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          fi
+      - name: Core tests (JVM), the debug APK, and the release APK + AAB (the runner ships the Android SDK)
+        working-directory: apps/android
+        env:
+          VPNGATE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          VPNGATE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          VPNGATE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon :core:test :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease :app:bundleRelease
+      - uses: actions/upload-artifact@v7
+        with: { name: vpn-gate-apk-debug, path: apps/android/app/build/outputs/apk/debug/*.apk }
+      - name: Release APK signing certificate (recorded in the log; release.yml rejects the debug key)
+        run: |
+          apksigner=$(printf '%s\n' "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          [ -x "$apksigner" ] || { echo "apksigner not found under $ANDROID_HOME/build-tools"; exit 1; }
+          "$apksigner" verify --print-certs apps/android/app/build/outputs/apk/release/*.apk | tee apk-certs.txt
+      - uses: actions/upload-artifact@v7
+        with: { name: vpn-gate-release-apk, path: apps/android/app/build/outputs/apk/release/*.apk }
+      - uses: actions/upload-artifact@v7
+        with: { name: vpn-gate-release-aab, path: apps/android/app/build/outputs/bundle/release/*.aab }
+      - uses: actions/upload-artifact@v7
+        with: { name: vpn-gate-release-apk-certs, path: apk-certs.txt }
+  android-emulator:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    needs: [android-engine]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with: { name: vpn-gate-android-engine, path: build/android-engine }
+      - uses: actions/setup-java@v6
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v5
+        with:      # its default saves only on main; save from the same pushes as rust-cache
+          cache-read-only: ${{ !(github.event_name == 'push' && github.ref_type == 'branch') }}
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Smoke test on an x86_64 emulator (launch, agree, the bundled list shows)
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          # v2.38.0's default options plus -no-metrics (the emulator warns its metrics prompt will become blocking);
+          # the pin keeps this copy from drifting silently: compare the defaults when bumping it
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
+          working-directory: apps/android
+          script: |
+            ./gradlew --no-daemon :app:connectedDebugAndroidTest || { adb logcat -d -t 3000 | grep -E 'AndroidRuntime|vpngate|FATAL|UniFFI|jna|System.err' | tail -80; exit 1; }
+  coverage:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        uses: ./.github/actions/rust-toolchain
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+      - name: Coverage thresholds (core >= 90%, engine files >= 80%)
+        run: scripts/coverage-rs.sh

@@ -12,6 +12,7 @@ with VPN Gate or SoftEther and does not claim full parity with the Windows clien
 |---|---|
 | [docs/FEATURES.md](docs/FEATURES.md) | What is implemented, known limits, telemetry, IPv6, routing rules, SOCKS5 mode |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Targets, process model, repository layout |
+| [docs/cross-platform/PLAN.md](docs/cross-platform/PLAN.md) | Multi-session plan for the Rust core + Windows/Linux/Android ports; progress in [STATUS.md](docs/cross-platform/STATUS.md) |
 | [docs/research/](docs/research/) | Reverse-engineering notes on the Windows client (not part of the build) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Build, test and change workflow |
 | [SECURITY.md](SECURITY.md) | Reporting vulnerabilities, trust model |
@@ -20,6 +21,20 @@ with VPN Gate or SoftEther and does not claim full parity with the Windows clien
 | [NOTICE](NOTICE) | Third-party notices |
 
 ## Install
+Release builds are attached to each [GitHub release](../../releases) (tag `v*`): `VPN Gate.pkg`, `VPN-Gate.msi`,
+`vpn-gate_<version>_<arch>.deb`, and an `.apk` and `.aab`. None is notarized or store-signed (see the notes per platform).
+
+| OS | Install | Uninstall |
+|---|---|---|
+| macOS | open `VPN Gate.pkg` (details below) | Settings → Uninstall…, then trash the app |
+| Windows 10/11 x64 | run `VPN-Gate.msi` as administrator; installs the `VPNGate` service and the app (Start menu) | Apps & features → VPN Gate |
+| Debian/Ubuntu (systemd) | `sudo apt install ./vpn-gate_<version>_<arch>.deb`, then log out and in so the `vpngate` group applies | `sudo apt remove vpn-gate` (`purge` also deletes state) |
+| Android 7.0+ | sideload the `.apk` (allow installs from unknown sources) | remove the app |
+
+The Windows installer and Android APK are signed only with test keys unless the release secrets were set. Build from
+source on macOS as follows.
+
+### macOS
 ```
 scripts/build-pkg.sh           # -> build/VPN Gate.pkg (Universal installer)
 open "build/VPN Gate.pkg"      # standard macOS installer: asks for your password once
@@ -49,16 +64,18 @@ Foreground tunnel for debugging: `sudo build/bin/vpngate-helper --connect <ip> [
 
 ## Tests
 ```
-scripts/test.sh                  # 431 tests, no network or root, ~100 s
+cargo test --workspace           # engine + daemon (Rust): no network or root
+scripts/test.sh                  # macOS app tests (Swift), no network or root
 scripts/test.sh --each           # every test in its own process (crashes are reported per test)
-scripts/test.sh --tsan | --asan  # same suite under ThreadSanitizer / AddressSanitizer
-scripts/test.sh --live live/     # real VPN Gate servers: list download + handshake + DHCP
-scripts/coverage.sh              # llvm-cov report; fails below 90% (core) / 80% (key helper files)
+scripts/test.sh --tsan | --asan  # app tests under ThreadSanitizer / AddressSanitizer
+cargo test -p vpngate-daemon --test live -- --ignored   # real VPN Gate servers (network)
+scripts/coverage-rs.sh           # cargo-llvm-cov; fails below 90% (core) / 80% (engine files)
+sudo -E cargo test -p vpngate-daemon --test tunnel_hermetic -- --ignored   # real utun + routes vs a fake relay
 sudo scripts/e2e-tunnel.sh <ip>  # real tunnel: traffic, DNS, IPv6 block, SIGINT/SIGTERM/kill -9 cleanup
 ```
-The suite uses an in-memory SoftEther server (real wire format), a fake hub that answers DHCP/ARP, and
+The Rust suite uses an in-memory SoftEther server (real wire format), a fake hub that answers DHCP/ARP, and
 recording doubles for `route`/DNS/utun, so the session, bridge, network configuration and IPC are tested
-without privileges. Fuzz tests are seeded (`FUZZ_SEED`, `FUZZ_ITERATIONS`).
+without privileges. Fuzz tests are property tests (`PROPTEST_CASES`).
 
 ## Notes / Security
 - If the helper crashes, stale routes/DNS are cleaned on its next start (only routes it added).

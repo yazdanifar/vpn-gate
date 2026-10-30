@@ -1,5 +1,4 @@
 import SwiftUI
-import VPNGateCore
 
 /// The "Routing" settings tab: an ordered rule list, what unmatched traffic does, and the bypass-LAN preset.
 /// Shared with the per-account override editor via `RoutingRulesEditor` (bound to whichever `RoutingConfig` the
