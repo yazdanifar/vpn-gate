@@ -24,9 +24,9 @@ PY
 sudo apt-get install -y "./$DEB" || { echo "install failed"; exit 1; }
 
 check "group vpngate exists" getent group vpngate
-# The postinst adds the installing user (SUDO_USER) to vpngate. A fresh login session must see the group and be able to
+# The postinst adds the installing user (apt runs under our `sudo`, so that is the user running this script) to vpngate. A fresh login session must see the group and be able to
 # use the socket without root; a user outside the group must be refused.
-MEMBER=${SUDO_USER:-}
+MEMBER=${SUDO_USER:-$(id -un)}
 if [ -n "$MEMBER" ] && [ "$MEMBER" != root ]; then
   check "installing user $MEMBER is in the vpngate group" bash -c "id -nG '$MEMBER' | tr ' ' '\n' | grep -qx vpngate"
 fi
