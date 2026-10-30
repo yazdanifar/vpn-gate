@@ -1,0 +1,55 @@
+name: spike-u34
+on:
+  push:
+    branches: [xp/U34-winui-ui-tests]
+jobs:
+  spike:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with: { dotnet-version: 8.0.x }
+      - run: dotnet build apps/windows/VPNGate.App --configuration Release -p:Platform=x64
+      - name: Session facts
+        shell: pwsh
+        run: |
+          whoami
+          "UserInteractive: $([Environment]::UserInteractive)"
+          "SessionId: $((Get-Process -Id $PID).SessionId)"
+          Get-Process explorer -ErrorAction SilentlyContinue | Select-Object Id, SessionId | Format-Table
+          Add-Type -AssemblyName System.Windows.Forms
+          [System.Windows.Forms.Screen]::PrimaryScreen.Bounds | Format-List
+          Get-CimInstance Win32_VideoController | Select-Object Name, CurrentHorizontalResolution | Format-Table
+      - name: Launch, UIA, screenshot
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem apps/windows/VPNGate.App/bin -Recurse -Filter VPNGate.exe | Select-Object -First 1
+          "exe: $($exe.FullName)"
+          $p = Start-Process $exe.FullName -PassThru -WorkingDirectory $exe.DirectoryName
+          Start-Sleep 15
+          $p.Refresh()
+          "alive: $(-not $p.HasExited)  exit: $(if ($p.HasExited) { $p.ExitCode })  mainWindow: '$($p.MainWindowTitle)' handle: $($p.MainWindowHandle)"
+          Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing, System.Windows.Forms
+          $root = [System.Windows.Automation.AutomationElement]::RootElement
+          $win = $root.FindFirst('Children', (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $p.Id)))
+          "uia window: $(if ($win) { $win.Current.Name } else { 'none' })"
+          if ($win) {
+            $all = $win.FindAll('Descendants', [System.Windows.Automation.Condition]::TrueCondition)
+            "uia descendants: $($all.Count)"
+            $all | Select-Object -First 40 | ForEach-Object { "  $($_.Current.ControlType.ProgrammaticName) '$($_.Current.Name)' id='$($_.Current.AutomationId)'" }
+          }
+          $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size)
+          New-Item -ItemType Directory -Force shots | Out-Null
+          $bmp.Save("shots/screen.png")
+          "screen: $($b.Width)x$($b.Height)"
+          $sum = 0; $n = 0
+          for ($x = 0; $x -lt $bmp.Width; $x += 97) { for ($y = 0; $y -lt $bmp.Height; $y += 97) { $c = $bmp.GetPixel($x,$y); $sum += $c.R + $c.G + $c.B; $n++ } }
+          "mean rgb sum: $($sum / $n)"
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with: { name: spike-shots, path: shots }
