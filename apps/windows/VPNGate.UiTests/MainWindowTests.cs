@@ -153,7 +153,7 @@ public class MainWindowTests
     [Fact]
     public async Task ConnectedStateShowsTheConnectionCard() => await WithMain(async (rig, w, root) =>
     {
-        rig.Status = FakeDaemon.Snapshot("connected", ",\"server\":\"2.2.2.2\",\"virtualIP\":\"10.21.0.5\",\"bytesIn\":1000,\"bytesOut\":500");
+        rig.Status = FakeDaemon.Snapshot("connected", ",\"server\":\"2.2.2.2\",\"virtualIP\":\"10.21.0.5\"");
         await rig.Vm.PollAsync();
         await Probe.Until(() => rig.Vm.State == ConnectionState.Connected, "the status poll to report connected. Unhandled: " + string.Join(";", UiHost.Unhandled));
         await Probe.Settle();
