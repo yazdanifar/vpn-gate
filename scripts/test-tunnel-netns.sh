@@ -47,7 +47,7 @@ vpncmd /CMD ServerStatusGet || { echo "server did not come up"; docker logs "$CO
 vpncmd /CMD HubCreate VPNGATE /PASSWORD:hubpw || { echo "HubCreate failed"; exit 2; }
 for c in "SecureNatEnable" "UserCreate vpn /GROUP:none /REALNAME:none /NOTE:none" "UserAnonymousSet vpn"; do
   # shellcheck disable=SC2086   # $c is a command line to split
-  vpncmd /HUB:VPNGATE /CMD $c || { echo "vpncmd $c failed"; exit 2; }
+  vpncmd /ADMINHUB:VPNGATE /CMD $c || { echo "vpncmd $c failed"; exit 2; }
 done
 DOCKER_GW=$(docker network inspect bridge -f '{{(index .IPAM.Config 0).Gateway}}')
 echo "server ready; docker0 address $DOCKER_GW"
