@@ -481,3 +481,63 @@ async fn byte_counts_report_data_but_not_keepalives() {
     assert!(u.send_frame(&[1, 2, 3]));
     assert_eq!((bytes_in.load(Ordering::SeqCst), bytes_out.load(Ordering::SeqCst)), (5, 3));
 }
+
+// Timing under Tokio's paused clock: virtual time, so the 1-3 s / 0.5-1 s jitter windows are asserted exactly.
+async fn keepalive_gaps(fast: bool, packets: usize) -> Vec<Duration> {
+    let lb = LoopbackUdp::new().await;
+    let (u, _) = make_udp(Opts { server_port: lb.port, fast, ..Opts::default() }, 5000);
+    u.start();
+    let mut gaps = Vec::new();
+    let mut prev = None;
+    for _ in 0..packets {
+        lb.recv(10.0).await.expect("keep-alive datagram");
+        let now = tokio::time::Instant::now();
+        if let Some(p) = prev {
+            gaps.push(now - p);
+        }
+        prev = Some(now);
+    }
+    u.stop();
+    gaps
+}
+
+#[tokio::test(start_paused = true)]
+async fn keepalives_repeat_every_one_to_three_seconds() {
+    let gaps = keepalive_gaps(false, 30).await;
+    assert_eq!(gaps.len(), 29);
+    for g in gaps {
+        assert!(g >= Duration::from_millis(1000) && g < Duration::from_millis(3000), "{g:?}");
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn fast_disconnect_keepalives_repeat_every_half_to_one_second() {
+    let gaps = keepalive_gaps(true, 30).await;
+    for g in gaps {
+        assert!(g >= Duration::from_millis(500) && g < Duration::from_millis(1000), "{g:?}");
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn silent_peer_is_detected_on_the_runtime_clock() {
+    for (fast, timeout_ms) in [(false, KEEP_ALIVE_TIMEOUT_MS), (true, KEEP_ALIVE_TIMEOUT_FAST_MS)] {
+        let (u, _) = make_udp(Opts { fast, ..Opts::default() }, 0);
+        let start = tokio::time::Instant::now();
+        let now = move || 100_000 + start.elapsed().as_millis() as u64;
+        u.set_clock(Arc::new(now));
+        // 10 s of traffic from the peer, one packet every 500 ms (inside both timeouts), makes the path usable.
+        for step in 0..=20u64 {
+            u.handle_datagram(&pp(1000 + step * 500, now() - 100, &[]), loopback(5000));
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        // The last packet arrived 500 ms ago.
+        assert!(u.is_usable());
+        tokio::time::sleep(Duration::from_millis(timeout_ms - 500)).await;
+        assert!(u.is_usable(), "silent for exactly the timeout ({timeout_ms} ms) is still alive");
+        tokio::time::sleep(Duration::from_millis(1)).await;
+        assert!(!u.is_usable(), "silent for more than {timeout_ms} ms");
+        // A late packet does not revive the path until the stable period has run again.
+        u.handle_datagram(&pp(50_000, now() - 100, &[]), loopback(5000));
+        assert!(!u.is_usable());
+    }
+}

@@ -638,3 +638,39 @@ async fn frames_go_over_tcp_until_udp_has_proven_stable() {
     assert!(eventually(3, || s.frames_received().contains(&vec![7; 64])).await, "frame must fall back to TCP");
     conn.close(None);
 }
+
+// Keep-alive timing under Tokio's paused clock: virtual seconds, no real waiting. The default fake welcome timeout is
+// 20 s, so the jitter window is [max(20/5, 1) s, 20/2 s] = [4 s, 10 s].
+#[tokio::test(start_paused = true)]
+async fn keep_alives_go_out_at_the_negotiated_interval() {
+    let s = FakeSoftEtherServer::new();
+    let sink = Sink::default();
+    let conn = connect(&s, 1, &sink).await;
+    tokio::time::sleep(Duration::from_millis(3_900)).await;
+    assert_eq!(s.keep_alives_received(), 0, "the first keep-alive waits at least timeout/5 = 4 s");
+    // Answer like a real server so the idle watchdog stays quiet.
+    for second in 4..=60u64 {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        if second % 5 == 0 {
+            s.stream(0).deliver(&data_phase::encode_keep_alive(&[]));
+        }
+    }
+    // 60 s elapsed: at most one per 4 s, at least one per 10 s (the last may still be pending).
+    let n = s.keep_alives_received();
+    assert!((5..=15).contains(&n), "{n} keep-alives in 60 s");
+    assert!(sink.closes.lock().unwrap().is_empty(), "an answering peer keeps the session open");
+    conn.close(None);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_silent_peer_is_dropped_after_the_idle_timeout() {
+    let s = FakeSoftEtherServer::new();
+    let sink = Sink::default();
+    let _conn = connect(&s, 1, &sink).await;
+    tokio::time::sleep(Duration::from_millis(19_900)).await;
+    assert!(sink.closes.lock().unwrap().is_empty(), "still inside the 20 s timeout");
+    assert!(s.keep_alives_received() >= 1, "we keep probing a silent peer");
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let e = sink.closes.lock().unwrap()[0].clone().expect("closed with an error");
+    assert!(e.to_string().contains("Read idle timeout (20000 ms)"), "{e}");
+}
