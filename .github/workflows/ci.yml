@@ -174,7 +174,8 @@ jobs:
         run: |
           $dir = "apps/windows/VPNGate.UiTests/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64"
           $env:VPNGATE_SHOTS = Join-Path $PWD "shots/ui"
-          & "$dir/VPNGate.UiTests.exe" -xml ui-results.xml -parallel none
+          & "$dir/VPNGate.UiTests.exe" -xml ui-results.xml -parallel none -verbose -diagnostics
+          "exit code: $LASTEXITCODE"
           exit $LASTEXITCODE
       - name: Tests that ran
         if: always()

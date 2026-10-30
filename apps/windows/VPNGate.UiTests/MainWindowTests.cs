@@ -88,7 +88,7 @@ public class MainWindowTests
         Probe.Invoke(Probe.ButtonNamed(root, "Clear Filters"));
         await Probe.Settle();
         Assert.Equal("", search.Text);
-        Assert.Equal(4, RowHosts(root).Count());
+        Assert.Equal(4, RowHosts(root).Count()); // all rows are back
 
         country.SelectedIndex = 1;
         await Probe.Settle();

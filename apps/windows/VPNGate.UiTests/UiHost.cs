@@ -34,6 +34,11 @@ internal static class UiHost
         {
             if (_queue is not null) return;
             Environment.SetEnvironmentVariable("VPNGATE_UITEST", "1");
+            AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            {
+                Console.Error.WriteLine("UNHANDLED (terminating=" + e.IsTerminating + "): " + e.ExceptionObject);
+                Console.Error.Flush();
+            };
             using var ready = new ManualResetEventSlim();
             var t = new Thread(() =>
             {
