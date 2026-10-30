@@ -3,6 +3,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
 
 ## [Unreleased]
 ### Added
+- U36b: Rust test leftovers. Keep-alive timing under Tokio's paused clock: `SoftEtherConnection` keep-alives (4-10 s window for a 20 s timeout) and the idle-timeout drop of a silent peer, `UdpAccel` keep-alive jitter (1-3 s, 0.5-1 s in fast mode) and silent-peer detection on the runtime clock. `vgdat::decompress` now rejects bytes between the end of the deflate stream and the Adler-32 (and after it). A `system_trust_accepts_a_public_ca_certificate` live test (platform verifier against example.com) runs in `live.yml`.
 - Sanitizer jobs: the Swift test harness stretches its waits 4x under `--asan`/`--tsan` (`VPNGATE_TEST_SLOWDOWN`), after two different `helperclient` tests timed out on a loaded runner.
 - U30b: `softether-netns` also checks the SOCKS5 TCP flow (new `vpngate-daemon --connect <host> --socks <port>` flag; the request reaches the web server through SecureNAT while the default route stays untouched and everything is restored after stop) and the IPv6 block while connected (v6 destinations route to the tun, not the physical link, and requests fail). The SoftEther image is pinned by digest.
 - U36 (step 1): `sanitizers` CI job runs the Swift app suite under ThreadSanitizer and AddressSanitizer (`scripts/test.sh --tsan` / `--asan`), which no job ran before.
