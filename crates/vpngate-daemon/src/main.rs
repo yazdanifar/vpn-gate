@@ -1,7 +1,6 @@
 //! Privileged daemon: `--daemon`, `--connect`, `--probe`, `--version`.
 
 use std::io::Write;
-#[cfg(unix)]
 use std::path::PathBuf;
 use std::process::ExitCode;
 #[cfg(unix)]
@@ -11,7 +10,6 @@ use vpngate_core::ipc::HELPER_VERSION;
 use vpngate_core::validation;
 use vpngate_daemon::args::{self, Mode};
 use vpngate_daemon::backend;
-#[cfg(unix)]
 use vpngate_daemon::engine::Engine;
 use vpngate_daemon::{daemon, probe};
 
