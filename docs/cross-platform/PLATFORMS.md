@@ -11,9 +11,13 @@ Manual checks that need a real machine. The agent cannot run these; the user doe
   fake relay (ping through the tunnel, only 192.0.2.0/24 captured, relay bypass, IPv6 block, restore on disconnect), SOCKS5-only
   mode (proxy answers, no system route change), and a killed process whose stale routes the next start removes.
 - `VPNGate.Tests/WindowsIntegrationTests.cs`: real Credential Manager (incl. chunking) and the run-at-login registry value.
+- `VPNGate.UiTests` (`winui-ui` job): every window and sheet built in-process over a fake daemon, key controls and state asserted
+  (list, sort, filters, Details, disclaimer, accounts, editor, routing, Settings, History, Log) and rendered to PNG; `VPNGate.Smoke`
+  (`winui-smoke` job): the real `VPNGate.exe` driven through UI Automation (launch, disclaimer, list, search, close).
 
-Only the rest needs a human: the look of the UI (5), a connection to a real relay with full-tunnel capture of the default
-route (6), a real TCP flow through SOCKS5, tray, upgrade of a running app window.
+Only the rest needs a human: looking once at the `winui-ui-screenshots` and `winui-smoke-screenshots` artifacts against UI-SPEC
+(5; the controls and their state are tested, the pictures are not yet diffed), a connection to a real relay with full-tunnel
+capture of the default route (6), a real TCP flow through SOCKS5, the tray icon and menu.
 
 Get `vpn-gate-msi` from the latest green `msi` CI job (unsigned: SmartScreen "More info" > "Run anyway").
 
@@ -21,9 +25,8 @@ Get `vpn-gate-msi` from the latest green `msi` CI job (unsigned: SmartScreen "Mo
 2. **Service.** `sc query VPNGate` is RUNNING; `sc qc VPNGate` shows AUTO_START, `--service`; `sc qfailure VPNGate` shows restart x3.
 3. **Files.** `C:\Program Files\VPN Gate` has `vpngate-daemon.exe`, `wintun.dll`, `VPNGate.dat`, `VPNGate.exe`.
 4. **State folder.** `icacls C:\ProgramData\VPNGate` lists only SYSTEM and Administrators (full control).
-5. **App.** Launch as a normal (non-admin) user: window renders; compare against UI-SPEC.md section by section
-   (disclaimer, list, filter, sort, columns, Details, accounts editor, routing editor, Settings, History, tray menu).
-   The list is filled (bundled list or sync); the status shows the service is reachable.
+5. **App.** Launch as a normal (non-admin) user. CI already checks every window's controls and renders them; what is left is
+   the tray menu and the real service: the list is filled (bundled list or sync) and the status shows the service is reachable.
 6. **Connect.** Connect to a relay. Verify: "VPNGate" adapter present, public IP changes, DNS resolves, IPv6 blocked
    (when set), `route print` shows the split default routes and the relay bypass. Disconnect restores routes and DNS.
 7. **Crash recovery.** While connected: `taskkill /F /IM vpngate-daemon.exe`. The service restarts within ~5 s and the

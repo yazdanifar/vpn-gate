@@ -20,13 +20,27 @@ public sealed partial class MainWindow : Window
 
     public MainViewModel Vm { get; }
 
-    public MainWindow()
+    public MainWindow() : this(CreateViewModel())
+    {
+    }
+
+    /// <summary>The production view model: the daemon's pipe (VPNGATE_PIPE overrides the name, for CI) and the files in <see cref="DataDir"/>.</summary>
+    private static MainViewModel CreateViewModel()
     {
         var queue = DispatcherQueue.GetForCurrentThread();
         var secrets = CredentialStore.Create();
-        Vm = new MainViewModel(IpcClient.ForNamedPipe(), new JsonFileSettings(JsonFileSettings.DefaultPath), a => queue.TryEnqueue(() => a()),
+        var pipe = Environment.GetEnvironmentVariable("VPNGATE_PIPE");
+        var ipc = string.IsNullOrEmpty(pipe) ? IpcClient.ForNamedPipe() : IpcClient.ForNamedPipe(pipe);
+        return new MainViewModel(ipc, new JsonFileSettings(JsonFileSettings.DefaultPath), a => queue.TryEnqueue(() => a()),
             accounts: new AccountStore(AccountStore.DefaultPath, secrets), secrets: secrets,
             history: new ConnectionHistoryStore(ConnectionHistoryStore.DefaultPath));
+    }
+
+    /// <summary>The window over a given view model (UI tests pass one wired to a fake daemon).</summary>
+    internal MainWindow(MainViewModel vm)
+    {
+        Vm = vm;
+        var queue = DispatcherQueue.GetForCurrentThread();
         InitializeComponent();
         Ui.Size(this, 1100, 720);
         var icon = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
@@ -34,7 +48,6 @@ public sealed partial class MainWindow : Window
 
         Vm.QuitRequested += () => Application.Current.Exit();
         Vm.PropertyChanged += OnVmChanged;
-        Closed += (_, _) => Tray.Dispose();
 
         // One tick a second: traffic text every time, a status poll every second one (UI-SPEC 11: the service is polled every 2 s).
         _tick = queue.CreateTimer();
@@ -43,6 +56,14 @@ public sealed partial class MainWindow : Window
         {
             Vm.RefreshTraffic();
             if (++_tickCount % 2 == 0) await Vm.PollAsync();
+        };
+
+        // A closed window must stop reacting to the view model (a disposed tray icon throws), which matters once tests open and close many.
+        Closed += (_, _) =>
+        {
+            _tick.Stop();
+            Vm.PropertyChanged -= OnVmChanged;
+            Tray.Dispose();
         };
 
         Root.Loaded += async (_, _) =>
