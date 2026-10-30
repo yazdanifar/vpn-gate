@@ -84,9 +84,6 @@ struct Widgets {
 }
 
 struct Shown {
-    /// The search text the model had at the last refresh: the entry is only overwritten when the model changed it (the user's
-    /// typing reaches the model after a short delay and must not be reset by a refresh in between).
-    search: String,
     ids: Vec<String>,
     probe_rev: u64,
     favorites: BTreeSet<String>,
@@ -176,7 +173,7 @@ pub fn build_with(app: &adw::Application, rt: Arc<tokio::runtime::Runtime>, env:
     wire_details(&w, &ctl, &window);
 
     let shown =
-        Rc::new(RefCell::new(Shown { search: String::new(), ids: vec![], probe_rev: 0, favorites: BTreeSet::new(), countries: vec![] }));
+        Rc::new(RefCell::new(Shown { ids: vec![], probe_rev: 0, favorites: BTreeSet::new(), countries: vec![] }));
     let disclaimer_open = Rc::new(Cell::new(false));
     let updating = Rc::new(Cell::new(false));
     let sync = {
@@ -687,6 +684,8 @@ fn syncing() -> bool {
 
 thread_local! {
     static SYNCING: Cell<bool> = const { Cell::new(false) };
+    /// The search text the entry last sent to the model.
+    static PUSHED_SEARCH: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
 fn wire_filters(w: &Rc<Widgets>, ctl: &Controller) {
@@ -697,6 +696,7 @@ fn wire_filters(w: &Rc<Widgets>, ctl: &Controller) {
             return;
         }
         let text = search.text().to_string();
+        PUSHED_SEARCH.with(|p| p.borrow_mut().clone_from(&text));
         c.change(|m| {
             m.filter.search = text;
             m.rebuild();
@@ -975,8 +975,10 @@ fn refresh_widgets(w: &Widgets, ctl: &Controller, shown: &Rc<RefCell<Shown>>) {
         if w.country.selected() != wanted_country {
             w.country.set_selected(wanted_country);
         }
-        if sh.search != m.filter.search {
-            sh.search = m.filter.search.clone();
+        // The entry is only written when something other than the entry changed the search (Clear Filters): what the user
+        // types reaches the model by itself, and a refresh in between must not reset it.
+        if PUSHED_SEARCH.with(|p| *p.borrow() != m.filter.search) {
+            PUSHED_SEARCH.with(|p| *p.borrow_mut() = m.filter.search.clone());
             if w.search.text() != m.filter.search {
                 w.search.set_text(&m.filter.search);
             }
