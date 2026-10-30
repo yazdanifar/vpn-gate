@@ -12,7 +12,6 @@ use rsa::RsaPublicKey;
 use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 use std::fmt;
-use std::io::Read;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VgDatError {
@@ -338,7 +337,8 @@ pub fn parse_inner_servers(inner: &Pack) -> Vec<VpnServer> {
 }
 
 /// Inflates a zlib stream (2-byte header, raw deflate, big-endian Adler-32) to exactly `expected_size` bytes.
-/// A longer or shorter stream, a bad header or a bad Adler-32 is rejected.
+/// A longer or shorter stream, a bad header, a bad Adler-32 or any byte before or after the Adler-32 that is not part
+/// of the stream is rejected.
 pub fn decompress(data: &[u8], expected_size: usize) -> Result<Vec<u8>, VgDatError> {
     let fail = VgDatError::DecompressionFailed;
     if expected_size == 0 || expected_size > MAX_INFLATED_SIZE || data.len() < 6 {
@@ -351,9 +351,15 @@ pub fn decompress(data: &[u8], expected_size: usize) -> Result<Vec<u8>, VgDatErr
     let raw = &data[2..data.len() - 4];
     let adler = u32::from_be_bytes(data[data.len() - 4..].try_into().expect("4 bytes"));
 
-    // One spare byte: an inflated stream longer than expected_size shows up as expected_size + 1.
+    // One spare byte: an inflated stream longer than expected_size shows up as expected_size + 1. The low-level
+    // decoder reports how much input it used, so bytes between the end of the deflate stream and the Adler-32 are
+    // rejected rather than skipped (they would be bytes nothing authenticated).
     let mut out = Vec::with_capacity(expected_size + 1);
-    flate2::read::DeflateDecoder::new(raw).take(expected_size as u64 + 1).read_to_end(&mut out).map_err(|_| fail)?;
+    let mut inflater = flate2::Decompress::new(false);
+    match inflater.decompress_vec(raw, &mut out, flate2::FlushDecompress::Finish) {
+        Ok(flate2::Status::StreamEnd) if inflater.total_in() == raw.len() as u64 => {}
+        _ => return Err(fail),
+    }
     if out.len() != expected_size || adler32(&out) != adler {
         return Err(fail);
     }
@@ -507,6 +513,27 @@ mod tests {
         older.merge(&list(&[("a", 100), ("b", 200)]));
         older.merge(&list(&[("B", 300)]));
         assert_eq!(older.values(), &want(&c["merged"]));
+    }
+
+    /// Not a shared vector: Swift's behaviour for extra bytes is unknown, and DECISIONS.md fixes the Rust one (reject).
+    #[test]
+    fn bytes_outside_the_deflate_stream_are_rejected() {
+        use std::io::Write;
+        let plain: Vec<u8> = (0..2000u32).map(|i| (i % 7) as u8).collect();
+        let mut enc = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        enc.write_all(&plain).unwrap();
+        let z = enc.finish().unwrap();
+        assert_eq!(decompress(&z, plain.len()).unwrap(), plain, "the stream itself is fine");
+
+        let (body, adler) = z.split_at(z.len() - 4);
+        // junk between the end of the deflate stream and the Adler-32
+        let between = [body, &[0xAA, 0xBB], adler].concat();
+        assert_eq!(decompress(&between, plain.len()), Err(VgDatError::DecompressionFailed));
+        // junk after the Adler-32 (the last four bytes are then not the checksum)
+        let after = [&z[..], &[0xAA, 0xBB, 0xCC, 0xDD]].concat();
+        assert_eq!(decompress(&after, plain.len()), Err(VgDatError::DecompressionFailed));
+        // a truncated stream
+        assert_eq!(decompress(&z[..z.len() - 6], plain.len()), Err(VgDatError::DecompressionFailed));
     }
 
     #[test]
