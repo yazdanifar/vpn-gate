@@ -14,7 +14,7 @@ cd "$(dirname "$0")/.."
 DAEMON=${VPNGATE_DAEMON:-target/release/vpngate-daemon}
 [[ -x $DAEMON ]] || { echo "$DAEMON not found: cargo build --release -p vpngate-daemon"; exit 2; }
 NS=vgtest HOST_IP=10.200.0.1 NS_IP=10.200.0.2
-CONTAINER=vgtest-softether SPW=serverpw HPW=hubpw
+CONTAINER=vgtest-softether
 WEB_PORT=8080
 LOG=/tmp/vpngate-netns.log
 WEB_LOG=/tmp/vpngate-netns-web.log
@@ -36,16 +36,18 @@ trap cleanup EXIT
 
 echo "== SoftEther server"
 docker rm -f "$CONTAINER" >/dev/null 2>&1
-docker run -d --name "$CONTAINER" -e SPW="$SPW" -e HPW="$HPW" -p 443:443 softethervpn/vpnserver:stable >/dev/null || { echo "cannot start the container"; exit 2; }
+docker run -d --name "$CONTAINER" -p 443:443 softethervpn/vpnserver:stable >/dev/null || { echo "cannot start the container"; exit 2; }
 VPNCMD=$(docker exec "$CONTAINER" sh -c 'command -v vpncmd || find / -name vpncmd -type f 2>/dev/null | head -1')
 [[ -n $VPNCMD ]] || { echo "vpncmd not found in the image"; exit 2; }
-vpncmd() { docker exec "$CONTAINER" "$VPNCMD" localhost /SERVER /PASSWORD:"$SPW" "$@"; }
+# The image sets no admin password (the server password is blank). stdin is /dev/null and a timeout bounds each call,
+# because vpncmd prompts forever when it is unhappy.
+vpncmd() { timeout 30 docker exec "$CONTAINER" "$VPNCMD" localhost /SERVER /PASSWORD: "$@" </dev/null; }
 for _ in $(seq 1 60); do vpncmd /CMD ServerStatusGet >/dev/null 2>&1 && break; sleep 1; done
-vpncmd /CMD ServerStatusGet >/dev/null 2>&1 || { echo "server did not come up"; docker logs "$CONTAINER"; exit 2; }
-vpncmd /CMD HubCreate VPNGATE /PASSWORD:"$HPW" >/dev/null || { echo "HubCreate failed"; exit 2; }
+vpncmd /CMD ServerStatusGet || { echo "server did not come up"; docker logs "$CONTAINER"; exit 2; }
+vpncmd /CMD HubCreate VPNGATE /PASSWORD:hubpw || { echo "HubCreate failed"; exit 2; }
 for c in "SecureNatEnable" "UserCreate vpn /GROUP:none /REALNAME:none /NOTE:none" "UserAnonymousSet vpn"; do
   # shellcheck disable=SC2086   # $c is a command line to split
-  vpncmd /HUB:VPNGATE /PASSWORD:"$HPW" /CMD $c >/dev/null || { echo "vpncmd $c failed"; exit 2; }
+  vpncmd /HUB:VPNGATE /CMD $c || { echo "vpncmd $c failed"; exit 2; }
 done
 DOCKER_GW=$(docker network inspect bridge -f '{{(index .IPAM.Config 0).Gateway}}')
 echo "server ready; docker0 address $DOCKER_GW"
