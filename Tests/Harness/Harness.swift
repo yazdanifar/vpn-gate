@@ -54,10 +54,14 @@ func expectThrows<T>(
     do { _ = try body(); fail(msg, file: file, line: line) } catch {}
 }
 
+/// Sanitizer builds (scripts/test.sh --asan/--tsan sets VPNGATE_TEST_SLOWDOWN) run several times slower, and CI runners are
+/// shared, so every wait is stretched by that factor; the plain run keeps its tight timeouts.
+let timeoutScale: Double = Double(ProcessInfo.processInfo.environment["VPNGATE_TEST_SLOWDOWN"] ?? "") ?? 1
+
 /// Polls until `cond` holds (or `timeout` elapses).
 @discardableResult
 func eventually(_ timeout: Double = 3, _ cond: () -> Bool) async -> Bool {
-    let end = Date().addingTimeInterval(timeout)
+    let end = Date().addingTimeInterval(timeout * timeoutScale)
     while Date() < end {
         if cond() { return true }
         try? await Task.sleep(nanoseconds: 10_000_000)
@@ -68,7 +72,7 @@ func eventually(_ timeout: Double = 3, _ cond: () -> Bool) async -> Bool {
 /// Like `eventually`, for conditions that must hop to another actor (e.g. read @MainActor state).
 @discardableResult
 func eventuallyA(_ timeout: Double = 3, _ cond: () async -> Bool) async -> Bool {
-    let end = Date().addingTimeInterval(timeout)
+    let end = Date().addingTimeInterval(timeout * timeoutScale)
     while Date() < end {
         if await cond() { return true }
         try? await Task.sleep(nanoseconds: 10_000_000)
