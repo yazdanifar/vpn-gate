@@ -92,10 +92,14 @@ await_peer() {   # $1 = what; waits for an answer that differs from the direct o
 }
 DIRECT=$(peer)
 [[ -n $DIRECT ]] && ok "direct answer from the web server: $DIRECT" || bad "no direct answer from the web server"
-adb shell am start-foreground-service -a android.net.VpnService -n $PKG/$T.VpnEngineService
-await_peer "always-on start with no UI"
+# The shell may not start a BIND_VPN_SERVICE service itself (Permission Denial), so an instrumentation run connects
+# and holds the tunnel; killing the app process then ends that run too, and what is left is the system's restart.
+adb shell am instrument -w -e class "$T.HoldTunnelTest" -e hermeticWeb "$WEB_URL" -e hermeticServer 10.0.2.2 "$RUNNER" > "$OUT/hold.txt" 2>&1 &
+HOLD_PID=$!
+await_peer "connected (held by the instrumentation)"
 PID=$(adb shell pidof $PKG | tr -d '\r')
 echo "killing pid $PID"
+DIRECT_BEFORE=$DIRECT
 adb shell run-as $PKG kill -9 "$PID"
 for _ in $(seq 1 30); do
   NEW=$(adb shell pidof $PKG | tr -d '\r'); [[ -n $NEW && $NEW != "$PID" ]] && break; sleep 1
@@ -103,6 +107,7 @@ done
 [[ -n ${NEW:-} && $NEW != "$PID" ]] && ok "the system restarted the service in a new process ($PID -> $NEW)" || bad "the VPN service was not restarted after kill -9"
 await_peer "reconnected after the restart"
 
+kill "$HOLD_PID" 2>/dev/null
 adb shell dumpsys activity services $PKG | head -40 > "$OUT/services.txt"
 echo
 [[ $FAILS == 0 ]] && echo "ANDROID EMULATOR TESTS PASSED" || echo "ANDROID EMULATOR TESTS FAILED ($FAILS)"
