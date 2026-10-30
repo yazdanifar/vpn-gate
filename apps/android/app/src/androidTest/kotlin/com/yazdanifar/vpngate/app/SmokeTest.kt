@@ -2,6 +2,8 @@ package com.yazdanifar.vpngate.app
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.hasText
 import org.junit.Rule
@@ -26,7 +28,8 @@ class SmokeTest {
             }
             Thread.sleep(500)
         }
-        throw AssertionError("timed out after $timeoutMs ms", last)
+        val tree = try { rule.onRoot().printToString(maxDepth = 12) } catch (e: Throwable) { "no tree: $e" }
+        throw AssertionError("timed out after $timeoutMs ms; UI:\n$tree", last)
     }
 
     @Test
