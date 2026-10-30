@@ -3,26 +3,44 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: read
+
 jobs:
-  release:
-    runs-on: macos-15
-    permissions:
-      contents: write
+  checks:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - name: Tag must match VERSION
         run: test "v$(tr -d '[:space:]' < VERSION)" = "${GITHUB_REF_NAME}"
       - name: CHANGELOG must mention this version
         run: grep -q "$(tr -d '[:space:]' < VERSION)" CHANGELOG.md
-      - run: scripts/lint.sh
-      - name: Package.swift still builds
-        run: swift build
-      - name: Toolchain (version pinned in rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install
-      - run: scripts/build.sh all
-      - run: scripts/test.sh --each
-      - run: scripts/build-pkg.sh
+
+  # Every lint, test and packaging job of ci.yml (all platforms); the installers come from its artifacts.
+  ci:
+    needs: checks
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  publish:
+    needs: [checks, ci]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with: { pattern: 'vpn-gate-*', path: dist }
+      - name: Collect the installers
+        run: |
+          mkdir -p out
+          cp "dist/vpn-gate-pkg/VPN Gate.pkg" out/
+          cp dist/vpn-gate-msi/VPN-Gate.msi out/
+          cp dist/vpn-gate-deb/*.deb out/
+          cp dist/vpn-gate-android-release/apk/release/*.apk out/
+          cp dist/vpn-gate-android-release/bundle/release/*.aab out/
+          ls -l out
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "build/VPN Gate.pkg" --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" out/* --title "$GITHUB_REF_NAME" --generate-notes

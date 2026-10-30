@@ -21,6 +21,20 @@ with VPN Gate or SoftEther and does not claim full parity with the Windows clien
 | [NOTICE](NOTICE) | Third-party notices |
 
 ## Install
+Release builds are attached to each [GitHub release](../../releases) (tag `v*`): `VPN Gate.pkg`, `VPN-Gate.msi`,
+`vpn-gate_<version>_<arch>.deb`, and an `.apk` and `.aab`. None is notarized or store-signed (see the notes per platform).
+
+| OS | Install | Uninstall |
+|---|---|---|
+| macOS | open `VPN Gate.pkg` (details below) | Settings → Uninstall…, then trash the app |
+| Windows 10/11 x64 | run `VPN-Gate.msi` as administrator; installs the `VPNGate` service and the app (Start menu) | Apps & features → VPN Gate |
+| Debian/Ubuntu (systemd) | `sudo apt install ./vpn-gate_<version>_<arch>.deb`, then log out and in so the `vpngate` group applies | `sudo apt remove vpn-gate` (`purge` also deletes state) |
+| Android 7.0+ | sideload the `.apk` (allow installs from unknown sources) | remove the app |
+
+The Windows installer and Android APK are signed only with test keys unless the release secrets were set. Build from
+source on macOS as follows.
+
+### macOS
 ```
 scripts/build-pkg.sh           # -> build/VPN Gate.pkg (Universal installer)
 open "build/VPN Gate.pkg"      # standard macOS installer: asks for your password once

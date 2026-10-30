@@ -2,6 +2,7 @@ name: CI
 on:
   push: { branches: [main] }
   pull_request:
+  workflow_call:      # release.yml runs the whole suite as its gate and reuses the artifacts
 
 jobs:
   lint:
@@ -162,8 +163,20 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       - uses: gradle/actions/setup-gradle@v4
+      - name: Release keystore (only when the ANDROID_KEYSTORE_BASE64 secret exists; otherwise the debug key signs)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > apps/android/release.jks
+            echo "VPNGATE_KEYSTORE=release.jks" >> "$GITHUB_ENV"
+          fi
       - name: Core tests (JVM), the debug APK, and the release APK + AAB (the runner ships the Android SDK)
         working-directory: apps/android
+        env:
+          VPNGATE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          VPNGATE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          VPNGATE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew --no-daemon :core:test :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease :app:bundleRelease
       - uses: actions/upload-artifact@v5
         with: { name: vpn-gate-apk-debug, path: apps/android/app/build/outputs/apk/debug/*.apk }
