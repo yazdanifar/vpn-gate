@@ -68,7 +68,7 @@ android {
 
 kotlin { jvmToolchain(17) }
 
-tasks.matching { it.name.matches(Regex("merge.*Assets")) }.configureEach { dependsOn(copyBundledList) }
+tasks.matching { it.name.matches(Regex("(merge.*Assets|.*Lint.*)")) }.configureEach { dependsOn(copyBundledList) }
 
 dependencies {
     implementation(project(":core"))
