@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
-        run: rustup toolchain install      # no arguments: installs what rust-toolchain.toml names
+        uses: ./.github/actions/rust-toolchain
       - name: Build the Rust daemon
         run: scripts/build.sh helper
       - name: Live tests (relays chosen from the bundled signed list unless overridden)
