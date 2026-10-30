@@ -292,6 +292,29 @@ Phase 1 units only depend on U02, so they can run in any order.
   - Gate it on every platform's lint and test jobs.
   - Add a per-platform feature matrix to FEATURES.md, and per-OS install instructions to the README.
 
+### Phase 8 — CI coverage (no hand testing)
+Goal: every check in PLATFORMS.md that a human runs today runs in CI. Hermetic tests (a real SoftEther server in a
+container, network namespaces, emulators, screenshot goldens, installers) **gate** in `ci.yml`; only checks against the
+public VPN Gate fleet stay in the weekly `e2e.yml`/`live.yml` and never gate. Tools: the official SoftEther server image
+`softethervpn/vpnserver`, `ip netns`, Roborazzi / `ImageRenderer` goldens, WinUI Unit Test App (`[UITestMethod]`), dogtail
+over AT-SPI under Xvfb, Gradle Managed Devices (ATD), UiAutomator + `DevicePolicyManager.setAlwaysOnVpnPackage`, Tokio
+`start_paused`, cargo-nextest with JUnit.
+- **U30 Real SoftEther server + netns e2e (Linux).** A `softethervpn/vpnserver` container (hub `VPNGATE`, anonymous user `vpn`,
+  SecureNAT) and the daemon in a network namespace: full tunnel, restore after SIGINT/SIGTERM/kill -9. Follow-up U30b: a
+  SOCKS5 TCP flow and the tun/route test under nextest.
+- **U31 macOS and Windows against a real server.** Same server on those runners (no Linux containers there); `scripts/e2e-tunnel.ps1`;
+  `e2e.yml` becomes a 3-OS matrix.
+- **U32 Installer gaps.** `.pkg` install/launchd/uninstall; MSI uninstall leaves no data/adapter, upgrade with the app open; deb
+  login-session group and a libsecret round trip with `gnome-keyring-daemon`.
+- **U33 GTK UI.** Golden screenshots under Xvfb, dogtail flows (context menu, column chooser, editors, drag-reorder), tray via a fake
+  `StatusNotifierWatcher`.
+- **U34 WinUI UI.** WinUI Unit Test App with `[UITestMethod]` per view, `RenderTargetBitmap` goldens, a FlaUI launch/tray smoke test (a spike
+  first: non-gating if the hosted runner has no usable desktop).
+- **U35 Android.** Roborazzi goldens, Gradle Managed Devices, UiAutomator on the VPN consent, always-on across `adb reboot`, airplane-mode reconnect.
+- **U36 macOS app, sanitizers, timing.** `test-tsan`/`test-asan` jobs, `ImageRenderer` goldens, paused-time keep-alive/UDP-accel tests, the
+  U04 trailing-deflate vector, the U07 system-trust accept path in `live.yml`.
+Left to a human afterwards: approving golden images once, SmartScreen on the unsigned MSI, OEM phone quirks.
+
 ## Dependency graph
 ```
 U00 → U01a → U01b → U02 → {U03, U04, U05, U06} → U07 → U08a → U08b → U09 → U10a → U10b → U11 → U12 → U13 → U14 → U15

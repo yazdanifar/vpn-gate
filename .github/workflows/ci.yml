@@ -83,6 +83,23 @@ jobs:
           BIN=$(cargo test --locked -p vpngate-daemon --test tunnel_hermetic --no-run --message-format=json-render-diagnostics | jq -r 'select(.profile.test and .target.name == "tunnel_hermetic") | .executable')
           [ -n "$BIN" ] || { echo "tunnel_hermetic test binary not found in cargo's output"; exit 1; }
           sudo "$BIN" --ignored --nocapture
+  softether-netns:
+    timeout-minutes: 25
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        uses: ./.github/actions/rust-toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+      - run: cargo build --release --locked -p vpngate-daemon
+      - name: Full tunnel against a real SoftEther server (official container), daemon in a network namespace (runner is a disposable machine)
+        run: sudo timeout 600 scripts/test-tunnel-netns.sh
+      - name: Logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with: { name: softether-netns-logs, path: /tmp/vpngate-netns*.log, if-no-files-found: ignore }
   gtk:
     timeout-minutes: 20
     runs-on: ubuntu-latest
