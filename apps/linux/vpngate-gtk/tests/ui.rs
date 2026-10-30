@@ -153,7 +153,12 @@ fn subtitle(r: &adw::ActionRow) -> String {
 
 fn click(b: &gtk::Button) {
     assert!(b.is_sensitive(), "button {:?} is not sensitive", b.label());
+    let fired = std::rc::Rc::new(std::cell::Cell::new(0));
+    let f = fired.clone();
+    let id = b.connect_clicked(move |_| f.set(f.get() + 1));
     b.emit_clicked();
+    eprintln!("DIAG click {:?}: extra handler ran {} time(s), mapped {}", b.label(), fired.get(), b.is_mapped());
+    b.disconnect(id);
     pump();
 }
 
