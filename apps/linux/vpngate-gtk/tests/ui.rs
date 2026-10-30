@@ -153,12 +153,9 @@ fn subtitle(r: &adw::ActionRow) -> String {
 
 fn click(b: &gtk::Button) {
     assert!(b.is_sensitive(), "button {:?} is not sensitive", b.label());
-    let fired = std::rc::Rc::new(std::cell::Cell::new(0));
-    let f = fired.clone();
-    let id = b.connect_clicked(move |_| f.set(f.get() + 1));
+    // A user can only click what is on screen: a dialog that is still being presented ignores a close request.
+    wait_until(&format!("button {:?} to be shown", b.label()), || b.is_mapped());
     b.emit_clicked();
-    eprintln!("DIAG click {:?}: extra handler ran {} time(s), mapped {}", b.label(), fired.get(), b.is_mapped());
-    b.disconnect(id);
     pump();
 }
 
@@ -184,7 +181,7 @@ fn top_dialog(win: &gtk::Window) -> Option<adw::Dialog> {
 
 /// The dialog on top of the window, waiting for it to appear.
 fn dialog_of(win: &gtk::Window) -> adw::Dialog {
-    wait_until("a dialog", || top_dialog(win).is_some());
+    wait_until("a dialog", || top_dialog(win).is_some_and(|d| d.is_mapped()));
     top_dialog(win).expect("dialog")
 }
 
