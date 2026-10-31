@@ -21,11 +21,19 @@ if (-not (Test-Path (Join-Path (Split-Path $Daemon) 'wintun.dll'))) { scripts/ge
 $script:fails = 0
 $log = Join-Path $env:TEMP 'vpngate-e2e.log'
 $err = Join-Path $env:TEMP 'vpngate-e2e.err'
+$curlErr = Join-Path $env:TEMP 'vpngate-e2e.curl.err'
+$daemonLog = Join-Path $env:TEMP 'vpngate-e2e-daemon.log'
 function Ok($m)  { Write-Host "  ok   $m" }
 function Bad($m) { Write-Host "  FAIL $m"; $script:fails++ }
 function PubIp($family) {
-    $o = & curl.exe "-$family" -s -m 10 https://api64.ipify.org 2>$null
-    if ($LASTEXITCODE -eq 0 -and $o) { $o.Trim() } else { '?' }
+    # The tunnel may need a moment after [connected]; show curl's reason when it keeps failing.
+    for ($i = 0; $i -lt 3; $i++) {
+        $o = & curl.exe "-$family" -sS -m 10 https://api64.ipify.org 2>$curlErr
+        if ($LASTEXITCODE -eq 0 -and $o) { return $o.Trim() }
+        Start-Sleep -Seconds 2
+    }
+    Write-Host "    curl -$family failed ($LASTEXITCODE): $(Get-Content $curlErr -Raw)"
+    '?'
 }
 # Every route and DNS server list outside the tunnel adapter, without multicast, broadcast and link-local noise.
 function Snap {
@@ -76,7 +84,7 @@ try {
 
 # Stale state from the hard kill must be cleaned by the next start (the console form of the daemon does the same as the service).
 Write-Host '  (daemon killed hard; the next start must clean up)'
-$d = Start-Process -FilePath $Daemon -ArgumentList '--daemon' -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $env:TEMP 'vpngate-e2e-daemon.log') -RedirectStandardError (Join-Path $env:TEMP 'vpngate-e2e-daemon.err')
+$d = Start-Process -FilePath $Daemon -ArgumentList '--daemon' -PassThru -WindowStyle Hidden -RedirectStandardOutput $daemonLog -RedirectStandardError (Join-Path $env:TEMP 'vpngate-e2e-daemon.err')
 Start-Sleep -Seconds 3
 Stop-Process -Id $d.Id -Force -ErrorAction SilentlyContinue
 $d.WaitForExit(10000) | Out-Null
@@ -84,7 +92,7 @@ Start-Sleep -Seconds 1
 
 $after = Snap
 $diff = Compare-Object $before $after
-if (-not $diff) { Ok 'routes and DNS restored exactly' } else { Bad 'routing/DNS differ after the kill:'; $diff | Select-Object -First 20 | ForEach-Object { Write-Host "      $($_.SideIndicator) $($_.InputObject)" } }
+if (-not $diff) { Ok 'routes and DNS restored exactly' } else { Bad 'routing/DNS differ after the kill:'; Write-Host '    daemon log:'; Get-Content $daemonLog, (Join-Path $env:TEMP 'vpngate-e2e-daemon.err') -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "      $_" }; Write-Host '    connect log:'; Get-Content $log, $err | ForEach-Object { Write-Host "      $_" }; $diff | Select-Object -First 20 | ForEach-Object { Write-Host "      $($_.SideIndicator) $($_.InputObject)" } }
 if (Get-NetAdapter -Name 'VPNGate' -ErrorAction SilentlyContinue) { Bad 'tunnel adapter left behind' } else { Ok 'tunnel adapter removed' }
 $back = PubIp 4
 if ($back -eq $baseIp) { Ok "public IPv4 back to $baseIp" } else { Bad "public IPv4 did not return to baseline ($back)" }
