@@ -102,8 +102,8 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBox x:Name="SearchBox" Grid.Column="0" PlaceholderText="Search host, IP, country, operator" TextChanged="OnSearchChanged" />
-            <ComboBox x:Name="CountryBox" Grid.Column="1" Width="150" SelectionChanged="OnCountryChanged" />
-            <ComboBox x:Name="LoggingBox" Grid.Column="2" Width="160" SelectedIndex="0" SelectionChanged="OnLoggingChanged">
+            <ComboBox x:Name="CountryBox" Grid.Column="1" Width="140" SelectionChanged="OnCountryChanged" />
+            <ComboBox x:Name="LoggingBox" Grid.Column="2" Width="175" SelectedIndex="0" SelectionChanged="OnLoggingChanged">
                 <ComboBoxItem Content="Any logging policy" Tag="-1" />
                 <ComboBoxItem Content="2 weeks or less" Tag="2" />
                 <ComboBoxItem Content="Up to 1 month" Tag="5" />
