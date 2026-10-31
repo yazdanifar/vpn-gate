@@ -60,7 +60,8 @@ jobs:
         shell: pwsh
         run: |
           scripts/get-wintun.ps1 -Dest target/release | Out-Null
-          scripts/e2e-tunnel.ps1 -Server "${{ steps.relay.outputs.ip }}" 2>&1 | Tee-Object e2e-report.txt
+          # *>&1: the script prints with Write-Host (the information stream), which 2>&1 does not capture.
+          scripts/e2e-tunnel.ps1 -Server "${{ steps.relay.outputs.ip }}" *>&1 | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/e2e-report.txt"
           if ($LASTEXITCODE) { throw "e2e failed ($LASTEXITCODE)" }
       - uses: actions/upload-artifact@v7
         if: always()
