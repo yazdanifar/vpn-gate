@@ -62,7 +62,15 @@ class TunnelTest {
     }
 
     private fun assertThroughSecureNat(label: String) {
-        val seen = Harness.fetchEventually(url, 60_000)
+        // The app reports Connected once the tunnel is up, but the system moves this process onto the VPN network a
+        // moment later: a fetch in between still leaves directly, so wait for the switch instead of sampling once.
+        var seen = direct
+        runCatching {
+            eventually(60_000, "$label: traffic through the tunnel") {
+                seen = Harness.fetch(url)
+                seen != direct
+            }
+        }
         assertNotEquals("$label: the web server saw the same address as without the tunnel ($direct)", direct, seen)
         assertTrue("$label: expected the container's address on the docker bridge, got $seen", seen.startsWith("172."))
     }
