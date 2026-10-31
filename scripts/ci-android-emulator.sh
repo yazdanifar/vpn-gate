@@ -31,7 +31,9 @@ trap cleanup EXIT
 
 echo "== SoftEther server on the runner"
 docker rm -f "$CONTAINER" >/dev/null 2>&1
-docker run -d --name "$CONTAINER" -p 443:443 softethervpn/vpnserver:stable >/dev/null || { echo "cannot start the container"; exit 2; }
+# Same digest as scripts/test-tunnel-netns.sh (softethervpn/vpnserver:stable when pinned), so an upstream change cannot break CI unseen.
+IMAGE=softethervpn/vpnserver@sha256:0007de9b4e2a0aaf0d10da3401bb54ba0afe45929a2df8f26ea0b3b04d51cea7
+docker run -d --name "$CONTAINER" -p 443:443 "$IMAGE" >/dev/null || { echo "cannot start the container"; exit 2; }
 VPNCMD=$(docker exec "$CONTAINER" sh -c 'command -v vpncmd || find / -name vpncmd -type f 2>/dev/null | head -1')
 [[ -n $VPNCMD ]] || { echo "vpncmd not found in the image"; exit 2; }
 vpncmd() { timeout 30 docker exec "$CONTAINER" "$VPNCMD" localhost /SERVER /PASSWORD: "$@" </dev/null; }
