@@ -17,6 +17,10 @@ internal sealed class Rig : IAsyncDisposable
     /// <summary>What the daemon answers to every status poll.</summary>
     public string Status { get; set; } = FakeDaemon.Snapshot("disconnected");
 
+    /// <summary>The time every view sees (the instant the GTK goldens use), so dates and durations in the goldens never change.</summary>
+    public static readonly DateTimeOffset Now = new(2023, 11, 14, 22, 13, 20, TimeSpan.Zero);
+    public static DateTimeOffset Clock() => Now;
+
     public static readonly VpnServer[] Servers =
     {
         Server("a.opengw.net", "1.1.1.1", "Japan", "JP", 500, 300_000_000, 30, 10, 3),
@@ -38,7 +42,7 @@ internal sealed class Rig : IAsyncDisposable
         Directory.CreateDirectory(Dir);
         var json = JsonSerializer.Serialize(new
         {
-            servers = Servers, source = "Cached", timestampMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), isFresh = true, outcome = "synced",
+            servers = Servers, source = "Cached", timestampMs = Now.ToUnixTimeMilliseconds(), isFresh = true, outcome = "synced",
         }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
         Daemon = new FakeDaemon().Start();
         Daemon.Respond = r => (string?)r["cmd"] switch
@@ -50,9 +54,9 @@ internal sealed class Rig : IAsyncDisposable
         Settings = new MemorySettings { HasAgreedToDisclaimer = agreed };
         var secrets = new MemorySecretStore();
         Accounts = new AccountStore(Path.Combine(Dir, "accounts.json"), secrets);
-        History = new ConnectionHistoryStore(Path.Combine(Dir, "history.json"));
+        History = new ConnectionHistoryStore(Path.Combine(Dir, "history.json"), Clock);
         var queue = DispatcherQueue.GetForCurrentThread();
-        Vm = new MainViewModel(Daemon.Client(), Settings, a => queue.TryEnqueue(() => a()), accounts: Accounts, secrets: secrets, history: History);
+        Vm = new MainViewModel(Daemon.Client(), Settings, a => queue.TryEnqueue(() => a()), accounts: Accounts, secrets: secrets, history: History, clock: Clock);
     }
 
     public async ValueTask DisposeAsync()
