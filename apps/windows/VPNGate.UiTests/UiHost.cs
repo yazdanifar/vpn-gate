@@ -191,28 +191,81 @@ internal static class Probe
         var rtb = new RenderTargetBitmap();
         await rtb.RenderAsync(element);
         var pixels = (await rtb.GetPixelsAsync()).ToArray();
-        var path = Path.Combine(ShotDir, name + ".png");
-        using (var stream = new InMemoryRandomAccessStream())
-        {
-            var enc = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);
-            enc.SetPixelData(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied, (uint)rtb.PixelWidth, (uint)rtb.PixelHeight, 96, 96, pixels);
-            await enc.FlushAsync();
-            stream.Seek(0);
-            var bytes = new byte[stream.Size];
-            await stream.AsStreamForRead().ReadExactlyAsync(bytes);
-            await File.WriteAllBytesAsync(path, bytes);
-        }
+        await WritePng(Path.Combine(ShotDir, name + ".png"), pixels, rtb.PixelWidth, rtb.PixelHeight);
         var colors = new HashSet<uint>();
         for (var i = 0; i + 3 < pixels.Length; i += 4 * 7) colors.Add(BitConverter.ToUInt32(pixels, i));
         return colors.Count;
     }
 
-    /// <summary>Takes the picture and fails if it is blank or tiny (a missing render is a real failure).</summary>
+    private static async Task WritePng(string path, byte[] bgra, int width, int height)
+    {
+        using var stream = new InMemoryRandomAccessStream();
+        var enc = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);
+        enc.SetPixelData(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied, (uint)width, (uint)height, 96, 96, bgra);
+        await enc.FlushAsync();
+        stream.Seek(0);
+        var bytes = new byte[stream.Size];
+        await stream.AsStreamForRead().ReadExactlyAsync(bytes);
+        await File.WriteAllBytesAsync(path, bytes);
+    }
+
+    private static async Task<(byte[] Bgra, int Width, int Height)> ReadPng(string path)
+    {
+        var bytes = await File.ReadAllBytesAsync(path);
+        using var stream = new InMemoryRandomAccessStream();
+        var w = stream.AsStreamForWrite();
+        await w.WriteAsync(bytes);
+        await w.FlushAsync();
+        stream.Seek(0);
+        var dec = await BitmapDecoder.CreateAsync(stream);
+        var data = await dec.GetPixelDataAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied, new BitmapTransform(),
+            ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.DoNotColorManage);
+        return (data.DetachPixelData(), (int)dec.PixelWidth, (int)dec.PixelHeight);
+    }
+
+    /// <summary>The approved PNGs (VPNGATE_GOLDEN, set by CI to VPNGate.UiTests/golden). Unset: no comparison, only the blank checks.</summary>
+    private static string? GoldenDir => Environment.GetEnvironmentVariable("VPNGATE_GOLDEN") is { Length: > 0 } d ? d : null;
+
+    /// <summary>
+    /// Compares shots/name.png with the golden of the same name, with the GTK tolerance: at most 0.5 % of the pixels may differ by
+    /// more than 16 in a channel (antialiasing and the text caret). On a difference it writes name.diff.png (differing pixels red).
+    /// VPNGATE_UI_RECORD=1 copies the shot over the golden instead.
+    /// </summary>
+    private static async Task CompareWithGolden(string name, string dir)
+    {
+        var shot = Path.Combine(ShotDir, name + ".png");
+        var golden = Path.Combine(dir, name + ".png");
+        if (Environment.GetEnvironmentVariable("VPNGATE_UI_RECORD") == "1")
+        {
+            Directory.CreateDirectory(dir);
+            File.Copy(shot, golden, overwrite: true);
+            return;
+        }
+        Assert.True(File.Exists(golden), $"{name}: no golden {golden} (record it with the 'Record screenshot goldens' workflow)");
+        var (a, aw, ah) = await ReadPng(shot);
+        var (g, gw, gh) = await ReadPng(golden);
+        Assert.True(aw == gw && ah == gh, $"{name}: rendered {aw}x{ah}, golden is {gw}x{gh}");
+        var diff = new byte[a.Length];
+        var differing = 0;
+        for (var i = 0; i < a.Length; i += 4)
+        {
+            var off = Math.Abs(a[i] - g[i]) > 16 || Math.Abs(a[i + 1] - g[i + 1]) > 16 || Math.Abs(a[i + 2] - g[i + 2]) > 16 || Math.Abs(a[i + 3] - g[i + 3]) > 16;
+            if (off) differing++;
+            (diff[i], diff[i + 1], diff[i + 2], diff[i + 3]) = off ? ((byte)0, (byte)0, (byte)255, (byte)255) : ((byte)(g[i] / 3), (byte)(g[i + 1] / 3), (byte)(g[i + 2] / 3), (byte)255);
+        }
+        var allowed = aw * ah / 200;
+        if (differing <= allowed) return;
+        await WritePng(Path.Combine(ShotDir, name + ".diff.png"), diff, aw, ah);
+        Assert.Fail($"{name}: {differing} of {aw * ah} pixels differ (allowed {allowed}); see {name}.png and {name}.diff.png in the winui-ui-screenshots artifact");
+    }
+
+    /// <summary>Takes the picture and fails if it is blank or tiny (a missing render is a real failure), or if it differs from its golden.</summary>
     public static async Task Shot(FrameworkElement element, string name)
     {
         var distinct = await Snap(element, name);
         Assert.True(element.ActualWidth > 100 && element.ActualHeight > 50, $"{name}: rendered at {element.ActualWidth}x{element.ActualHeight}");
         Assert.True(distinct > 3, $"{name}: the picture is blank ({distinct} colours)");
+        if (GoldenDir is { } dir) await CompareWithGolden(name, dir);
     }
 
     /// <summary>The window's root content, laid out and loaded.</summary>

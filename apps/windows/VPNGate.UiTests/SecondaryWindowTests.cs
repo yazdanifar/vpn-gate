@@ -204,7 +204,7 @@ public class SecondaryWindowTests
         var saved = 0;
         var settings = new CountingSettings(() => saved++);
         // The window reads vm.Settings, so build a view model over the counting store.
-        var vm = new MainViewModel(rig.Daemon.Client(), settings, a => a());
+        var vm = new MainViewModel(rig.Daemon.Client(), settings, a => a(), clock: Rig.Clock);
         var shown = 0;
         await WithWindow(rig, () => new SettingsWindow(vm, () => shown++, () => shown += 10), async (w, root) =>
         {
