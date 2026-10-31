@@ -53,7 +53,7 @@ internal static class ServerDetails
         await new ContentDialog
         {
             XamlRoot = root,
-            Title = $"{s.Flag} {s.HostName}".Trim(),
+            Title = s.HostName, // no flag: Windows shows flag emoji as two letters
             Content = new ScrollViewer { Content = body, MaxHeight = 480 },
             CloseButtonText = "Done",
         }.ShowAsync();

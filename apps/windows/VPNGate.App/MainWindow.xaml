@@ -155,7 +155,7 @@
                             <TextBlock Text="{x:Bind HostName}" TextTrimming="CharacterEllipsis" />
                             <TextBlock Text="{x:Bind Ip}" Opacity="0.7" FontFamily="Consolas" />
                         </StackPanel>
-                        <TextBlock Grid.Column="1" Text="{x:Bind local:Cols.Region(Flag, CountryLong)}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="1" Text="{x:Bind local:Cols.Region(CountryLong)}" TextTrimming="CharacterEllipsis" />
                         <TextBlock Grid.Column="2" Text="{x:Bind local:Cols.Uptime(UptimeMs)}" />
                         <TextBlock Grid.Column="3" Text="{x:Bind local:Cols.Sessions(Sessions)}" />
                         <TextBlock Grid.Column="4" Text="{x:Bind local:Cols.Speed(Speed)}" />

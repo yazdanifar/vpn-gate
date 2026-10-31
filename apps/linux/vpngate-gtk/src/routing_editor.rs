@@ -38,10 +38,7 @@ struct Editor {
 
 pub fn groups(cfg: Rc<RefCell<RoutingConfig>>, changed: Rc<dyn Fn()>) -> Vec<adw::PreferencesGroup> {
     let defaults = adw::PreferencesGroup::builder().title("Unmatched traffic").build();
-    let default_row = adw::ComboRow::builder()
-        .title("By default")
-        .model(&gtk::StringList::new(&["Proxy (through the tunnel)", "Direct (bypass the tunnel)"]))
-        .build();
+    let default_row = crate::combo::row("By default", &["Proxy (through the tunnel)", "Direct (bypass the tunnel)"]);
     let bypass = adw::SwitchRow::builder().title("Bypass private networks").subtitle("LAN, link-local, CGNAT").build();
     defaults.add(&default_row);
     defaults.add(&bypass);

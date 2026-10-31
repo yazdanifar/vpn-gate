@@ -14,7 +14,8 @@ public static class Cols
 
     public static bool NotNull(object? o) => o is not null;
 
-    public static string Region(string flag, string country) => flag.Length == 0 ? country : $"{flag} {country}";
+    /// <summary>The country alone: Windows has no flag glyphs, so a flag emoji would show as two letters ("KR Korea Republic of").</summary>
+    public static string Region(string country) => country;
     public static string Uptime(long ms) => ListFormat.Uptime(ms);
     public static string Sessions(int n) => ListFormat.Sessions(n);
     public static string Speed(long bps) => Fmt.Speed(bps);
