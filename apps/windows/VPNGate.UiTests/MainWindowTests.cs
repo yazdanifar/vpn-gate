@@ -44,7 +44,7 @@ public class MainWindowTests
         var list = List(root);
         Assert.True(Probe.HasText(list, "b.opengw.net"));
         Assert.True(Probe.HasText(list, "900"));
-        Assert.Equal(0, UiHost.Unhandled.Count);
+        Assert.Empty(UiHost.Unhandled);
         await Probe.Shot(root, "main-list");
     });
 
