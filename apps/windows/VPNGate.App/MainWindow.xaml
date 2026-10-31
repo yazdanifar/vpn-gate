@@ -89,22 +89,32 @@
         <!-- List status -->
         <TextBlock Grid.Row="2" Text="{x:Bind Vm.ListStatus, Mode=OneWay}" TextWrapping="Wrap" Opacity="0.8" />
 
-        <!-- Toolbar -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8">
-            <TextBox x:Name="SearchBox" Width="260" PlaceholderText="Search host, IP, country, operator" TextChanged="OnSearchChanged" />
-            <ComboBox x:Name="CountryBox" Width="180" SelectionChanged="OnCountryChanged" />
-            <ComboBox x:Name="LoggingBox" Width="170" SelectedIndex="0" SelectionChanged="OnLoggingChanged">
+        <!-- Toolbar: the search box takes what is left, so the row fits a window clamped to a 1024 px screen. -->
+        <Grid Grid.Row="3" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="120" MaxWidth="260" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="SearchBox" Grid.Column="0" PlaceholderText="Search host, IP, country, operator" TextChanged="OnSearchChanged" />
+            <ComboBox x:Name="CountryBox" Grid.Column="1" Width="150" SelectionChanged="OnCountryChanged" />
+            <ComboBox x:Name="LoggingBox" Grid.Column="2" Width="160" SelectedIndex="0" SelectionChanged="OnLoggingChanged">
                 <ComboBoxItem Content="Any logging policy" Tag="-1" />
                 <ComboBoxItem Content="2 weeks or less" Tag="2" />
                 <ComboBoxItem Content="Up to 1 month" Tag="5" />
                 <ComboBoxItem Content="No logs only" Tag="0" />
             </ComboBox>
-            <ToggleButton x:Name="FavoritesToggle" Content="Favorites only" Click="OnFavoritesToggled" />
-            <Button Content="Clear Filters" Click="OnClearFilters" Visibility="{x:Bind local:Cols.Vis(Vm.FilterActive), Mode=OneWay}" />
-            <Button Content="Details" Click="OnDetails" IsEnabled="{x:Bind local:Cols.NotNull(Vm.Selected), Mode=OneWay}" />
-            <Button Content="Refresh List" Click="OnRefresh" IsEnabled="{x:Bind Vm.IsNotLoading, Mode=OneWay}" />
-            <Button Content="Settings" Click="OnShowSettings" />
-        </StackPanel>
+            <ToggleButton x:Name="FavoritesToggle" Grid.Column="3" Content="Favorites only" Click="OnFavoritesToggled" />
+            <Button Grid.Column="4" Content="Clear Filters" Click="OnClearFilters" Visibility="{x:Bind local:Cols.Vis(Vm.FilterActive), Mode=OneWay}" />
+            <Button Grid.Column="5" Content="Details" Click="OnDetails" IsEnabled="{x:Bind local:Cols.NotNull(Vm.Selected), Mode=OneWay}" />
+            <Button Grid.Column="6" Content="Refresh List" Click="OnRefresh" IsEnabled="{x:Bind Vm.IsNotLoading, Mode=OneWay}" />
+            <Button Grid.Column="7" Content="Settings" Click="OnShowSettings" />
+        </Grid>
 
         <!-- Column headers -->
         <Grid Grid.Row="4" Padding="12,0" ColumnSpacing="8">
