@@ -26,8 +26,12 @@ cp "$STAGE/helper.pkg" "$APP/Contents/Resources/VPN Gate Helper.pkg"
 codesign --force -s - "$APP"
 cp -R "$APP" "$STAGE/app-root/Applications/"
 xattr -cr "$STAGE/app-root"
-quiet pkgbuild --root "$STAGE/app-root" --identifier com.yazdanifar.VPNGateMac --version "$VERSION" \
-  --install-location / --ownership recommended "$STAGE/app.pkg" >/dev/null
+# Not relocatable: otherwise the installer updates any other copy of the bundle it finds (a stray one in Downloads, the
+# build directory) and leaves /Applications untouched.
+pkgbuild --analyze --root "$STAGE/app-root" "$STAGE/app-components.plist" >/dev/null
+plutil -replace 0.BundleIsRelocatable -bool NO "$STAGE/app-components.plist"
+quiet pkgbuild --root "$STAGE/app-root" --component-plist "$STAGE/app-components.plist" --identifier com.yazdanifar.VPNGateMac \
+  --version "$VERSION" --install-location / --ownership recommended "$STAGE/app.pkg" >/dev/null
 
 # 3. one installer for both
 cat > "$STAGE/distribution.xml" <<XML

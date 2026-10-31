@@ -2,6 +2,9 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+### Fixed
+- The .pkg no longer treats the app bundle as relocatable (the installer could update a stray copy instead of installing into `/Applications`), and the daemon creates its data directory before recording undo state, so `--connect` on a fresh Windows machine can be cleaned up after a crash.
+
 ### Added
 - U31: Windows real-relay e2e. `scripts/e2e-tunnel.ps1` (port of `e2e-tunnel.sh`) and `e2e.yml` is now a macOS/Linux/Windows matrix against public relays (weekly, non-gating). `probe-sample.sh` honours `VPNGATE_DAEMON`.
 - U33: GTK UI tests in CI. `apps/linux/vpngate-gtk` is a library plus `main.rs`; `tests/ui.rs` drives the real windows in-process under Xvfb against a fake daemon (filters, sorting, column chooser, context-menu actions, details, disclaimer, accounts and editor, Settings and routing rules, history, log) and compares 9 golden screenshots rendered through GSK's offscreen path; `tests/tray.rs` checks the `ksni` tray item and menu against a fake `StatusNotifierWatcher` (`zbus`) on a private session bus. The `GTK goldens` workflow re-records the screenshots on the runner image.
