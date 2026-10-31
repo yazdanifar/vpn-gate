@@ -143,13 +143,14 @@ private fun Toolbar(state: UiState, model: MainModel) {
         FlowRow(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             CountryMenu(state, model)
             FilterChip(
                 selected = state.filter.favoritesOnly,
                 onClick = { model.setFavoritesOnly(!state.filter.favoritesOnly) },
                 label = { Text("Favorites") },
+                // The chip is shorter than the text buttons beside it.
+                modifier = Modifier.align(Alignment.CenterVertically),
             )
             SortMenu(state, model)
             if (state.filter.isActive) TextButton(onClick = model::clearFilters) { Text("Clear") }
