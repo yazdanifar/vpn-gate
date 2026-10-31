@@ -39,7 +39,9 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then export VPNGATE_DAEMON=target/release/vpngate-daemon.exe
           elif [ "$RUNNER_OS" = Linux ]; then export VPNGATE_DAEMON=target/release/vpngate-daemon; fi
           if [ -z "$RELAY" ]; then
-            RELAY=$(scripts/probe-sample.sh 15 | awk '/ ok$/ {split($1,a,":"); print a[1]; exit}')
+            # Capture first: awk exiting early would SIGPIPE the probe, which pipefail turns into exit 141.
+            PROBED=$(scripts/probe-sample.sh 15 || true)
+            RELAY=$(awk '/ ok$/ {split($1,a,":"); print a[1]; exit}' <<< "$PROBED")
           fi
           [ -n "$RELAY" ] || { echo "no relay answered a probe"; exit 1; }
           echo "ip=$RELAY" >> "$GITHUB_OUTPUT"
