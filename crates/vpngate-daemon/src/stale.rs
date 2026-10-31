@@ -59,6 +59,10 @@ impl StaleState {
         undo.push(op);
         let data = serde_json::to_vec(&StateFile { undo }).map_err(io::Error::other)?;
         let tmp = self.path.with_extension("tmp");
+        if let Some(dir) = self.path.parent() {
+            // `--connect` on a fresh machine never created the data directory, so nothing was recorded to undo.
+            std::fs::create_dir_all(dir)?;
+        }
         std::fs::write(&tmp, data)?;
         #[cfg(unix)]
         {
@@ -105,6 +109,16 @@ mod tests {
         let s = StaleState::new(dir.join("state.json"));
         s.clear();
         s
+    }
+
+    #[test]
+    fn record_creates_a_missing_directory() {
+        let dir = std::env::temp_dir().join(format!("vpngate-stale-mkdir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let s = StaleState::new(dir.join("nested").join("state.json"));
+        s.record(UndoOp { kind: "route".into(), args: vec![] }).unwrap();
+        assert_eq!(s.load().len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
