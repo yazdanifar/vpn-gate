@@ -27,8 +27,7 @@ pub fn open(parent: &impl IsA<gtk::Widget>, ctx: &Ctx, account: Option<ClientAcc
     let page = adw::PreferencesPage::new();
 
     let entry = |title: &str, text: &str| adw::EntryRow::builder().title(title).text(text).build();
-    let combo =
-        |title: &str, items: &[&str]| adw::ComboRow::builder().title(title).model(&gtk::StringList::new(items)).build();
+    let combo = crate::combo::row;
     let spin = |title: &str, lo: f64, hi: f64, v: i64| {
         let r = adw::SpinRow::with_range(lo, hi, 1.0);
         r.set_title(title);

@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -125,6 +127,7 @@ private fun ConnectionCard(state: UiState) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Toolbar(state: UiState, model: MainModel) {
     Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -135,7 +138,13 @@ private fun Toolbar(state: UiState, model: MainModel) {
             singleLine = true,
             label = { Text("Search host, IP, country, operator") },
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        // A Row squeezed "Test" to one letter per line and pushed "Refresh" off a 393 dp phone; a FlowRow moves the
+        // actions to a second line when they do not fit.
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
             CountryMenu(state, model)
             FilterChip(
                 selected = state.filter.favoritesOnly,
@@ -145,10 +154,12 @@ private fun Toolbar(state: UiState, model: MainModel) {
             SortMenu(state, model)
             if (state.filter.isActive) TextButton(onClick = model::clearFilters) { Text("Clear") }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = model::testConnections, enabled = !state.isTesting && state.servers.isNotEmpty()) {
-                Text(if (state.isTesting) "Testing…" else "Test")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = model::testConnections, enabled = !state.isTesting && state.servers.isNotEmpty()) {
+                    Text(if (state.isTesting) "Testing…" else "Test")
+                }
+                TextButton(onClick = model::refreshList, enabled = !state.isLoading) { Text("Refresh") }
             }
-            TextButton(onClick = model::refreshList, enabled = !state.isLoading) { Text("Refresh") }
         }
     }
 }

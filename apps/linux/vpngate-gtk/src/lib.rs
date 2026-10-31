@@ -3,6 +3,7 @@
 
 pub mod account_editor;
 pub mod accounts_window;
+pub mod combo;
 pub mod ctx;
 pub mod details;
 pub mod history_window;

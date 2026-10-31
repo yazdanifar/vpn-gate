@@ -37,11 +37,8 @@ pub fn open(parent: &impl IsA<gtk::Widget>, ctx: &Ctx, actions: Actions) {
         connection.add(r);
     }
     let mode_group = adw::PreferencesGroup::builder().title("Mode").build();
-    let mode = adw::ComboRow::builder()
-        .title("Use the VPN as")
-        .model(&gtk::StringList::new(&["Full tunnel (whole computer)", "SOCKS5 proxy only"]))
-        .selected(u32::from(s.tunnel_mode == TunnelMode::SocksProxy))
-        .build();
+    let mode = crate::combo::row("Use the VPN as", &["Full tunnel (whole computer)", "SOCKS5 proxy only"]);
+    mode.set_selected(u32::from(s.tunnel_mode == TunnelMode::SocksProxy));
     let socks_port = adw::SpinRow::with_range(1024.0, 65535.0, 1.0);
     socks_port.set_title("SOCKS port");
     socks_port.set_value(s.socks_port as f64);
@@ -87,15 +84,12 @@ pub fn open(parent: &impl IsA<gtk::Widget>, ctx: &Ctx, actions: Actions) {
         .title("Connect through")
         .description("If you are using a proxy server, you might not be able to use VPN Relay Servers which don't support the TCP port 443 as “SSL-VPN Connection” from such a proxy-mandated network.")
         .build();
-    let kind = adw::ComboRow::builder()
-        .title("Proxy")
-        .model(&gtk::StringList::new(&["No proxy (direct)", "HTTP proxy (CONNECT)", "SOCKS5 proxy"]))
-        .selected(match s.proxy_kind {
-            ProxyKind::None => 0,
-            ProxyKind::Http => 1,
-            ProxyKind::Socks5 => 2,
-        })
-        .build();
+    let kind = crate::combo::row("Proxy", &["No proxy (direct)", "HTTP proxy (CONNECT)", "SOCKS5 proxy"]);
+    kind.set_selected(match s.proxy_kind {
+        ProxyKind::None => 0,
+        ProxyKind::Http => 1,
+        ProxyKind::Socks5 => 2,
+    });
     let host = adw::EntryRow::builder().title("Proxy host").text(&s.proxy_host).build();
     let port = adw::SpinRow::with_range(0.0, 65535.0, 1.0);
     port.set_title("Proxy port");

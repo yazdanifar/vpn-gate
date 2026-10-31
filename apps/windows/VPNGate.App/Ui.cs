@@ -1,5 +1,6 @@
 using Microsoft.UI;
 using Microsoft.UI.Text;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -35,9 +36,12 @@ internal static class Ui
         t.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
     }
 
+    /// <summary>Sizes the window in physical pixels, never larger than the work area of its display (the 1100 px main
+    /// window used to run off a 1024×768 screen).</summary>
     public static void Size(Window w, int width, int height)
     {
-        w.AppWindow.Resize(new SizeInt32(width, height));
+        var work = DisplayArea.GetFromWindowId(w.AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+        w.AppWindow.Resize(new SizeInt32(Math.Min(width, work.Width), Math.Min(height, work.Height)));
         var icon = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
         if (File.Exists(icon)) w.AppWindow.SetIcon(icon);
     }
