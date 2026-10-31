@@ -7,7 +7,7 @@ set -u
 cd "$(dirname "$0")/.."
 COUNT="${1:-20}"
 CSV="${2:-docs/research/VPNGate_dat_hosts.csv}"
-HELPER=build/bin/vpngate-helper   # the Rust daemon (scripts/build.sh helper)
+HELPER=${VPNGATE_DAEMON:-build/bin/vpngate-helper}   # the Rust daemon (scripts/build.sh helper), or any build of it
 TO=$(command -v timeout || command -v gtimeout || true)
 [ -x "$HELPER" ] || { echo "build first: scripts/build.sh all" >&2; exit 2; }
 
