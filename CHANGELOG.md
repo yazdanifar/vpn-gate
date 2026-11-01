@@ -2,6 +2,8 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+### Fixed
+- Android: the app draws edge to edge with dark status and navigation bar icons, and the connect/disconnect button and footer sit above the gesture bar instead of under it.
 
 ## [1.0.0] - 2026-11-01
 First public release.
