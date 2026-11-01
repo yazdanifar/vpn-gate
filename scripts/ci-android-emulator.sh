@@ -4,7 +4,7 @@
 #   emulator --10.0.2.2--> runner:443 --docker--> SoftEther container (hub VPNGATE, anonymous user "vpn", SecureNAT)
 #   emulator --172.17.0.1:8080--> runner's web server (answers with the caller's address)
 #
-# Phases: (1) smoke, manifest and the VPN consent dialog, (2) connect/always-on/airplane against the container.
+# Phases: (1) smoke, manifest and the VPN consent dialog, (1b) the main screen's insets in both navigation modes, (2) connect/always-on/airplane against the container.
 # A real kill -9 + system restart of the sticky service cannot be tested here: the shell may not start a BIND_VPN_SERVICE
 # service, and the end of an instrumentation run force-stops the package, which cancels the restart (DECISIONS U35).
 # The container setup mirrors scripts/test-tunnel-netns.sh. Logs go to $OUT.
@@ -80,6 +80,14 @@ run_instr() {
 }
 
 run_instr smoke-manifest-consent "$T.SmokeTest,$T.ManifestTest,$T.ConsentTest"
+# The main screen against both system navigation bars (the overlays are those of AOSP's SystemUI); the screenshots are
+# kept with the logs to look at.
+for mode in threebutton gestural; do
+  adb shell cmd overlay enable-exclusive --category "com.android.internal.systemui.navbar.$mode" >/dev/null
+  sleep 5
+  run_instr "insets-$mode" "$T.InsetsTest" -e navMode "$mode"
+  adb pull "/sdcard/Android/data/$PKG/files/insets/main-$mode.png" "$OUT/" >/dev/null 2>&1
+done
 run_instr tunnel "$T.TunnelTest" -e hermeticWeb "$WEB_URL" -e hermeticServer 10.0.2.2
 
 echo
