@@ -43,7 +43,7 @@ project's release key; one you build yourself is signed with the debug key unles
 The installer puts `VPN Gate.app` in /Applications and starts the privileged helper (a LaunchDaemon). After that the
 app never asks for anything: the helper accepts requests from whoever is logged in at the console. If the helper is
 missing or outdated, **Connect** shows a one-time setup alert, opens the same installer and connects by itself when it
-finishes. The package version is the `VERSION` file (currently 1.0.0). The app and package are ad-hoc signed only:
+finishes. The package version is the `VERSION` file (currently 1.0.1). The app and package are ad-hoc signed only:
 no Developer ID, no hardened runtime, **not notarizable** as built, so macOS shows an "unidentified developer" notice
 the first time (right-click → Open). Notarizing would need a Developer ID, hardened-runtime signing and a rebuild.
 

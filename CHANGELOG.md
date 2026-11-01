@@ -2,6 +2,9 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+
+## [1.0.1] - 2026-11-01
+Android fix release.
 ### Added
 - Android emulator CI checks that the main screen stays clear of the status and navigation bars in both 3-button and gesture navigation (`InsetsTest`), and keeps the screenshots in the `android-emulator-logs` artifact.
 ### Fixed
