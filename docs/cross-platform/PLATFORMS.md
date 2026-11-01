@@ -12,11 +12,12 @@ Manual checks that need a real machine. The agent cannot run these; the user doe
   mode (proxy answers, no system route change), and a killed process whose stale routes the next start removes.
 - `VPNGate.Tests/WindowsIntegrationTests.cs`: real Credential Manager (incl. chunking) and the run-at-login registry value.
 - `VPNGate.UiTests` (`winui-ui` job): every window and sheet built in-process over a fake daemon, key controls and state asserted
-  (list, sort, filters, Details, disclaimer, accounts, editor, routing, Settings, History, Log) and rendered to PNG; `VPNGate.Smoke`
+  (list, sort, filters, Details, disclaimer, accounts, editor, routing, Settings, History, Log), rendered to PNG and diffed with the
+  goldens in `VPNGate.UiTests/golden`; `VPNGate.Smoke`
   (`winui-smoke` job): the real `VPNGate.exe` driven through UI Automation (launch, disclaimer, list, search, close).
 
-Only the rest needs a human: looking once at the `winui-ui-screenshots` and `winui-smoke-screenshots` artifacts against UI-SPEC
-(5; the controls and their state are tested, the pictures are not yet diffed), a connection to a real relay with full-tunnel
+Only the rest needs a human: approving changed WinUI goldens, looking once at the `winui-smoke-screenshots` artifact against
+UI-SPEC (5), a connection to a real relay with full-tunnel
 capture of the default route (6), a real TCP flow through SOCKS5, the tray icon and menu.
 
 Get `vpn-gate-msi` from the latest green `msi` CI job (unsigned: SmartScreen "More info" > "Run anyway").

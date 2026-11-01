@@ -98,8 +98,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # The names are the required checks of the protect-main ruleset ("rust (ubuntu-latest)"), so the Linux leg keeps its
+        # name and runs on the pinned image through `runner`.
         os: [macos-15, windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          - os: ubuntu-latest
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner || matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
@@ -129,7 +134,7 @@ jobs:
           sudo "$BIN" --ignored --nocapture
   softether-netns:
     timeout-minutes: 25
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
@@ -146,7 +151,7 @@ jobs:
         with: { name: softether-netns-logs, path: /tmp/vpngate-netns*.log, if-no-files-found: ignore }
   gtk:
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
@@ -190,9 +195,10 @@ jobs:
       - name: WinUI app builds (unpackaged, self-contained)
         run: dotnet build apps/windows/VPNGate.App --configuration Release -p:Platform=x64
   winui-ui:
-    # U34: the real WinUI views in-process (own XAML Application on a UI thread, a fake daemon on a named pipe), rendered to PNG.
+    # U34: the real WinUI views in-process (own XAML Application on a UI thread, a fake daemon on a named pipe), rendered to PNG
+    # and compared with apps/windows/VPNGate.UiTests/golden. Pinned image: the goldens' pixels depend on it.
     timeout-minutes: 30
-    runs-on: windows-latest
+    runs-on: windows-2025
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -204,6 +210,7 @@ jobs:
         run: |
           $dir = "apps/windows/VPNGate.UiTests/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64"
           $env:VPNGATE_SHOTS = Join-Path $PWD "shots/ui"
+          $env:VPNGATE_GOLDEN = Join-Path $PWD "apps/windows/VPNGate.UiTests/golden"
           & "$dir/VPNGate.UiTests.exe" -xml ui-results.xml -parallel none -verbose -diagnostics
           "exit code: $LASTEXITCODE"
           exit $LASTEXITCODE
@@ -273,7 +280,7 @@ jobs:
         with: { name: vpn-gate-msi, path: build/VPN-Gate.msi }
   deb:
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
@@ -299,7 +306,7 @@ jobs:
         with: { name: vpn-gate-deb, path: build/vpn-gate_*.deb }
   android-engine:
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)
@@ -317,7 +324,7 @@ jobs:
         with: { name: vpn-gate-android-engine, path: build/android-engine }
   android-app:
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [android-engine]
     steps:
       - uses: actions/checkout@v7
@@ -378,7 +385,7 @@ jobs:
         with: { name: paparazzi-recorded-goldens, path: apps/android/app/src/test/snapshots/images }
   android-emulator:
     timeout-minutes: 45
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [android-engine]
     steps:
       - uses: actions/checkout@v7
@@ -410,7 +417,7 @@ jobs:
         with: { name: android-emulator-logs, path: /tmp/android-emulator-logs, if-no-files-found: ignore }
   coverage:
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain (version pinned in rust-toolchain.toml)

@@ -1,7 +1,8 @@
 name: Record screenshot goldens
 # Screenshot goldens (Tests/Fixtures/screenshots) depend on the OS and its font rendering, so they are recorded on the
-# CI runner. Run this (Actions tab, or `gh workflow run record-goldens.yml --ref <branch>`), download the artifact,
-# look at the images, copy them into Tests/Fixtures/screenshots and commit. The CI `screenshots` job then compares.
+# CI runner. Run this (Actions tab, or `gh workflow run record-goldens.yml --ref <branch>`), download the artifacts,
+# look at the images, copy them into Tests/Fixtures/screenshots (macOS, `screenshot-goldens`) and
+# apps/windows/VPNGate.UiTests/golden (WinUI, `winui-goldens`) and commit. The CI `screenshots` and `winui-ui` jobs then compare.
 on:
   workflow_dispatch:
 
@@ -18,3 +19,22 @@ jobs:
         run: scripts/test-ui.sh --record
       - uses: actions/upload-artifact@v7
         with: { name: screenshot-goldens, path: Tests/Fixtures/screenshots/*.png, if-no-files-found: error }
+  winui:
+    timeout-minutes: 30
+    runs-on: windows-2025   # same image as the winui-ui job in ci.yml
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with: { dotnet-version: 8.0.x }
+      - run: dotnet build apps/windows/VPNGate.UiTests --configuration Release -p:Platform=x64
+      - name: Render every view and write the PNGs
+        shell: pwsh
+        run: |
+          $dir = "apps/windows/VPNGate.UiTests/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64"
+          $env:VPNGATE_SHOTS = Join-Path $PWD "shots/ui"
+          $env:VPNGATE_GOLDEN = Join-Path $PWD "apps/windows/VPNGate.UiTests/golden"
+          $env:VPNGATE_UI_RECORD = "1"
+          & "$dir/VPNGate.UiTests.exe" -parallel none
+          exit $LASTEXITCODE
+      - uses: actions/upload-artifact@v7
+        with: { name: winui-goldens, path: apps/windows/VPNGate.UiTests/golden/*.png, if-no-files-found: error }
