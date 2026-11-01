@@ -409,6 +409,9 @@ jobs:
           # v2.38.0's default options plus -no-metrics (the emulator warns its metrics prompt will become blocking);
           # the pin keeps this copy from drifting silently: compare the defaults when bumping it
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
+          # The default 6 GB data partition needs 1.2x as much free disk; a runner with 6.7 GB free made the emulator refuse to
+          # start ("Not enough space to create userdata partition"). The tests need a fraction of it.
+          disk-size: 4096M
           working-directory: apps/android
           script: bash ../../scripts/ci-android-emulator.sh
       - name: Logs
