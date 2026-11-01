@@ -257,7 +257,7 @@ private fun ServerRow(s: VpnServer, selected: Boolean, favorite: Boolean, probe:
 @Composable
 private fun BottomBar(state: UiState, model: MainModel) {
     // A custom bottomBar gets no insets from the Scaffold; without this the gesture/navigation bar covers the footer.
-    Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp)) {
+    Column(Modifier.fillMaxWidth().padding(16.dp)) {
         val disconnected = state.state == ConnectionState.Disconnected
         Button(
             onClick = model::act,
