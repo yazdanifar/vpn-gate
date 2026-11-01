@@ -22,6 +22,10 @@ final class HelperClient: @unchecked Sendable {
         if isConnected { return true }
         let s = socket(AF_UNIX, SOCK_STREAM, 0)
         guard s >= 0 else { return false }
+        // A write to a helper that went away must fail with EPIPE, not kill the app with SIGPIPE (the Swift engine this
+        // replaced set this on every socket; the thin client lost it).
+        var one: Int32 = 1
+        setsockopt(s, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
         withUnsafeMutableBytes(of: &addr.sun_path) { $0.copyBytes(from: Array(path.utf8) + [0]) }

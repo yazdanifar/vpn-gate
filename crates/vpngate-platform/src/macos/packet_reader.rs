@@ -196,14 +196,14 @@ fn read_loop(fd: RawFd, wake: RawFd, on_packet: &Mutex<Option<Callback>>, forwar
 
 #[cfg(test)]
 mod tests {
-    use std::os::fd::IntoRawFd;
+    use std::os::fd::{AsRawFd, IntoRawFd};
     use std::os::unix::net::UnixDatagram;
     use std::time::Instant;
 
     use super::*;
 
-    /// Tests that create descriptors run one at a time: the recycling test `dup2`s onto a descriptor number, which
-    /// would hijack one a parallel test had just been given.
+    /// Tests of this module run one at a time, so the descriptor numbers one test frees are the ones the next creates
+    /// (the other modules' tests still run in parallel: no test here may close or replace a number it does not own).
     fn serial() -> MutexGuard<'static, ()> {
         static LOCK: Mutex<()> = Mutex::new(());
         lock(&LOCK)
@@ -316,22 +316,33 @@ mod tests {
         reader.start_reading();
         std::thread::sleep(Duration::from_millis(100)); // the reader thread is parked in poll()
         reader.close();
-        // The kernel hands the same descriptor number to the next tunnel.
-        let (next, next_peer) = UnixDatagram::pair().unwrap();
-        let next = next.into_raw_fd();
-        // SAFETY: both descriptors are open; `old` was closed by the reader and is reused here.
-        unsafe {
-            libc::dup2(next, old);
+        // The kernel hands the lowest free number to the next socket, so one of the next tunnel's descriptors normally lands
+        // on the number the reader just released. Only descriptors this test owns are created (no `dup2` onto, or `close`
+        // of, a bare number): the other tests of this binary run in parallel, `old` can already belong to one of them, and
+        // replacing or closing it behind its back makes that test abort with "IO Safety violation" when it drops its file.
+        let mut held = Vec::new();
+        let mut next_peer = None;
+        for _ in 0..64 {
+            let (x, y) = UnixDatagram::pair().unwrap();
+            if x.as_raw_fd() == old {
+                next_peer = Some(y);
+                held.push(x);
+                break;
+            }
+            if y.as_raw_fd() == old {
+                next_peer = Some(x);
+                held.push(y);
+                break;
+            }
+            held.push(x);
+            held.push(y);
         }
-        // Other tests' file I/O can close a number this test shares; a failed send then just means nothing to consume.
-        let _ = next_peer.send(&[0, 0, 0, 2, 1, 2, 3, 4]);
+        // Without a recycled number there is nothing a stale reader could consume; the checks below still hold.
+        if let Some(peer) = &next_peer {
+            let _ = peer.send(&[0, 0, 0, 2, 1, 2, 3, 4]);
+        }
         std::thread::sleep(Duration::from_millis(300));
         assert!(lock(&got).is_empty(), "stale reader consumed a packet that belongs to the next tunnel");
-        // SAFETY: closing the descriptors this test opened.
-        unsafe {
-            libc::close(old);
-            libc::close(next);
-        }
     }
 
     #[test]
