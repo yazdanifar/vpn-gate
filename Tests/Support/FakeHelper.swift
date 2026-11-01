@@ -79,6 +79,8 @@ final class FakeHelperServer: @unchecked Sendable {
     private let session: FakeHelperSession
     private var listener: Int32 = -1
     private let clients = Locked([Int32]())
+    private let stopping = Locked(false)
+    private let acceptExited = DispatchSemaphore(value: 0)
 
     init(path: String, session: FakeHelperSession) { self.path = path; self.session = session }
 
@@ -93,22 +95,37 @@ final class FakeHelperServer: @unchecked Sendable {
         }
         guard rc == 0, listen(listener, 8) == 0 else { throw POSIXError(.EADDRINUSE) }
         session.emit = { [weak self] e in self?.broadcast(e) }
-        let l = listener
+        let l = listener, flag = stopping, exited = acceptExited
         Thread.detachNewThread { [weak self] in
-            while true {
+            // This thread owns the listening descriptor and is the only one to close it, once it is done accepting. stop() used
+            // to close it under a loop that was still running; the next server's listener then got the same number, the stale
+            // loop accepted on it, stole the new client's connection and dropped it (the new client never got its snapshot).
+            // Polling lets stop() end the loop without closing the number first.
+            while !flag.value {
+                var p = pollfd(fd: l, events: Int16(POLLIN), revents: 0)
+                if poll(&p, 1, 20) <= 0 { continue }
                 let c = accept(l, nil, nil)
-                if c < 0 { break }
-                self?.serve(c)
+                if c < 0 {
+                    if errno == EINTR || errno == ECONNABORTED || errno == EAGAIN { continue }
+                    break
+                }
+                guard !flag.value, let self else { Darwin.close(c); break }
+                self.serve(c)
             }
+            Darwin.close(l)
+            exited.signal()
         }
     }
 
     func stop() {
+        stopping.update { $0 = true }
         let l = listener; listener = -1
-        if l >= 0 { Darwin.close(l) }
+        // Wait until the accept loop is gone and the listener is closed: no later test may be given its descriptor number
+        // while a loop might still call accept() on it.
+        if l >= 0 { _ = acceptExited.wait(timeout: .now() + 5) }
         // Shut the clients down, never close them here: each one's reader thread closes its own descriptor when read() returns.
         // Closing here as well made that second close hit whatever the next test's socket had been given the same number, which
-        // cut a fresh connection off before its first snapshot arrived (a flaky "helperclient/snapshots-carry-the-ipc-version").
+        // cut a fresh connection off before its first snapshot arrived.
         for c in clients.value { Darwin.shutdown(c, SHUT_RDWR) }
         clients.update { $0 = [] }
         unlink(path)

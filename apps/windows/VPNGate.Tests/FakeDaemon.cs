@@ -22,24 +22,36 @@ public sealed class FakeDaemon : IAsyncDisposable
 
     public FakeDaemon Start()
     {
-        _loop = Task.Run(AcceptLoop);
+        // The first pipe instance exists before Start returns. Creating it on the thread pool left a gap in which a client that
+        // connected at once found no pipe, gave up after its 2 s connect timeout and never sent its request (on a busy runner:
+        // "no refreshServers request" after 12 s).
+        var first = NewPipe();
+        _loop = Task.Run(() => AcceptLoop(first));
         return this;
     }
 
     public IpcClient Client() => IpcClient.ForNamedPipe(PipeName);
 
-    private async Task AcceptLoop()
+    private NamedPipeServerStream NewPipe() =>
+        new(PipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+
+    private async Task AcceptLoop(NamedPipeServerStream? pipe)
     {
-        while (!_cts.IsCancellationRequested)
+        try
         {
-            var pipe = new NamedPipeServerStream(PipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances,
-                PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-            try { await pipe.WaitForConnectionAsync(_cts.Token); }
-            catch (OperationCanceledException) { pipe.Dispose(); return; }
-            lock (_gate) _current = pipe;
-            _connected.TrySetResult();
-            _ = Task.Run(() => Serve(pipe));
+            while (!_cts.IsCancellationRequested)
+            {
+                pipe ??= NewPipe();
+                try { await pipe.WaitForConnectionAsync(_cts.Token); }
+                catch (OperationCanceledException) { return; }
+                lock (_gate) _current = pipe;
+                _connected.TrySetResult();
+                var served = pipe;
+                pipe = _cts.IsCancellationRequested ? null : NewPipe();  // ready before the next client (a reconnect) arrives
+                _ = Task.Run(() => Serve(served));
+            }
         }
+        finally { pipe?.Dispose(); }
     }
 
     private async Task Serve(NamedPipeServerStream pipe)
