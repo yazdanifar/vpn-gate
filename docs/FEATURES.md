@@ -100,9 +100,10 @@ connection setting can use its own rules instead of the app-wide list (its edito
   lifetime expires it is only no longer used; it stays on the utun until disconnect.
 
 ### Per-platform features
-The engine is the same Rust code everywhere; the table shows what each app offers. Only macOS has had a live tunnel run
-(see [verification](#what-has-and-has-not-been-verified)); the other platforms are verified by CI and the checklists in
-[PLATFORMS.md](cross-platform/PLATFORMS.md).
+The engine is the same Rust code everywhere; the table shows what each app offers. macOS, Linux and Windows have run a tunnel
+against real public relays (the weekly `Tunnel e2e (real relay)` workflow); Android is verified against a real SoftEther server
+in an emulator, not against a public relay (see [verification](#what-has-and-has-not-been-verified)). The checklists and what CI
+covers per platform are in [PLATFORMS.md](cross-platform/PLATFORMS.md).
 
 | Feature | macOS | Windows | Linux | Android |
 |---|---|---|---|---|
@@ -121,14 +122,26 @@ The engine is the same Rust code everywhere; the table shows what each app offer
 | Opt-in diagnostics upload | yes | no | no | no |
 
 ### What has and has not been verified
-**Nothing has run against a real VPN Gate server, the real list API, or a live tunnel yet.** Everything is tested with
-in-memory fakes and loopback sockets: a fake SoftEther server (real wire format), a fake hub for DHCP/ARP, recording
-doubles for `route`/DNS/utun, fake relay streams and a fake HTTP client for the list sync (the default HTTP client is
-exercised only against a loopback server), a fake helper behind the real IPC socket, and a loopback TLS server for
-certificate pinning. Whether the real list API answers a request without `X-Transaction`, and whether every relay
-accepts a client without the "knock" below, are therefore open. The opt-in live checks (`make rust-live`, `--probe`,
-`scripts/e2e-tunnel.sh`) need network access and are not part of the normal test run. One earlier end-to-end log shows
-a connection to a build-9729 relay without the knock; that is one data point, not proof for all relays.
+**Verified against real servers.**
+- *Tunnels*: the weekly `Tunnel e2e (real relay)` workflow probes the bundled list, picks a working public relay and connects from a
+  GitHub-hosted macOS, Linux and Windows runner. It checks that the public IPv4 address changes, that the two half-default routes are
+  present, that IPv6 is blocked, that the VPN's resolver is the primary one and DNS resolves, and that afterwards routes, DNS and the
+  adapter are exactly as before: after SIGINT, SIGTERM and a kill -9 + restart on macOS and Linux, after a hard kill + restart on
+  Windows (a script cannot send it Ctrl-C; the graceful stop is covered by the `tunnel_windows` test). The two most recent runs passed
+  on all three systems; a run can still fail when the chosen public relay is flaky. On macOS the script was also run by hand.
+- *Handshake and list*: the weekly `Live relay checks` workflow completes the TLS login and DHCP against real relays, reaches the CSV API,
+  mirror, and checks that the platform certificate verifier accepts a public CA. It reports a pass rate per server build:
+  relays of builds 9729 and 9807 have completed the handshake, others fail (a relay may simply be gone; the cause is not told apart).
+- *Android*: the emulator job connects through the app's own screens to a real SoftEther server container and checks that traffic leaves
+  through it, the always-on start and the reconnect after airplane mode. It has never connected to a public relay.
+
+**Still tested only with fakes**, in the normal (offline) test run: a fake SoftEther server (real wire format), a fake hub for DHCP/ARP,
+recording doubles for `route`/DNS/tun, fake relay streams and a fake HTTP client for the list sync (the default HTTP client is
+exercised only against a loopback server), a fake daemon behind the real IPC socket, and a loopback TLS server for certificate
+pinning. **Still open:** whether the real HTTP list API (the signed `.dat`) answers a request without `X-Transaction` (only the CSV
+API is checked live), and whether every relay accepts a client without the "knock" below: relays that did complete the handshake
+needed none, but one that fails cannot be told from one that requires it. The live checks (`make rust-live`, `--probe`,
+`scripts/e2e-tunnel.sh`) need network access and are not part of the normal test run.
 
 ### Not implemented
 - **"Knock"**: the Windows client sends servers with a build above 9074 that publish a `HostUniqueKey` a pre-connect

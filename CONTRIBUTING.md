@@ -1,7 +1,7 @@
 # Contributing
 
 ## Requirements
-macOS 14+, Xcode Command Line Tools (Swift 6 toolchain, language mode 5) and rustup (the daemon is Rust; `rust-toolchain.toml` pins it). SwiftPM is optional.
+macOS 14+, Xcode Command Line Tools (Swift 6 toolchain, language mode 5) and rustup (the daemon is Rust; `rust-toolchain.toml` pins it) for the macOS app and the Rust engine. SwiftPM is optional. The Windows, Linux and Android apps need their own toolchains (.NET 8 SDK and WiX, GTK4/libadwaita dev packages, Android SDK and NDK): see "Build from source" in the README.
 
 ## Workflow
 ```
@@ -32,7 +32,7 @@ make rust-lint   # cargo fmt --check + clippy -D warnings
 - `scripts/test.sh` builds one test binary: `Model/` + `Tests/App`, against `FakeHelperServer` in `Tests/Support/FakeHelper.swift`.
 - `scripts/test-ui.sh` builds a second binary (`UI/` + `Model/` + `Tests/UI`) that renders the SwiftUI views off-screen and diffs them with `Tests/Fixtures/screenshots/*.png` (CI job `screenshots`). Goldens depend on the macOS version, so never record them on your Mac: run the `Record screenshot goldens` workflow (or take `actual/` from the failed job's `screenshot-actual-and-diff` artifact), look at the images, copy them into `Tests/Fixtures/screenshots/` and commit. A new view state = a new `test("ui/...")` in `Tests/UI/ScreenshotTests.swift`. `scripts/test-ui.sh` locally is still useful to see that views render (it fails on a golden mismatch, expected on a different macOS).
 - `Package.swift` and `scripts/build.sh` must both build; CI runs `swift build` as a drift check.
-- Releases: bump `VERSION`, update the changelog, push tag `v<VERSION>`; the Release workflow publishes the pkg.
+- Releases: bump `VERSION`, update the changelog, push tag `v<VERSION>`; the Release workflow runs the whole CI suite and publishes the pkg, msi, deb, apk and aab.
 - `git config blame.ignoreRevsFile .git-blame-ignore-revs` hides the formatting commit from blame.
 - Bump `VERSION` and update `CHANGELOG.md` for releases. The helper's IPC version is a separate number.
 - Commit messages: imperative, one-line summary describing the user-visible change.
