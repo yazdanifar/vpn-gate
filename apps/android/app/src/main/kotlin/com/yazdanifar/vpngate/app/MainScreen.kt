@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -255,7 +256,8 @@ private fun ServerRow(s: VpnServer, selected: Boolean, favorite: Boolean, probe:
 
 @Composable
 private fun BottomBar(state: UiState, model: MainModel) {
-    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+    // A custom bottomBar gets no insets from the Scaffold; without this the gesture/navigation bar covers the footer.
+    Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp)) {
         val disconnected = state.state == ConnectionState.Disconnected
         Button(
             onClick = model::act,

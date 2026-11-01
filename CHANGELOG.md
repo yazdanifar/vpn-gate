@@ -2,6 +2,10 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+### Added
+- Android emulator CI checks that the main screen stays clear of the status and navigation bars in both 3-button and gesture navigation (`InsetsTest`), and keeps the screenshots in the `android-emulator-logs` artifact.
+### Fixed
+- Android: the app draws edge to edge with dark status and navigation bar icons, and the connect/disconnect button and footer sit above the gesture bar instead of under it.
 
 ## [1.0.0] - 2026-11-01
 First public release.

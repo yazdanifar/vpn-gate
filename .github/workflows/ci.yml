@@ -407,8 +407,9 @@ jobs:
           arch: x86_64
           target: google_apis
           # v2.38.0's default options plus -no-metrics (the emulator warns its metrics prompt will become blocking);
-          # the pin keeps this copy from drifting silently: compare the defaults when bumping it
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
+          # the pin keeps this copy from drifting silently: compare the defaults when bumping it.
+          # -prop qemu.hw.mainkeys=0 gives the emulator a system navigation bar (it has none by default), which InsetsTest needs.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics -prop qemu.hw.mainkeys=0
           # The default 6 GB data partition needs 1.2x as much free disk; a runner with 6.7 GB free made the emulator refuse to
           # start ("Not enough space to create userdata partition"). The tests need a fraction of it.
           disk-size: 4096M
