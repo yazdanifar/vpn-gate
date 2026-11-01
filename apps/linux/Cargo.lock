@@ -2149,7 +2149,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vpngate-app-model"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "base64",
  "p12-keystore",
@@ -2164,7 +2164,7 @@ dependencies = [
 
 [[package]]
 name = "vpngate-core"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "base64",
  "flate2",
@@ -2179,7 +2179,7 @@ dependencies = [
 
 [[package]]
 name = "vpngate-gtk"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-channel",
  "gtk4",
@@ -2196,7 +2196,7 @@ dependencies = [
 
 [[package]]
 name = "vpngate-ipc-client"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -2206,7 +2206,7 @@ dependencies = [
 
 [[package]]
 name = "vpngate-platform"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "core-foundation",
  "libc",
@@ -2220,7 +2220,7 @@ dependencies = [
 
 [[package]]
 name = "vpngate-testkit"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "serde",
  "serde_json",
