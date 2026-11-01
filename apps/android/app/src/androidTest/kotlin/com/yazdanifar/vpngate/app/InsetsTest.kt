@@ -49,10 +49,13 @@ class InsetsTest {
         rule.waitForIdle()
 
         var bars = androidx.core.graphics.Insets.NONE
+        var visible = androidx.core.graphics.Insets.NONE
         var screenHeight = 0
         rule.runOnUiThread {
             val decor = rule.activity.window.decorView
-            bars = WindowInsetsCompat.toWindowInsetsCompat(decor.rootWindowInsets).getInsets(WindowInsetsCompat.Type.systemBars())
+            val insets = WindowInsetsCompat.toWindowInsetsCompat(decor.rootWindowInsets)
+            visible = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            bars = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.systemBars())
             screenHeight = decor.height
         }
         val title = rule.onNodeWithText("VPN Gate").fetchSemanticsNode().boundsInWindow
@@ -62,7 +65,7 @@ class InsetsTest {
         Harness.device.takeScreenshot(File(dir, "main-$mode.png"))
 
         assertTrue("no status bar inset: the test would prove nothing", bars.top > 0)
-        assertTrue("no navigation bar inset in $mode mode: the test would prove nothing", bars.bottom > 0)
+        assertTrue("no navigation bar inset in $mode mode (visible $visible, ignoring visibility $bars): the test would prove nothing", bars.bottom > 0)
         assertTrue("title (top ${title.top}) is under the status bar (${bars.top} px)", title.top >= bars.top)
         assertTrue(
             "footer (bottom ${footer.bottom}) is under the navigation bar (starts at ${screenHeight - bars.bottom})",

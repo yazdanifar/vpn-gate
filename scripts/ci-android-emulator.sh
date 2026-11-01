@@ -85,6 +85,8 @@ run_instr smoke-manifest-consent "$T.SmokeTest,$T.ManifestTest,$T.ConsentTest"
 for mode in threebutton gestural; do
   adb shell cmd overlay enable-exclusive --category "com.android.internal.systemui.navbar.$mode" >/dev/null
   sleep 5
+  adb shell dumpsys window | grep -iE "navigationBar|InputMethod|mHasNavigationBar|isNavBarForcedShownByUser" > "$OUT/window-$mode.txt" 2>&1
+  adb shell cmd overlay list | grep -i navbar > "$OUT/overlays-$mode.txt" 2>&1
   run_instr "insets-$mode" "$T.InsetsTest" -e navMode "$mode"
   adb pull "/sdcard/Android/data/$PKG/files/insets/main-$mode.png" "$OUT/" >/dev/null 2>&1
 done
