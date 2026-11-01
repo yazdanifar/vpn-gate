@@ -198,14 +198,14 @@ Phase 1 units only depend on U02, so they can run in any order.
   - `build.sh` runs `cargo build` for `{aarch64,x86_64}-apple-darwin`, then `lipo`. `build-pkg.sh` ships the result as
     `vpngate-helper`, so the plist and the pkg scripts stay unchanged.
 - **U15a macOS parity: Rust tests + CI (offline).** Fuzz (proptest), live tests, `cargo-llvm-cov` thresholds, `live.yml`, `probe-sample.sh`, `gen-watermark.sh`.
-- **U15b Swift deletion + 2.0.0** (after the user ran the live commands below). Remaining items of the old U15:
+- **U15b Swift deletion + release prep (1.0.0)** (after the user ran the live commands below). Remaining items of the old U15:
   - Port the Fuzz tests (seeded proptest) and the Live tests.
   - Add `cargo-llvm-cov` thresholds equal to today's (≥90% core, ≥80% client, bridge, session, netconfig and ipc).
   - Point `live.yml` and `probe-sample.sh` at the Rust daemon, and make `gen-watermark.sh` emit Rust.
   - **The user runs** `sudo scripts/e2e-tunnel.sh <ip>` and `scripts/test.sh --live`.
   - Then delete `Sources/VPNGateCore` and `Sources/vpngate-helper`, and the Swift tests the Rust tests now cover.
   - Trim `Package.swift`, `test.sh` and `coverage.sh`.
-  - Update ARCHITECTURE, README and FEATURES, and release 2.0.0 (VERSION, CHANGELOG, tag).
+  - Update ARCHITECTURE, README and FEATURES, and release 1.0.0 (VERSION, CHANGELOG, tag; first called 2.0.0, renumbered before anything was published).
 
 ### Phase 4 — Windows
 - **U16 Windows backend I: tunnel + routes.**
