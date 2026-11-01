@@ -106,7 +106,10 @@ final class FakeHelperServer: @unchecked Sendable {
     func stop() {
         let l = listener; listener = -1
         if l >= 0 { Darwin.close(l) }
-        for c in clients.value { Darwin.close(c) }
+        // Shut the clients down, never close them here: each one's reader thread closes its own descriptor when read() returns.
+        // Closing here as well made that second close hit whatever the next test's socket had been given the same number, which
+        // cut a fresh connection off before its first snapshot arrived (a flaky "helperclient/snapshots-carry-the-ipc-version").
+        for c in clients.value { Darwin.shutdown(c, SHUT_RDWR) }
         clients.update { $0 = [] }
         unlink(path)
     }
@@ -122,6 +125,8 @@ final class FakeHelperServer: @unchecked Sendable {
     }
 
     private func serve(_ fd: Int32) {
+        var one: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))  // a late write to a stopped client must not raise SIGPIPE
         clients.update { $0.append(fd) }
         if let d = try? JSONEncoder().encode(session.snapshotEvent()) { send(fd, d) }
         Thread.detachNewThread { [weak self] in
