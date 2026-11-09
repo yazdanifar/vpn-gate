@@ -51,7 +51,7 @@ public class MainWindowTests
     [Fact]
     public async Task ColumnHeadersAreAllThere() => await WithMain((rig, w, root) =>
     {
-        foreach (var h in new[] { "IP Address (Hostname)", "Region", "Uptime", "VPN Sessions", "Line Speed", "Ping (Google, SE)", "Logging Policy", "Total Score", "Test from this computer" })
+        foreach (var h in new[] { "IP Address (Hostname)", "Region", "Uptime", "VPN Sessions", "Line Speed", "Ping (Google, SE)", "Logging Policy", "Total Score", "Test (this PC)" })
             Assert.Contains(Probe.All<HyperlinkButton>(root), b => b.Content as string == h);
         return Task.CompletedTask;
     });
@@ -82,7 +82,7 @@ public class MainWindowTests
         Assert.True(Probe.HasText(list, "40 ms"));
         Assert.True(Probe.HasText(list, "15 ms"));
         Assert.Equal(2, Probe.Texts(list).Count(t => t == "Cannot connect"));
-        Probe.Invoke(Probe.Find<HyperlinkButton>(root, b => b.Content as string == "Test from this computer", "Test header"));
+        Probe.Invoke(Probe.Find<HyperlinkButton>(root, b => b.Content as string == "Test (this PC)", "Test header"));
         await Probe.Settle();
         Assert.Equal(new[] { "c.opengw.net", "a.opengw.net" }, RowHosts(root).Take(2));
     });

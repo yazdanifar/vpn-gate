@@ -140,7 +140,7 @@
             <HyperlinkButton Grid.Column="5" Content="Ping (Google, SE)" Tag="Ping" Click="OnSort" Padding="0" />
             <HyperlinkButton Grid.Column="6" Content="Logging Policy" Tag="Logging" Click="OnSort" Padding="0" />
             <HyperlinkButton Grid.Column="7" Content="Total Score" Tag="Score" Click="OnSort" Padding="0" />
-            <HyperlinkButton Grid.Column="8" Content="Test from this computer" Tag="Test" Click="OnSort" Padding="0" />
+            <HyperlinkButton Grid.Column="8" Content="Test (this PC)" Tag="Test" Click="OnSort" Padding="0" />
         </Grid>
 
         <!-- Table -->
