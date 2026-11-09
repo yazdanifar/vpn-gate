@@ -228,6 +228,15 @@ public sealed class IpcClient : IAsyncDisposable
         return (await RequestAsync(r, TimeSpan.FromSeconds(180), ct).ConfigureAwait(false)).Decode<ServerListResult>();
     }
 
+    /// <summary>A real SoftEther handshake with up to 200 relays; the entries come back in request order.</summary>
+    public async Task<ProbeResult> ProbeAsync(IReadOnlyList<ProbeTarget> targets, ProxySettings? proxy, CancellationToken ct = default)
+    {
+        var r = HelperRequest.Of("probe");
+        r.Targets = targets.ToList();
+        if (proxy is { Kind: not ProxyKind.None }) r.Proxy = proxy;
+        return (await RequestAsync(r, TimeSpan.FromSeconds(120), ct).ConfigureAwait(false)).Decode<ProbeResult>();
+    }
+
     public async ValueTask DisposeAsync()
     {
         Stream? s;

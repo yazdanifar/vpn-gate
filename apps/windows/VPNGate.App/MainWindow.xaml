@@ -100,6 +100,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBox x:Name="SearchBox" Grid.Column="0" PlaceholderText="Search host, IP, country, operator" TextChanged="OnSearchChanged" />
             <ComboBox x:Name="CountryBox" Grid.Column="1" Width="140" SelectionChanged="OnCountryChanged" />
@@ -113,7 +114,9 @@
             <Button Grid.Column="4" Content="Clear Filters" Click="OnClearFilters" Visibility="{x:Bind local:Cols.Vis(Vm.FilterActive), Mode=OneWay}" />
             <Button Grid.Column="5" Content="Details" Click="OnDetails" IsEnabled="{x:Bind local:Cols.NotNull(Vm.Selected), Mode=OneWay}" />
             <Button Grid.Column="6" Content="Refresh List" Click="OnRefresh" IsEnabled="{x:Bind Vm.IsNotLoading, Mode=OneWay}" />
-            <Button Grid.Column="7" Content="Settings" Click="OnShowSettings" />
+            <Button x:Name="TestButton" Grid.Column="7" Content="{x:Bind Vm.TestLabel, Mode=OneWay}" Click="OnTestConnections"
+                    IsEnabled="{x:Bind Vm.IsNotTesting, Mode=OneWay}" />
+            <Button Grid.Column="8" Content="Settings" Click="OnShowSettings" />
         </Grid>
 
         <!-- Column headers -->
@@ -127,6 +130,7 @@
                 <ColumnDefinition Width="1.3*" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="0.8*" />
+                <ColumnDefinition Width="1.2*" />
             </Grid.ColumnDefinitions>
             <HyperlinkButton Grid.Column="0" Content="IP Address (Hostname)" Tag="Host" Click="OnSort" Padding="0" />
             <HyperlinkButton Grid.Column="1" Content="Region" Tag="Country" Click="OnSort" Padding="0" />
@@ -136,6 +140,7 @@
             <HyperlinkButton Grid.Column="5" Content="Ping (Google, SE)" Tag="Ping" Click="OnSort" Padding="0" />
             <HyperlinkButton Grid.Column="6" Content="Logging Policy" Tag="Logging" Click="OnSort" Padding="0" />
             <HyperlinkButton Grid.Column="7" Content="Total Score" Tag="Score" Click="OnSort" Padding="0" />
+            <HyperlinkButton Grid.Column="8" Content="Test from this computer" Tag="Test" Click="OnSort" Padding="0" />
         </Grid>
 
         <!-- Table -->
@@ -160,6 +165,7 @@
                             <ColumnDefinition Width="1.3*" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="0.8*" />
+                            <ColumnDefinition Width="1.2*" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
                             <TextBlock Text="{x:Bind HostName}" TextTrimming="CharacterEllipsis" />
@@ -172,6 +178,7 @@
                         <TextBlock Grid.Column="5" Text="{x:Bind local:Cols.Pings(PingToGoogle, Ping)}" />
                         <TextBlock Grid.Column="6" Text="{x:Bind local:Cols.Logging(LogType)}" />
                         <TextBlock Grid.Column="7" Text="{x:Bind Score}" />
+                        <TextBlock Grid.Column="8" Text="{x:Bind Test.Text, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>

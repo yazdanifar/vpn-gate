@@ -2,6 +2,8 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+### Added
+- Windows: "Test Connection". A toolbar button and a "Test from this computer" column run a real SoftEther handshake (the daemon's `probe`) with every server in the current view, eight at a time, and show the connect time or why it failed; the column header sorts working servers by connect time, then untested, then failed. Results are kept when the list refreshes.
 
 ## [1.0.1] - 2026-11-01
 Android fix release.

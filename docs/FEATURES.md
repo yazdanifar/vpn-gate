@@ -108,7 +108,7 @@ covers per platform are in [PLATFORMS.md](cross-platform/PLATFORMS.md).
 | Feature | macOS | Windows | Linux | Android |
 |---|---|---|---|---|
 | Server list, search, filter, sort, favorites | yes | yes | yes | yes |
-| Test Connection (handshake probe column) | yes | not yet | yes | yes |
+| Test Connection (handshake probe column) | yes | yes | yes | yes |
 | Saved connection settings (accounts), all auth types | yes | yes | yes | yes |
 | Certificate import | PEM/DER/PKCS#12 | PEM/DER/PKCS#12 | PEM/DER/PKCS#12 | PEM/DER/PKCS#12 |
 | Secrets stored in | Keychain | Credential Manager | Secret Service (`secret-tool`) | Keystore (AES-GCM) |

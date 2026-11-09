@@ -49,6 +49,17 @@ internal sealed class Rig : IAsyncDisposable
         {
             "listServers" or "refreshServers" => new[] { $"{{\"reply\":\"{r["cmd"]}\",\"id\":{r["id"]},\"ok\":true,\"result\":{json}}}" },
             "status" => new[] { Status },
+            // Test Connection: 1.1.1.1 answers in 40 ms, 3.3.3.3 in 15 ms, the others do not answer.
+            "probe" => new[] { $"{{\"reply\":\"probe\",\"id\":{r["id"]},\"ok\":true,\"result\":{{\"results\":[" + string.Join(",", r["targets"]!.AsArray().Select(t =>
+            {
+                var host = (string)t!["host"]!;
+                return host switch
+                {
+                    "1.1.1.1" => $"{{\"host\":\"{host}\",\"ok\":true,\"port\":443,\"connectMs\":40,\"helloMs\":45}}",
+                    "3.3.3.3" => $"{{\"host\":\"{host}\",\"ok\":true,\"port\":443,\"connectMs\":15,\"helloMs\":20}}",
+                    _ => $"{{\"host\":\"{host}\",\"ok\":false,\"error\":\"Cannot connect\"}}",
+                };
+            })) + "]}}" },
             _ => Array.Empty<string>(),
         };
         Settings = new MemorySettings { HasAgreedToDisclaimer = agreed };

@@ -102,6 +102,58 @@ public sealed class ProbeTarget
     public List<int>? Ports { get; set; }
 }
 
+public sealed class ProbeEntry
+{
+    public string Host { get; set; } = "";
+    public bool Ok { get; set; }
+    public int? Port { get; set; }
+    public long? ConnectMs { get; set; }
+    public long? HelloMs { get; set; }
+    public long? Build { get; set; }
+    public string? Error { get; set; }
+}
+
+public sealed class ProbeResult
+{
+    public List<ProbeEntry> Results { get; set; } = new();
+}
+
+public enum ProbePhase { None, Queued, Testing, Ok, Failed }
+
+/// <summary>One list server's "Test Connection" state (UI-SPEC 4, probe cell). Observable so a row updates in place.</summary>
+public sealed partial class ProbeState : CommunityToolkit.Mvvm.ComponentModel.ObservableObject
+{
+    public ProbePhase Phase { get; private set; }
+    public long ConnectMs { get; private set; }
+    public string? Why { get; private set; }
+
+    public string Text => Phase switch
+    {
+        ProbePhase.Queued => "Waiting…",
+        ProbePhase.Testing => "Testing…",
+        ProbePhase.Ok => $"{ConnectMs} ms",
+        ProbePhase.Failed => Why ?? "failed",
+        _ => "—",
+    };
+
+    /// <summary>Lower sorts first: working servers by connect time, then untested ones, then failures.</summary>
+    public long SortRank => Phase switch
+    {
+        ProbePhase.Ok => ConnectMs,
+        ProbePhase.Failed => long.MaxValue,
+        _ => long.MaxValue - 1,
+    };
+
+    public void Set(ProbePhase phase, long connectMs = 0, string? why = null)
+    {
+        Phase = phase;
+        ConnectMs = connectMs;
+        Why = why;
+        OnPropertyChanged(nameof(Text));
+        OnPropertyChanged(nameof(SortRank));
+    }
+}
+
 public sealed class HelperRequest
 {
     public string Cmd { get; set; } = "";
@@ -207,6 +259,10 @@ public sealed class VpnServer
     public ulong SendSize { get; set; }
     public ulong RecvSize { get; set; }
     public bool IsKernelModeNat { get; set; }
+
+    /// <summary>Result of "Test Connection" for this row; never part of the daemon's JSON.</summary>
+    [JsonIgnore]
+    public ProbeState Test { get; set; } = new();
 
     /// <summary>The DDNS host name is the only unique key: one IP can appear several times on different ports.</summary>
     [JsonIgnore]
