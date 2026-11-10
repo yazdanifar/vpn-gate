@@ -21,16 +21,14 @@ import org.junit.Test
  * "Test Connection" against real VPN Gate relays from the emulator, through the same path as the app: the Kotlin
  * [IpcClient] over the in-process UniFFI engine, 8 relays per `probe` request, the relay's ports in priority order.
  * Needs the internet, so it runs only with `-e liveRelays true` (the Test Connection workflow); otherwise skipped.
- * The table goes to logcat (tag ProbeLive) and to the instrumentation status, so the job log shows it.
+ * The table goes to logcat (tag ProbeLive); scripts/ci-android-probe-live.sh prints it in the job log.
  */
 class ProbeLiveTest {
     private val args get() = InstrumentationRegistry.getArguments()
 
+    // Logcat only: an instrumentation status would be read as a test result by the CI script.
     private fun report(line: String) {
         Log.i("ProbeLive", line)
-        val b = android.os.Bundle()
-        b.putString("stream", line + "\n")
-        Harness.instrumentation.sendStatus(0, b)
     }
 
     @Test
