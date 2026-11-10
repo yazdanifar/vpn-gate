@@ -192,6 +192,8 @@ public sealed partial class MainWindow : Window
 
     private async void OnRefresh(object sender, RoutedEventArgs e) => await Vm.RefreshAsync();
 
+    private async void OnTestConnections(object sender, RoutedEventArgs e) => await Vm.TestConnectionsAsync();
+
     private void OnShowLog(object sender, RoutedEventArgs e) => ShowLog();
 
     private void ShowLog()

@@ -51,7 +51,7 @@ public class MainWindowTests
     [Fact]
     public async Task ColumnHeadersAreAllThere() => await WithMain((rig, w, root) =>
     {
-        foreach (var h in new[] { "IP Address (Hostname)", "Region", "Uptime", "VPN Sessions", "Line Speed", "Ping (Google, SE)", "Logging Policy", "Total Score" })
+        foreach (var h in new[] { "IP Address (Hostname)", "Region", "Uptime", "VPN Sessions", "Line Speed", "Ping (Google, SE)", "Logging Policy", "Total Score", "Test (this PC)" })
             Assert.Contains(Probe.All<HyperlinkButton>(root), b => b.Content as string == h);
         return Task.CompletedTask;
     });
@@ -69,6 +69,22 @@ public class MainWindowTests
         await Probe.Settle();
         Assert.Equal("a.opengw.net", RowHosts(root).First());
         await Probe.Shot(root, "main-sorted-by-host");
+    });
+
+    [Fact]
+    public async Task TestConnectionFillsTheColumnAndTheHeaderSortsByIt() => await WithMain(async (rig, w, root) =>
+    {
+        var list = List(root);
+        Assert.Equal(4, Probe.Texts(list).Count(t => t == "—"));
+        Probe.Invoke(Probe.ButtonNamed(root, "Test Connection"));
+        await Probe.Until(() => !rig.Vm.IsTesting && rig.Vm.Servers.All(s => s.Test.Phase is ProbePhase.Ok or ProbePhase.Failed), "the probe results");
+        await Probe.Settle();
+        Assert.True(Probe.HasText(list, "40 ms"));
+        Assert.True(Probe.HasText(list, "15 ms"));
+        Assert.Equal(2, Probe.Texts(list).Count(t => t == "Cannot connect"));
+        Probe.Invoke(Probe.Find<HyperlinkButton>(root, b => b.Content as string == "Test (this PC)", "Test header"));
+        await Probe.Settle();
+        Assert.Equal(new[] { "c.opengw.net", "a.opengw.net" }, RowHosts(root).Take(2));
     });
 
     [Fact]
@@ -104,7 +120,7 @@ public class MainWindowTests
     public async Task ToolbarAndMenuAreComplete() => await WithMain((rig, w, root) =>
     {
         Assert.Equal(new[] { "File", "View", "Help" }, Probe.All<MenuBarItem>(root).Select(m => m.Title).ToArray());
-        foreach (var b in new[] { "Details", "Refresh List", "Settings" })
+        foreach (var b in new[] { "Details", "Test Connection", "Refresh List", "Settings" })
             Assert.Contains(Probe.All<Button>(root), x => x.Content as string == b);
         Assert.NotNull(root.FindName("FavoritesToggle"));
         // No selection yet: Details is off and the action button cannot connect.

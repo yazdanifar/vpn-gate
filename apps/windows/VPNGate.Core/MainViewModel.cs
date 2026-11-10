@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace VPNGate.Core;
 
-public enum SortKey { Score, Host, Country, Uptime, Sessions, Speed, Ping, Logging }
+public enum SortKey { Score, Host, Country, Uptime, Sessions, Speed, Ping, Logging, Test }
 
 /// <summary>
 /// The main window's state: the daemon's session, the server list and the disclaimer gate (UI-SPEC sections 1, 4, 10, 11).
@@ -73,6 +73,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _hasAgreed;
     [ObservableProperty] private bool _showDisclaimer;
     [ObservableProperty] private bool _isLoading;
+    [ObservableProperty] private bool _isTesting;
     [ObservableProperty] private string? _listError;
     [ObservableProperty] private string _listStatus = "";
     [ObservableProperty] private string? _listSource;
@@ -479,8 +480,68 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    // MARK: Test Connection
+
+    public const int ProbeBatch = 8;
+
+    /// <summary>
+    /// "Test Connection": a real handshake with every server in the current view, eight at a time so rows fill in as each
+    /// batch finishes. Results live on the rows (<see cref="VpnServer.Test"/>) and are not persisted.
+    /// </summary>
+    public async Task TestConnectionsAsync()
+    {
+        if (Interlocked.Exchange(ref _testing, 1) == 1) return;
+        var rows = Servers.ToList();
+        if (rows.Count == 0)
+        {
+            Interlocked.Exchange(ref _testing, 0);
+            return;
+        }
+        IsTesting = true;
+        foreach (var s in rows) s.Test.Set(ProbePhase.Queued);
+        try
+        {
+            var proxy = CurrentProxy();
+            foreach (var batch in rows.Chunk(ProbeBatch))
+            {
+                foreach (var s in batch) s.Test.Set(ProbePhase.Testing);
+                try
+                {
+                    var targets = batch.Select(s => new ProbeTarget
+                    {
+                        Host = s.Ip,
+                        Ports = s.SslPorts.Count > 0 ? s.PrioritizedSslPorts.Select(p => (int)p).ToList() : null,
+                    }).ToList();
+                    var res = await _ipc.ProbeAsync(targets, proxy);
+                    for (int i = 0; i < batch.Length; i++)
+                    {
+                        var e = i < res.Results.Count ? res.Results[i] : null;
+                        if (e is { Ok: true, ConnectMs: { } ms }) batch[i].Test.Set(ProbePhase.Ok, ms);
+                        else batch[i].Test.Set(ProbePhase.Failed, why: e?.Error ?? "failed");
+                    }
+                }
+                catch (HelperRequestException e)
+                {
+                    foreach (var s in batch) s.Test.Set(ProbePhase.Failed, why: e.Message);
+                }
+                if (SortKey == SortKey.Test) Rebuild();
+            }
+        }
+        finally
+        {
+            IsTesting = false;
+            Interlocked.Exchange(ref _testing, 0);
+        }
+    }
+
+    private int _testing;
+
     private void ApplyList(ServerListResult r)
     {
+        // A refreshed list has new objects; keep what the user already measured.
+        var known = _all.ToDictionary(s => s.Id, s => s.Test, StringComparer.Ordinal);
+        foreach (var s in r.Servers)
+            if (known.TryGetValue(s.Id, out var t)) s.Test = t;
         _all = r.Servers;
         ListSource = r.Source;
         ListTimestamp = r.Timestamp;
@@ -503,6 +564,7 @@ public sealed partial class MainViewModel : ObservableObject
             SortKey.Speed => s => s.Speed,
             SortKey.Ping => s => s.Ping == 0 ? int.MaxValue : s.Ping,
             SortKey.Logging => s => FilterWeeks(s),
+            SortKey.Test => s => s.Test.SortRank,
             _ => s => s.Score,
         };
         var rows = Filter.Apply(_all);
@@ -563,6 +625,15 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     public bool ListIsStale => ListTimestamp is { } t && !ListFormat.IsListOk(t, _clock());
+
+    public bool IsNotTesting => !IsTesting;
+    public string TestLabel => IsTesting ? "Testing…" : "Test Connection";
+
+    partial void OnIsTestingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsNotTesting));
+        OnPropertyChanged(nameof(TestLabel));
+    }
 
     partial void OnIsLoadingChanged(bool value)
     {
