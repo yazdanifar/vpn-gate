@@ -146,7 +146,7 @@ func registerAppParityTests() {
         expect(outdated); expect(prompt == .update)
         expect(!fake.commands.contains("listServers") && !fake.commands.contains("refreshServers"), "\(fake.commands)")
     }
-    test("probe/results-reach-the-rows-in-request-order") {
+    test("probe/results-reach-their-rows") {
         let path = tempPath("probe-\(UUID().uuidString.prefix(6)).sock")
         let (srv, fake) = startFake(path); defer { srv.stop() }
         fake.probeReply = { ts in
@@ -163,10 +163,11 @@ func registerAppParityTests() {
             await eventuallyA(5) { await MainActor.run { m.probes[list[0].id]?.isOK == true || m.probes[list[1].id]?.isOK == true } }, "no probe result")
         let p = await MainActor.run { m.probes }
         expectEqual(p[list[1].id], .failed("down")); expectEqual(p[list[0].id], .ok(port: 443, connectMs: 12, helloMs: 30, build: 9807))
-        expectEqual(fake.probes.first?.map(\.host), ["10.0.0.2", "10.0.0.3"])
-        expectEqual(fake.probes.first?.first?.ports, [443, 995], "the relay's ports in the Windows client's priority order")
+        let sent = fake.probes.flatMap { $0 }
+        expectEqual(Set(sent.map(\.host)), ["10.0.0.2", "10.0.0.3"])
+        expectEqual(sent.first { $0.host == "10.0.0.2" }?.ports, [443, 995], "the relay's ports in the Windows client's priority order")
     }
-    test("probe/sent-in-batches-of-eight-so-results-show-up-early") {
+    test("probe/one-relay-per-request-so-each-result-shows-up-when-ready") {
         let path = tempPath("probeb-\(UUID().uuidString.prefix(6)).sock")
         let (srv, fake) = startFake(path); defer { srv.stop() }
         fake.probeReply = { ts in ts.map { ProbeEntry(host: $0.host, ok: true, port: 443, connectMs: 12, helloMs: 30, build: nil, error: nil) } }
@@ -176,8 +177,8 @@ func registerAppParityTests() {
         await MainActor.run { m.measure(list) }
         await expectA(
             await eventuallyA(5) { await MainActor.run { list.allSatisfy { m.probes[$0.id]?.isOK == true } } }, "not every relay tested")
-        expectEqual(fake.probes.map(\.count), [8, 8, 4])
-        expectEqual(fake.probes.flatMap { $0.map(\.host) }, list.map(\.ip), "request order kept across batches")
+        expectEqual(fake.probes.map(\.count), Array(repeating: 1, count: 20))
+        expectEqual(Set(fake.probes.flatMap { $0.map(\.host) }), Set(list.map(\.ip)), "every relay tested once")
     }
     test("reconnect/off-means-no-retry") {
         let path = tempPath("rc-\(UUID().uuidString.prefix(6)).sock")

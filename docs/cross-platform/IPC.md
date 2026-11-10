@@ -57,7 +57,7 @@ and interleaved with events.
 | `listServers` | | `ServerListResult` from the cache or the shipped list; **no network**. `ok:false` if there is none. |
 | `refreshServers` | `proxy`?, `mirror`? | Runs the sync pipeline below and returns `ServerListResult`. |
 | `syncDat` | `proxy`?, `mirror`? | The same sync, returning `SyncResult` (no servers). |
-| `probe` | `targets` (1-200 of `{host, ports?}`), `proxy`?, `timeout`? (seconds per relay, clamped 1-60, default 8) | `{"results":[ProbeEntry]}` in request order. |
+| `probe` | `targets` (1-200 of `{host, ports?}`), `proxy`?, `timeout`? (seconds per relay, clamped 1-60, default 8) | `{"results":[ProbeEntry]}` in request order. The reply comes when every target is done, so the apps send one target per request with 8 requests in flight (the daemon handles each request on its own) and a row updates as soon as its relay is done. |
 | `validateAccount` | `account` (`ClientAccount`) | `{"valid":bool,"error"?}`: would `connect` accept this account. |
 
 Validation failures (bad host or port, no targets, more than 200 targets, a bad proxy) answer `ok:false` before any socket

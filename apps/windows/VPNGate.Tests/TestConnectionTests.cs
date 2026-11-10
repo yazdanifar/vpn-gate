@@ -4,7 +4,7 @@ using Xunit;
 
 namespace VPNGate.Tests;
 
-/// <summary>"Test Connection" (UI-SPEC 4): the probe request, the batches, the row states and the sort.</summary>
+/// <summary>"Test Connection" (UI-SPEC 4): the probe requests, the row states and the sort.</summary>
 public class TestConnectionTests
 {
     private static string Server(string host, string ip, int score) =>
@@ -45,16 +45,18 @@ public class TestConnectionTests
     }
 
     [Fact]
-    public async Task SendsOneProbeWithTheViewsServersAndTheirPortOrder()
+    public async Task SendsOneProbePerServerOfTheViewWithItsPortOrder()
     {
         var (d, ipc, vm) = await Make(new() { ["10.0.0.1"] = 40 });
         await using var _d = d; await using var _i = ipc;
         await vm.TestConnectionsAsync();
-        var r = await d.NextRequestAsync("probe");
-        var targets = r["targets"]!.AsArray();
-        Assert.Equal(new[] { "10.0.0.3", "10.0.0.2", "10.0.0.1" }, targets.Select(t => (string)t!["host"]!));
-        Assert.Equal(new[] { 443, 995 }, targets[0]!["ports"]!.AsArray().Select(p => (int)p!));
-        Assert.Null(r["proxy"]);
+        var requests = new List<JsonObject>();
+        for (int i = 0; i < 3; i++) requests.Add(await d.NextRequestAsync("probe"));
+        Assert.All(requests, r => Assert.Single(r["targets"]!.AsArray()));
+        var targets = requests.Select(r => r["targets"]![0]!).ToList();
+        Assert.Equal(new[] { "10.0.0.1", "10.0.0.2", "10.0.0.3" }, targets.Select(t => (string)t["host"]!).Order());
+        Assert.Equal(new[] { 443, 995 }, targets.First(t => (string)t["host"]! == "10.0.0.3")["ports"]!.AsArray().Select(p => (int)p!));
+        Assert.All(requests, r => Assert.Null(r["proxy"]));
     }
 
     [Fact]
@@ -85,14 +87,14 @@ public class TestConnectionTests
     }
 
     [Fact]
-    public async Task ManyServersGoInBatchesOfEight()
+    public async Task ManyServersGoOneRelayPerRequest()
     {
         var (d, ipc, vm) = await Make(Enumerable.Range(1, 20).ToDictionary(i => $"10.0.0.{i}", i => (long?)i), servers: 20);
         await using var _d = d; await using var _i = ipc;
         await vm.TestConnectionsAsync();
         var sizes = new List<int>();
-        for (int i = 0; i < 3; i++) sizes.Add((await d.NextRequestAsync("probe"))["targets"]!.AsArray().Count);
-        Assert.Equal(new[] { 8, 8, 4 }, sizes);
+        for (int i = 0; i < 20; i++) sizes.Add((await d.NextRequestAsync("probe"))["targets"]!.AsArray().Count);
+        Assert.All(sizes, n => Assert.Equal(1, n));
         Assert.All(vm.Servers, s => Assert.EndsWith(" ms", s.Test.Text));
     }
 
@@ -121,7 +123,7 @@ public class TestConnectionTests
     }
 
     [Fact]
-    public async Task ADaemonErrorFailsTheBatchWithItsMessage()
+    public async Task ADaemonErrorFailsTheRowWithItsMessage()
     {
         await using var d = new FakeDaemon().Start();
         var list = List(new[] { Server("h1.opengw.net", "10.0.0.1", 10) });
@@ -142,7 +144,7 @@ public class TestConnectionTests
     [Fact]
     public async Task ASecondTestWhileOneRunsIsIgnored()
     {
-        var (d, ipc, vm) = await Make(new() { ["10.0.0.1"] = 40 });
+        var (d, ipc, vm) = await Make(new() { ["10.0.0.1"] = 40 }, servers: 1);
         await using var _d = d; await using var _i = ipc;
         var a = vm.TestConnectionsAsync();
         var b = vm.TestConnectionsAsync();

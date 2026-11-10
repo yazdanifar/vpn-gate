@@ -526,39 +526,49 @@ final class AppModel: ObservableObject {
         favorites = migrated
     }
 
+    /// `probe` requests in flight at once: the daemon's concurrency (`PROBE_CONCURRENCY`), as in the other apps.
+    nonisolated static let probeConcurrency = 8
+
     /// Tests every given server (all rows of the current view, in order) from this Mac with a real SoftEther handshake
     /// (not just a ping or a TCP connect). The daemon tests a few at a time; results land in `probes`, and a new run
     /// replaces earlier results for the same servers.
-    /// Relays per `probe` request: the daemon's concurrency (`PROBE_CONCURRENCY`), as in the other apps.
-    nonisolated static let probeBatch = 8
-
     func measure(_ list: [VPNServer]) {
         probeTask?.cancel()
         let targets = list
         for s in targets { probes[s.id] = .queued }
         let proxy = currentProxy
+        let helper = helper
         probeTask = Task { [weak self] in
-            guard let self else { return }
-            // As many relays per request as the daemon tests at once, so results show up batch by batch (like the
-            // Windows, Linux and Android apps) instead of all at the end, which takes minutes when relays are blocked.
-            let batch = Self.probeBatch
-            let chunks = stride(from: 0, to: targets.count, by: batch).map { Array(targets[$0..<min($0 + batch, targets.count)]) }
-            for chunk in chunks {
-                if Task.isCancelled { return }
-                for s in chunk { probes[s.id] = .testing }
-                do {
-                    let entries = try await helper.probe(
-                        chunk.map { ProbeTarget(host: $0.ip, ports: ServerProbe.ports(for: $0).map(Int.init)) }, proxy: proxy)
+            // One relay per request with a few in flight, so each row shows its result as soon as that relay is done
+            // and a relay that times out holds up nobody else (on a filtered network most of them time out).
+            await withTaskGroup(of: (String, ProbeOutcome).self) { group in
+                var queue = targets[...]
+                var running = 0
+                while true {
+                    while running < Self.probeConcurrency, !Task.isCancelled, let s = queue.popFirst() {
+                        await self?.setProbe(s.id, .testing)
+                        let target = ProbeTarget(host: s.ip, ports: ServerProbe.ports(for: s).map(Int.init))
+                        group.addTask {
+                            do {
+                                let entries = try await helper.probe([target], proxy: proxy)
+                                return (s.id, entries.first?.outcome ?? .failed("Test failed"))
+                            } catch {
+                                return (s.id, .failed(error.localizedDescription))
+                            }
+                        }
+                        running += 1
+                    }
+                    guard let (id, outcome) = await group.next() else { break }
+                    running -= 1
                     // A cancelled run must not overwrite the state of a newer one.
-                    if Task.isCancelled { return }
-                    for (s, e) in zip(chunk, entries) { probes[s.id] = e.outcome }
-                } catch {
-                    if Task.isCancelled { return }
-                    for s in chunk { probes[s.id] = .failed(error.localizedDescription) }
+                    if Task.isCancelled { group.cancelAll(); return }
+                    await self?.setProbe(id, outcome)
                 }
             }
         }
     }
+
+    private func setProbe(_ id: String, _ outcome: ProbeOutcome) { probes[id] = outcome }
 
     // MARK: cache
 

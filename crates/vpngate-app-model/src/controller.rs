@@ -484,10 +484,12 @@ impl Controller {
 
     // MARK: test connection
 
-    /// Servers per `probe` request: the daemon tests them concurrently, and results show up batch by batch.
-    const PROBE_BATCH: usize = 8;
+    /// `probe` requests in flight at once (the daemon's own concurrency).
+    const PROBE_CONCURRENCY: usize = 8;
 
-    /// "Test Connection": a real SoftEther handshake with every server in the current view.
+    /// "Test Connection": a real SoftEther handshake with every server in the current view. One relay per request with
+    /// a few requests in flight, so each row shows its result as soon as that relay is done and a relay that times out
+    /// holds up nobody else.
     pub async fn test_connections(&self) {
         {
             let mut f = lock(&self.0.flow);
@@ -513,32 +515,31 @@ impl Controller {
             }
         });
         let proxy = self.proxy_settings(&self.settings());
-        for batch in targets.chunks(Self::PROBE_BATCH) {
-            self.change(|m| {
-                for (id, _) in batch {
-                    m.set_probe(id, Probe::Testing);
-                }
-            });
-            let result = self.0.ipc.probe(batch.iter().map(|b| b.1.clone()).collect(), Some(proxy.clone()), None).await;
-            self.change(|m| match &result {
-                Ok(r) => {
-                    for (entry, (id, _)) in r.results.iter().zip(batch) {
-                        let p = match (entry.ok, entry.connect_ms) {
-                            (true, Some(connect_ms)) => {
-                                Probe::Ok { connect_ms, hello_ms: entry.hello_ms, port: entry.port }
-                            }
-                            _ => Probe::Failed(entry.error.clone().unwrap_or_else(|| "failed".into())),
-                        };
-                        m.set_probe(id, p);
-                    }
-                }
-                Err(e) => {
-                    for (id, _) in batch {
-                        m.set_probe(id, Probe::Failed(e.to_string()));
-                    }
+        let queue = Arc::new(Mutex::new(std::collections::VecDeque::from(targets)));
+        let mut workers = tokio::task::JoinSet::new();
+        for _ in 0..Self::PROBE_CONCURRENCY {
+            let (me, queue, proxy) = (self.clone(), queue.clone(), proxy.clone());
+            workers.spawn(async move {
+                loop {
+                    let Some((id, target)) = lock(&queue).pop_front() else { break };
+                    me.change(|m| m.set_probe(&id, Probe::Testing));
+                    let p = match me.0.ipc.probe(vec![target], Some(proxy.clone()), None).await {
+                        Ok(r) => match r.results.first() {
+                            Some(e) => match (e.ok, e.connect_ms) {
+                                (true, Some(connect_ms)) => {
+                                    Probe::Ok { connect_ms, hello_ms: e.hello_ms, port: e.port }
+                                }
+                                _ => Probe::Failed(e.error.clone().unwrap_or_else(|| "failed".into())),
+                            },
+                            None => Probe::Failed("failed".into()),
+                        },
+                        Err(e) => Probe::Failed(e.to_string()),
+                    };
+                    me.change(|m| m.set_probe(&id, p));
                 }
             });
         }
+        while workers.join_next().await.is_some() {}
         lock(&self.0.flow).testing = false;
         self.change(|_| {});
     }

@@ -482,11 +482,13 @@ public sealed partial class MainViewModel : ObservableObject
 
     // MARK: Test Connection
 
-    public const int ProbeBatch = 8;
+    /// <summary><c>probe</c> requests in flight at once (the daemon's own concurrency).</summary>
+    public const int ProbeConcurrency = 8;
 
     /// <summary>
-    /// "Test Connection": a real handshake with every server in the current view, eight at a time so rows fill in as each
-    /// batch finishes. Results live on the rows (<see cref="VpnServer.Test"/>) and are not persisted.
+    /// "Test Connection": a real handshake with every server in the current view. One relay per request with a few in
+    /// flight, so each row shows its result as soon as that relay is done and a relay that times out holds up nobody
+    /// else. Results live on the rows (<see cref="VpnServer.Test"/>) and are not persisted.
     /// </summary>
     public async Task TestConnectionsAsync()
     {
@@ -502,30 +504,38 @@ public sealed partial class MainViewModel : ObservableObject
         try
         {
             var proxy = CurrentProxy();
-            foreach (var batch in rows.Chunk(ProbeBatch))
+            var queue = new System.Collections.Concurrent.ConcurrentQueue<VpnServer>(rows);
+            // The app resumes on the UI thread; tests have no dispatcher, so results are applied one at a time.
+            var apply = new object();
+            async Task Worker()
             {
-                foreach (var s in batch) s.Test.Set(ProbePhase.Testing);
-                try
+                while (queue.TryDequeue(out var s))
                 {
-                    var targets = batch.Select(s => new ProbeTarget
+                    lock (apply) s.Test.Set(ProbePhase.Testing);
+                    ProbeEntry? e = null;
+                    string? why = null;
+                    try
                     {
-                        Host = s.Ip,
-                        Ports = s.SslPorts.Count > 0 ? s.PrioritizedSslPorts.Select(p => (int)p).ToList() : null,
-                    }).ToList();
-                    var res = await _ipc.ProbeAsync(targets, proxy);
-                    for (int i = 0; i < batch.Length; i++)
+                        var target = new ProbeTarget
+                        {
+                            Host = s.Ip,
+                            Ports = s.SslPorts.Count > 0 ? s.PrioritizedSslPorts.Select(p => (int)p).ToList() : null,
+                        };
+                        e = (await _ipc.ProbeAsync(new[] { target }, proxy)).Results.FirstOrDefault();
+                    }
+                    catch (HelperRequestException ex)
                     {
-                        var e = i < res.Results.Count ? res.Results[i] : null;
-                        if (e is { Ok: true, ConnectMs: { } ms }) batch[i].Test.Set(ProbePhase.Ok, ms);
-                        else batch[i].Test.Set(ProbePhase.Failed, why: e?.Error ?? "failed");
+                        why = ex.Message;
+                    }
+                    lock (apply)
+                    {
+                        if (e is { Ok: true, ConnectMs: { } ms }) s.Test.Set(ProbePhase.Ok, ms);
+                        else s.Test.Set(ProbePhase.Failed, why: why ?? e?.Error ?? "failed");
+                        if (SortKey == SortKey.Test) Rebuild();
                     }
                 }
-                catch (HelperRequestException e)
-                {
-                    foreach (var s in batch) s.Test.Set(ProbePhase.Failed, why: e.Message);
-                }
-                if (SortKey == SortKey.Test) Rebuild();
             }
+            await Task.WhenAll(Enumerable.Range(0, ProbeConcurrency).Select(_ => Worker()));
         }
         finally
         {

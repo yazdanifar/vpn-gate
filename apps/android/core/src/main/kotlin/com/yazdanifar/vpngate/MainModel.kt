@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 /** Asks the system for the VPN consent dialog and brings the VpnService up; false when the user said no. */
@@ -184,7 +185,10 @@ class MainModel(
         }
     }
 
-    /** "Test Connection": a real handshake with every server in the current view, eight at a time. */
+    /**
+     * "Test Connection": a real handshake with every server in the current view. One relay per request with a few in
+     * flight, so each row shows its result as soon as that relay is done and a relay that times out holds up nobody else.
+     */
     fun testConnections() {
         if (_state.value.isTesting) return
         val targets = _state.value.servers.map { it.id to ProbeTarget(it.ip, it.prioritizedSslPorts.takeIf { p -> p.isNotEmpty() }) }
@@ -192,17 +196,24 @@ class MainModel(
         _state.update { s -> s.copy(isTesting = true, probes = s.probes + targets.associate { it.first to Probe.Queued }) }
         scope.launch {
             val proxy = settings.proxy
-            for (batch in targets.chunked(PROBE_BATCH)) {
-                _state.update { s -> s.copy(probes = s.probes + batch.associate { it.first to Probe.Testing }) }
-                val results: Map<String, Probe> = try {
-                    val r = ipc.probe(batch.map { it.second }, proxy)
-                    batch.zip(r.results).associate { (t, e) ->
-                        t.first to if (e.ok && e.connectMs != null) Probe.Ok(e.connectMs, e.helloMs, e.port) else Probe.Failed(e.error ?: "failed")
+            val queue = java.util.concurrent.ConcurrentLinkedQueue(targets)
+            coroutineScope {
+                repeat(PROBE_CONCURRENCY) {
+                    launch {
+                        while (true) {
+                            val (id, target) = queue.poll() ?: break
+                            _state.update { s -> s.copy(probes = s.probes + (id to Probe.Testing)) }
+                            val result: Probe = try {
+                                val e = ipc.probe(listOf(target), proxy).results.firstOrNull()
+                                if (e != null && e.ok && e.connectMs != null) Probe.Ok(e.connectMs, e.helloMs, e.port)
+                                else Probe.Failed(e?.error ?: "failed")
+                            } catch (e: EngineRequestException) {
+                                Probe.Failed(e.message ?: "failed")
+                            }
+                            _state.update { s -> s.copy(probes = s.probes + (id to result)) }
+                        }
                     }
-                } catch (e: EngineRequestException) {
-                    batch.associate { it.first to Probe.Failed(e.message ?: "failed") }
                 }
-                _state.update { s -> s.copy(probes = s.probes + results) }
             }
             _state.update { it.copy(isTesting = false) }
         }
@@ -492,6 +503,7 @@ class MainModel(
 
     companion object {
         const val MAX_LOG_LINES = 300
-        const val PROBE_BATCH = 8
+        /** `probe` requests in flight at once (the engine's own concurrency). */
+        const val PROBE_CONCURRENCY = 8
     }
 }

@@ -363,7 +363,7 @@ async fn list_connects_use_the_proxy_and_global_routing_settings() {
 }
 
 #[tokio::test]
-async fn test_connection_probes_the_view_in_batches_and_sorts_by_result() {
+async fn test_connection_probes_one_relay_per_request_and_sorts_by_result() {
     use vpngate_core::ipc::{ProbeEntry, ProbeResult};
     let servers: Vec<VpnServer> = (1..=10).map(|i| server(&format!("h{i}"), &format!("10.0.0.{i}"))).collect();
     let daemon = FakeDaemon::start(temp_path("probe")).unwrap();
@@ -406,7 +406,10 @@ async fn test_connection_probes_the_view_in_batches_and_sorts_by_result() {
     });
     ctl.test_connections().await;
     let probes = daemon.requests().iter().filter(|r| r.cmd == "probe").count();
-    assert_eq!(probes, 2, "10 servers in batches of 8");
+    assert_eq!(probes, 10, "one relay per request");
+    for r in daemon.requests().iter().filter(|r| r.cmd == "probe") {
+        assert_eq!(r.targets.as_ref().map(Vec::len), Some(1), "one relay per request");
+    }
     assert_eq!(ctl.read(|m| m.probe_text("h1")), "99 ms");
     assert_eq!(ctl.read(|m| m.probe_text("h3")), "timed out");
     assert!(!ctl.is_testing());

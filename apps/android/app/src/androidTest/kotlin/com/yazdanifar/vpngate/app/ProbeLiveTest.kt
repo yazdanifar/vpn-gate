@@ -9,6 +9,8 @@ import com.yazdanifar.vpngate.ServerListResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -19,7 +21,8 @@ import org.junit.Test
 
 /**
  * "Test Connection" against real VPN Gate relays from the emulator, through the same path as the app: the Kotlin
- * [IpcClient] over the in-process UniFFI engine, 8 relays per `probe` request, the relay's ports in priority order.
+ * [IpcClient] over the in-process UniFFI engine, one relay per `probe` request with 8 in flight, the relay's ports in
+ * priority order.
  * Needs the internet, so it runs only with `-e liveRelays true` (the Test Connection workflow); otherwise skipped.
  * The table goes to logcat (tag ProbeLive); scripts/ci-android-probe-live.sh prints it in the job log.
  */
@@ -48,10 +51,13 @@ class ProbeLiveTest {
             val started = System.currentTimeMillis()
             var ok = 0
             val implausible = mutableListOf<String>()
-            for (batch in servers.chunked(MainModel.PROBE_BATCH)) {
-                val r = ipc.probe(batch.map { ProbeTarget(it.ip, it.prioritizedSslPorts.takeIf { p -> p.isNotEmpty() }) })
-                assertEquals("one result per target", batch.size, r.results.size)
-                for ((s, e) in batch.zip(r.results)) {
+            // As the app does: one relay per request, a few requests in flight.
+            for (batch in servers.chunked(MainModel.PROBE_CONCURRENCY)) {
+                val entries = batch.map { s ->
+                    async { ipc.probe(listOf(ProbeTarget(s.ip, s.prioritizedSslPorts.takeIf { p -> p.isNotEmpty() }))).results }
+                }.awaitAll()
+                assertTrue("one result per request", entries.all { it.size == 1 })
+                for ((s, e) in batch.zip(entries.map { it.single() })) {
                     assertEquals("results keep the order of the request", s.ip, e.host)
                     if (e.ok) {
                         ok++
