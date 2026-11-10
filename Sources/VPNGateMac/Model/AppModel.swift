@@ -526,6 +526,9 @@ final class AppModel: ObservableObject {
         favorites = migrated
     }
 
+    /// `probe` requests in flight at once: the daemon's concurrency (`PROBE_CONCURRENCY`), as in the other apps.
+    nonisolated static let probeConcurrency = 8
+
     /// Tests every given server (all rows of the current view, in order) from this Mac with a real SoftEther handshake
     /// (not just a ping or a TCP connect). The daemon tests a few at a time; results land in `probes`, and a new run
     /// replaces earlier results for the same servers.
@@ -534,25 +537,47 @@ final class AppModel: ObservableObject {
         let targets = list
         for s in targets { probes[s.id] = .queued }
         let proxy = currentProxy
-        probeTask = Task { [weak self] in
-            guard let self else { return }
-            // 200 relays per request is the daemon's cap.
-            let chunks = stride(from: 0, to: targets.count, by: 200).map { Array(targets[$0..<min($0 + 200, targets.count)]) }
-            for chunk in chunks {
-                if Task.isCancelled { return }
-                for s in chunk { probes[s.id] = .testing }
-                do {
-                    let entries = try await helper.probe(
-                        chunk.map { ProbeTarget(host: $0.ip, ports: ServerProbe.ports(for: $0).map(Int.init)) }, proxy: proxy)
-                    // A cancelled run must not overwrite the state of a newer one.
-                    if Task.isCancelled { return }
-                    for (s, e) in zip(chunk, entries) { probes[s.id] = e.outcome }
-                } catch {
-                    if Task.isCancelled { return }
-                    for s in chunk { probes[s.id] = .failed(error.localizedDescription) }
-                }
+        // One relay per request with a few in flight, so each row shows its result as soon as that relay is done and
+        // a relay that times out holds up nobody else (on a filtered network most of them time out).
+        let queue = ProbeQueue(targets)
+        let workers = (0..<Self.probeConcurrency).map { _ in
+            Task { [weak self] in await self?.probeWorker(queue, proxy: proxy) }
+        }
+        // The handle a new run cancels: it stops every worker of this one.
+        probeTask = Task {
+            await withTaskCancellationHandler {
+                for w in workers { await w.value }
+            } onCancel: {
+                for w in workers { w.cancel() }
             }
         }
+    }
+
+    /// One of a run's workers: takes relays off the shared queue until it is empty. A method of this main-actor class,
+    /// so the queue and `probes` are only touched on the main actor whatever context starts it.
+    private func probeWorker(_ queue: ProbeQueue, proxy: ProxySettings) async {
+        while !Task.isCancelled, let s = queue.next() {
+            probes[s.id] = .testing
+            let target = ProbeTarget(host: s.ip, ports: ServerProbe.ports(for: s).map(Int.init))
+            let outcome: ProbeOutcome
+            do {
+                outcome = try await helper.probe([target], proxy: proxy).first?.outcome ?? .failed("Test failed")
+            } catch {
+                outcome = .failed(error.localizedDescription)
+            }
+            // A cancelled run must not overwrite the state of a newer one.
+            if Task.isCancelled { return }
+            probes[s.id] = outcome
+        }
+    }
+
+    /// The relays of one Test Connection run that no worker has taken yet. Locked rather than relying on the main
+    /// actor alone: under `dispatchMain()` (the test runner) main-actor jobs run on GCD worker threads.
+    private final class ProbeQueue: @unchecked Sendable {
+        private let lock = NSLock()
+        private var rest: ArraySlice<VPNServer>
+        init(_ servers: [VPNServer]) { rest = servers[...] }
+        func next() -> VPNServer? { lock.withLock { rest.popFirst() } }
     }
 
     // MARK: cache

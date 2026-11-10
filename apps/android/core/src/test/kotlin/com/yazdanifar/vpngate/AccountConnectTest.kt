@@ -5,6 +5,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
@@ -132,10 +133,15 @@ class AndroidLimitsTest {
             IpcClient(engine, backgroundScope), MemorySettings(hasAgreedToDisclaimer = true), backgroundScope, preparer = { true },
         )
         val list = listResult(server("a", "1.1.1.1"), server("b", "2.2.2.2"))
-        engine.onRequest = { cmd, _ ->
+        engine.onRequest = { cmd, request ->
             when (cmd) {
                 "listServers", "refreshServers" -> resultJson(list)
-                "probe" -> """"ok":true,"result":{"results":[{"host":"1.1.1.1","ok":true,"connectMs":40,"port":443},{"host":"2.2.2.2","ok":false,"error":"Cannot connect"}]}"""
+                "probe" -> request["targets"]!!.jsonArray.joinToString(",", """"ok":true,"result":{"results":[""", "]}") {
+                    when (val host = it.jsonObject["host"]!!.jsonPrimitive.content) {
+                        "1.1.1.1" -> """{"host":"$host","ok":true,"connectMs":40,"port":443}"""
+                        else -> """{"host":"$host","ok":false,"error":"Cannot connect"}"""
+                    }
+                }
                 else -> null
             }
         }
@@ -148,5 +154,8 @@ class AndroidLimitsTest {
         assertEquals(Probe.Failed("Cannot connect"), s.probes["b"])
         assertFalse(s.isTesting)
         assertEquals("a", s.allServers.sortedBy(SortKey.Test, false, s.probes).first().id)
+        // One relay per request, so each row gets its result as soon as that relay is done.
+        val probes = engine.requests.filter { it["cmd"]!!.jsonPrimitive.content == "probe" }
+        assertEquals(listOf(1, 1), probes.map { it["targets"]!!.jsonArray.size })
     }
 }

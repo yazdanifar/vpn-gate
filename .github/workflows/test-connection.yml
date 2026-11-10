@@ -1,0 +1,86 @@
+name: Test Connection (real relays)
+# The "Test Connection" button / "Test from this computer" column (the daemon's `probe` request) against real public
+# relays, on every OS the app ships for: macOS, Linux and Windows run the shared engine the way the apps call it and
+# compare each relay with a full handshake (`--probe`); Android runs it through the app's Kotlin client and the UniFFI
+# engine on an emulator. Never gates a merge: relays are volunteer-run and come and go.
+on:
+  schedule:
+    - cron: "29 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "How many relays of the list to test"
+        required: false
+        default: "24"
+  push:
+    paths:
+      - .github/workflows/test-connection.yml
+      - crates/vpngate-net/src/probe.rs
+      - crates/vpngate-daemon/src/engine.rs
+      - crates/vpngate-daemon/tests/live.rs
+      - apps/android/app/src/androidTest/kotlin/com/yazdanifar/vpngate/app/ProbeLiveTest.kt
+      - scripts/ci-android-probe-live.sh
+
+jobs:
+  desktop:
+    name: desktop (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        uses: ./.github/actions/rust-toolchain
+      - name: Test Connection like the apps, checked against full handshakes
+        shell: bash
+        env:
+          VPNGATE_LIVE_PROBE_COUNT: ${{ inputs.count || '24' }}
+        run: |
+          set -o pipefail
+          cargo test --locked -p vpngate-daemon --test live test_connection_like_the_apps -- --ignored --nocapture 2>&1 | tee probe-report.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with: { name: "test-connection-${{ matrix.os }}", path: probe-report.txt }
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        uses: ./.github/actions/rust-toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: false
+      - name: Android engine (as in ci.yml)
+        run: |
+          ndk="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          export ANDROID_NDK_HOME="$ndk" ANDROID_NDK_ROOT="$ndk"
+          scripts/build-android-engine.sh
+      - uses: actions/setup-java@v6
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: true
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Test Connection from the emulator (API 34 x86_64)
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        env:
+          LIVE_COUNT: ${{ inputs.count || '24' }}
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
+          disk-size: 4096M
+          working-directory: apps/android
+          script: bash ../../scripts/ci-android-probe-live.sh
+      - name: Logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with: { name: test-connection-android, path: /tmp/android-probe-logs, if-no-files-found: ignore }
