@@ -2,8 +2,11 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+
+## [1.1.0] - 2026-11-10
+Test Connection on Windows, per-relay results on every app, and a live CI check on every OS.
 ### Added
-- Windows: "Test Connection". A toolbar button and a "Test (this PC)" column run a real SoftEther handshake (the daemon's `probe`) with every server in the current view, eight at a time, and show the connect time or why it failed; the column header sorts working servers by connect time, then untested, then failed. Results are kept when the list refreshes.
+- Windows: "Test Connection". A toolbar button and a "Test (this PC)" column run a real SoftEther handshake (the daemon's `probe`) with every server in the current view and show the connect time or why it failed; the column header sorts working servers by connect time, then untested, then failed. Results are kept when the list refreshes.
 - `Test Connection (real relays)` workflow (weekly, manual, and on changes to the probe code; never gates a merge): Test Connection against real relays on macOS, Linux and Windows, the way the apps call it, each relay checked against a full handshake; on Android through the app's client and the UniFFI engine on an emulator.
 ### Changed
 - Test Connection (all apps) sends one relay per request with eight in flight, so each row shows its result as soon as that relay is done and a relay that times out holds up nobody else. Before, a row waited for its whole request: eight relays on Windows, Linux and Android, every relay at once on macOS (minutes on a network that blocks most relays).
