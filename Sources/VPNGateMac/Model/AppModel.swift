@@ -529,6 +529,9 @@ final class AppModel: ObservableObject {
     /// Tests every given server (all rows of the current view, in order) from this Mac with a real SoftEther handshake
     /// (not just a ping or a TCP connect). The daemon tests a few at a time; results land in `probes`, and a new run
     /// replaces earlier results for the same servers.
+    /// Relays per `probe` request: the daemon's concurrency (`PROBE_CONCURRENCY`), as in the other apps.
+    nonisolated static let probeBatch = 8
+
     func measure(_ list: [VPNServer]) {
         probeTask?.cancel()
         let targets = list
@@ -536,8 +539,10 @@ final class AppModel: ObservableObject {
         let proxy = currentProxy
         probeTask = Task { [weak self] in
             guard let self else { return }
-            // 200 relays per request is the daemon's cap.
-            let chunks = stride(from: 0, to: targets.count, by: 200).map { Array(targets[$0..<min($0 + 200, targets.count)]) }
+            // As many relays per request as the daemon tests at once, so results show up batch by batch (like the
+            // Windows, Linux and Android apps) instead of all at the end, which takes minutes when relays are blocked.
+            let batch = Self.probeBatch
+            let chunks = stride(from: 0, to: targets.count, by: batch).map { Array(targets[$0..<min($0 + batch, targets.count)]) }
             for chunk in chunks {
                 if Task.isCancelled { return }
                 for s in chunk { probes[s.id] = .testing }

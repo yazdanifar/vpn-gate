@@ -304,3 +304,19 @@ async fn probe_over_real_tls_finds_the_softether_hello() {
         probe::run("127.0.0.1", &[plain.port], &ProxySettings::default(), Duration::from_millis(500), &factory).await;
     assert!(!r.is_ok(), "{r:?}");
 }
+
+#[tokio::test]
+async fn probe_names_a_relay_that_takes_tcp_but_never_answers_tls() {
+    // What deep packet inspection does to a blocked relay: the TCP handshake completes, the TLS hello gets no reply.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let held = tokio::spawn(async move {
+        let (sock, _) = listener.accept().await.unwrap();
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        drop(sock);
+    });
+    let factory: StreamFactory = Arc::new(|h, p, px| Box::new(TlsStream::new(h, p, px, ServerCertPolicy::AcceptAny)));
+    let r = probe::run("127.0.0.1", &[port], &ProxySettings::default(), Duration::from_millis(500), &factory).await;
+    assert_eq!(r, ProbeOutcome::Failed(probe::FILTERED.into()));
+    held.abort();
+}

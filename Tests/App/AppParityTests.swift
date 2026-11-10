@@ -166,6 +166,19 @@ func registerAppParityTests() {
         expectEqual(fake.probes.first?.map(\.host), ["10.0.0.2", "10.0.0.3"])
         expectEqual(fake.probes.first?.first?.ports, [443, 995], "the relay's ports in the Windows client's priority order")
     }
+    test("probe/sent-in-batches-of-eight-so-results-show-up-early") {
+        let path = tempPath("probeb-\(UUID().uuidString.prefix(6)).sock")
+        let (srv, fake) = startFake(path); defer { srv.stop() }
+        fake.probeReply = { ts in ts.map { ProbeEntry(host: $0.host, ok: true, port: 443, connectMs: 12, helloMs: 30, build: nil, error: nil) } }
+        let m = await makeModel(path)
+        await ready(m, fake)
+        let list = (1...20).map { host($0, ports: [443]) }
+        await MainActor.run { m.measure(list) }
+        await expectA(
+            await eventuallyA(5) { await MainActor.run { list.allSatisfy { m.probes[$0.id]?.isOK == true } } }, "not every relay tested")
+        expectEqual(fake.probes.map(\.count), [8, 8, 4])
+        expectEqual(fake.probes.flatMap { $0.map(\.host) }, list.map(\.ip), "request order kept across batches")
+    }
     test("reconnect/off-means-no-retry") {
         let path = tempPath("rc-\(UUID().uuidString.prefix(6)).sock")
         let (srv, fake) = startFake(path); defer { srv.stop() }

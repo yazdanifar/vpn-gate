@@ -4,6 +4,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
 ## [Unreleased]
 ### Added
 - Windows: "Test Connection". A toolbar button and a "Test (this PC)" column run a real SoftEther handshake (the daemon's `probe`) with every server in the current view, eight at a time, and show the connect time or why it failed; the column header sorts working servers by connect time, then untested, then failed. Results are kept when the list refreshes.
+- `Test Connection (real relays)` workflow (weekly, manual, and on changes to the probe code; never gates a merge): Test Connection against real relays on macOS, Linux and Windows, the way the apps call it, each relay checked against a full handshake; on Android through the app's client and the UniFFI engine on an emulator.
+### Changed
+- macOS: Test Connection asks the daemon for eight relays at a time, like the other apps, so results show up batch by batch instead of all at once at the end (minutes on a network that blocks most relays).
+- Test Connection names a relay that accepts TCP but never answers TLS "Connected, but no reply (filtered?)", the mark of a blocked relay, instead of "No answer in N s", which now means no connection at all.
 
 ## [1.0.1] - 2026-11-01
 Android fix release.

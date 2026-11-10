@@ -84,28 +84,47 @@ async fn attempt(
     factory: &StreamFactory,
 ) -> Result<ProbeOutcome, String> {
     let mut stream = factory(host, port, proxy);
+    // Behind a proxy a TCP connection only reaches the proxy, so it says nothing about the relay.
+    let direct = crate::proxy::effective(proxy).is_none();
+    let mut tls_ready = false;
     // Dropping the handshake future on timeout abandons whatever it was waiting for.
-    let result = match tokio::time::timeout(timeout, handshake(stream.as_mut(), host, port)).await {
-        Ok(r) => r,
-        Err(_) => Err(format!("No answer in {} s", timeout.as_secs())),
-    };
+    let result =
+        match tokio::time::timeout(timeout, handshake(stream.as_mut(), host, port, direct, &mut tls_ready)).await {
+            Ok(r) => r,
+            Err(_) if tls_ready => Err(NO_HANDSHAKE.to_string()),
+            Err(_) if direct && stream.remote_ipv4().is_some() => Err(FILTERED.to_string()),
+            Err(_) => Err(format!("No answer in {} s", timeout.as_secs())),
+        };
     stream.cancel();
     result
 }
+
+const NO_HANDSHAKE: &str = "Connected, but no VPN handshake";
+/// TCP reached the relay but TLS got no reply: what deep packet inspection does to blocked relays, as opposed to a
+/// relay that is down (no TCP at all).
+pub const FILTERED: &str = "Connected, but no reply (filtered?)";
 
 fn ms_since(t: Instant) -> i64 {
     i64::try_from(t.elapsed().as_millis()).unwrap_or(i64::MAX).max(1)
 }
 
-async fn handshake(s: &mut dyn ByteStream, host: &str, port: u16) -> Result<ProbeOutcome, String> {
+async fn handshake(
+    s: &mut dyn ByteStream,
+    host: &str,
+    port: u16,
+    direct: bool,
+    tls_ready: &mut bool,
+) -> Result<ProbeOutcome, String> {
     let t0 = Instant::now();
     if let Err(e) = s.start().await {
         return Err(match e {
+            StreamError::Timeout if direct && s.remote_ipv4().is_some() => FILTERED.to_string(),
             StreamError::Timeout => "No answer".to_string(),
             StreamError::Io(_) => "Cannot connect".to_string(),
             other => other.to_string(),
         });
     }
+    *tls_ready = true;
     let connect_ms = ms_since(t0);
     // The plain marker is accepted by every SoftEther server, which is all that is needed to make it say hello.
     let body = b"VPNCONNECT";
@@ -116,7 +135,7 @@ async fn handshake(s: &mut dyn ByteStream, host: &str, port: u16) -> Result<Prob
     );
     req.extend_from_slice(body);
 
-    let no_handshake = || "Connected, but no VPN handshake".to_string();
+    let no_handshake = || NO_HANDSHAKE.to_string();
     s.send(&req).await.map_err(|_| no_handshake())?;
     let head = s.recv_http_head().await.map_err(|_| no_handshake())?;
     if head.status_code() != Some(200) {
@@ -258,6 +277,59 @@ mod tests {
         let t0 = Instant::now();
         let r = run("h", &[443], &ProxySettings::default(), Duration::from_millis(300), &f).await;
         assert!(!r.is_ok() && t0.elapsed() < Duration::from_secs(3), "{r:?}");
+    }
+
+    /// TCP connects (the peer is known) but TLS never completes, as with a relay blocked by deep packet inspection.
+    struct TlsStalls {
+        buffer: ByteBuffer,
+        tcp: bool,
+    }
+
+    #[async_trait]
+    impl ByteStream for TlsStalls {
+        fn buffer(&mut self) -> &mut ByteBuffer {
+            &mut self.buffer
+        }
+        async fn start(&mut self) -> Result<(), StreamError> {
+            std::future::pending().await
+        }
+        async fn send(&mut self, _: &[u8]) -> Result<(), StreamError> {
+            Err(StreamError::Closed)
+        }
+        async fn read_chunk(&mut self) -> Result<Vec<u8>, StreamError> {
+            Err(StreamError::Closed)
+        }
+        fn cancel(&mut self) {}
+        fn remote_ipv4(&self) -> Option<String> {
+            self.tcp.then(|| "192.0.2.1".to_string())
+        }
+    }
+
+    #[tokio::test]
+    async fn a_stall_says_how_far_the_relay_got() {
+        let stalls = |tcp: bool| -> StreamFactory {
+            Arc::new(move |_, _, _| Box::new(TlsStalls { buffer: ByteBuffer::new(), tcp }))
+        };
+        let t = Duration::from_millis(200);
+        let direct = ProxySettings::default();
+        let filtered = run("h", &[443], &direct, t, &stalls(true)).await;
+        assert_eq!(filtered, ProbeOutcome::Failed(FILTERED.into()));
+        let down = run("h", &[443], &direct, t, &stalls(false)).await;
+        assert_eq!(down, ProbeOutcome::Failed("No answer in 0 s".into()));
+        // TLS done, then silence: the relay is reachable but does not speak SoftEther.
+        let silent: StreamFactory = Arc::new(|_, _, _| {
+            Box::new(Scripted { buffer: ByteBuffer::new(), reply: None, silent: true, sent: Arc::default() })
+        });
+        assert_eq!(run("h", &[443], &direct, t, &silent).await, ProbeOutcome::Failed(NO_HANDSHAKE.into()));
+        // Behind a proxy, a connection proves nothing about the relay.
+        let proxied = ProxySettings {
+            kind: vpngate_core::ipc::ProxyKind::Http,
+            host: "proxy".into(),
+            port: 8080,
+            ..ProxySettings::default()
+        };
+        let r = run("h", &[443], &proxied, t, &stalls(true)).await;
+        assert_eq!(r, ProbeOutcome::Failed("No answer in 0 s".into()));
     }
 
     #[test]
