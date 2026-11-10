@@ -537,38 +537,48 @@ final class AppModel: ObservableObject {
         let targets = list
         for s in targets { probes[s.id] = .queued }
         let proxy = currentProxy
-        let helper = helper
-        probeTask = Task { [weak self] in
-            // One relay per request with a few in flight, so each row shows its result as soon as that relay is done
-            // and a relay that times out holds up nobody else (on a filtered network most of them time out).
-            await withTaskGroup(of: (String, ProbeOutcome).self) { group in
-                var queue = targets[...]
-                var running = 0
-                while true {
-                    while running < Self.probeConcurrency, !Task.isCancelled, let s = queue.popFirst() {
-                        await self?.setProbe(s.id, .testing)
-                        let target = ProbeTarget(host: s.ip, ports: ServerProbe.ports(for: s).map(Int.init))
-                        group.addTask {
-                            do {
-                                let entries = try await helper.probe([target], proxy: proxy)
-                                return (s.id, entries.first?.outcome ?? .failed("Test failed"))
-                            } catch {
-                                return (s.id, .failed(error.localizedDescription))
-                            }
-                        }
-                        running += 1
-                    }
-                    guard let (id, outcome) = await group.next() else { break }
-                    running -= 1
-                    // A cancelled run must not overwrite the state of a newer one.
-                    if Task.isCancelled { group.cancelAll(); return }
-                    await self?.setProbe(id, outcome)
-                }
+        // One relay per request with a few in flight, so each row shows its result as soon as that relay is done and
+        // a relay that times out holds up nobody else (on a filtered network most of them time out).
+        let queue = ProbeQueue(targets)
+        let workers = (0..<Self.probeConcurrency).map { _ in
+            Task { [weak self] in await self?.probeWorker(queue, proxy: proxy) }
+        }
+        // The handle a new run cancels: it stops every worker of this one.
+        probeTask = Task {
+            await withTaskCancellationHandler {
+                for w in workers { await w.value }
+            } onCancel: {
+                for w in workers { w.cancel() }
             }
         }
     }
 
-    private func setProbe(_ id: String, _ outcome: ProbeOutcome) { probes[id] = outcome }
+    /// One of a run's workers: takes relays off the shared queue until it is empty. A method of this main-actor class,
+    /// so the queue and `probes` are only touched on the main actor whatever context starts it.
+    private func probeWorker(_ queue: ProbeQueue, proxy: ProxySettings) async {
+        while !Task.isCancelled, let s = queue.next() {
+            probes[s.id] = .testing
+            let target = ProbeTarget(host: s.ip, ports: ServerProbe.ports(for: s).map(Int.init))
+            let outcome: ProbeOutcome
+            do {
+                outcome = try await helper.probe([target], proxy: proxy).first?.outcome ?? .failed("Test failed")
+            } catch {
+                outcome = .failed(error.localizedDescription)
+            }
+            // A cancelled run must not overwrite the state of a newer one.
+            if Task.isCancelled { return }
+            probes[s.id] = outcome
+        }
+    }
+
+    /// The relays of one Test Connection run that no worker has taken yet. Locked rather than relying on the main
+    /// actor alone: under `dispatchMain()` (the test runner) main-actor jobs run on GCD worker threads.
+    private final class ProbeQueue: @unchecked Sendable {
+        private let lock = NSLock()
+        private var rest: ArraySlice<VPNServer>
+        init(_ servers: [VPNServer]) { rest = servers[...] }
+        func next() -> VPNServer? { lock.withLock { rest.popFirst() } }
+    }
 
     // MARK: cache
 
