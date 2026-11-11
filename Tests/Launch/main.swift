@@ -76,7 +76,9 @@ struct AX {
         func walk(_ n: AX, _ depth: Int) {
             if lines.count >= maxLines { return }
             lines.append(String(repeating: "  ", count: depth) + "\(n.role) \(n.names.map { "\"\($0.prefix(40))\"" }.joined(separator: " "))")
-            if n.role == "AXOutline" || n.role == "AXTable" { lines.append(String(repeating: "  ", count: depth + 1) + "(\(n.children.count) rows, not listed)"); return }
+            if n.role == "AXOutline" || n.role == "AXTable" {
+                lines.append(String(repeating: "  ", count: depth + 1) + "(\(n.children.count) rows, not listed)"); return
+            }
             for c in n.children { walk(c, depth + 1) }
         }
         walk(self, 0)
@@ -156,7 +158,10 @@ final class Rig: @unchecked Sendable {
         env["VPNGATE_SUPPORT_DIR"] = support
         p.environment = env
         // Not the runner's pipes: a child holding them open keeps `tee` (and the CI step) waiting after the test is done.
-        let log = FileHandle(forWritingAtPath: { FileManager.default.createFile(atPath: "\(shotsDir)/app.log", contents: nil); return "\(shotsDir)/app.log" }())
+        let log = FileHandle(
+            forWritingAtPath: {
+                FileManager.default.createFile(atPath: "\(shotsDir)/app.log", contents: nil); return "\(shotsDir)/app.log"
+            }())
         p.standardOutput = log; p.standardError = log; p.standardInput = FileHandle.nullDevice
         try p.run()
         proc = p
@@ -181,7 +186,8 @@ final class Rig: @unchecked Sendable {
 
     // Finders. `table` is the server list.
     var table: AX? { ax.find(skipTable: false) { $0.role == "AXTable" || $0.role == "AXOutline" } }
-    func shows(_ text: String) -> Bool { (table ?? ax).find(skipTable: false) { n in n.names.contains { $0 == text || $0.hasSuffix(" " + text) } } != nil }  // cells read "🇯🇵 Japan"
+    // Cells read "🇯🇵 Japan", so the text may follow a flag.
+    func shows(_ text: String) -> Bool { (table ?? ax).find(skipTable: false) { n in n.names.contains { $0 == text || $0.hasSuffix(" " + text) } } != nil }
     var rowCount: Int { table?.findAll { $0.role == "AXRow" }.count ?? 0 }
     var filterButton: AX? { ax.named("toolbar.filter") ?? ax.named("Filter", roles: ["AXMenuButton", "AXPopUpButton", "AXButton"]) }
     var testButton: AX? { ax.named("toolbar.test") ?? ax.named("Test Connection", roles: ["AXButton"]) }
@@ -281,7 +287,8 @@ test("launch/typing-in-the-search-field-narrows-the-list", timeout: 90) {
         if await eventuallyA(5, { rig.menuItem("Clear Filters") != nil }) { _ = rig.menuItem("Clear Filters")!.press() } else { pressEscape() }
     }
     try need(await eventuallyA(8) { rig.shows("Japan") && rig.shows("South Korea") }, "could not get the full list back", "search-start")
-    let field = rig.ax.find { $0.role == "AXTextField" && ($0.names.contains { $0.localizedCaseInsensitiveContains("search") } || $0.role == "AXSearchField") }
+    let field =
+        rig.ax.find { $0.role == "AXTextField" && ($0.names.contains { $0.localizedCaseInsensitiveContains("search") } || $0.role == "AXSearchField") }
         ?? rig.ax.find { $0.role == "AXSearchField" || $0.role == "AXTextField" }
     try need(field != nil && clickCenter(field!), "no search field", "search-no-field")
     typeText("Korea")
