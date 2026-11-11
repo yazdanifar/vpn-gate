@@ -115,7 +115,7 @@ let shotsDir = ProcessInfo.processInfo.environment["VPNGATE_SHOTS"] ?? "build/la
 try? FileManager.default.createDirectory(atPath: shotsDir, withIntermediateDirectories: true)
 
 let countries = [("Japan", "JP"), ("South Korea", "KR"), ("United States", "US")]
-let fakeServers: [VPNServer] = (0..<90).map { i in
+let fakeServers: [VPNServer] = (0..<240).map { i in
     var s = parsedServer("relay\(i)", ip: "10.1.\(i / 200).\(i % 200 + 1)")
     s.countryLong = countries[i % 3].0; s.countryShort = countries[i % 3].1
     return s
@@ -124,6 +124,7 @@ let fakeServers: [VPNServer] = (0..<90).map { i in
 final class Rig: @unchecked Sendable {
     let session = FakeHelperSession()
     var server: FakeHelperServer?
+    let replied = Locked(0)  // probe replies sent so far: the progress the menu must survive
     var proc: Process?
     var ax: AX!
     let socket = tempPath("launch-\(UUID().uuidString.prefix(6)).sock")
@@ -136,9 +137,10 @@ final class Rig: @unchecked Sendable {
             servers: fakeServers, source: .httpApi, timestampMs: UInt64(Date().timeIntervalSince1970 * 1000), isFresh: true,
             outcome: .synced, nextPollSeconds: 3600)
         session.refreshResult = session.listResult
-        // Each relay answers after a pause, so a Test Connection over 90 relays streams results for about six seconds.
-        session.probeReply = { ts in
+        // Each relay answers after a pause, so a Test Connection over 240 relays streams results for about eighteen seconds.
+        session.probeReply = { [replied] ts in
             Thread.sleep(forTimeInterval: 0.6)
+            replied.update { $0 += ts.count }
             return ts.map { ProbeEntry(host: $0.host, ok: true, port: 443, connectMs: 20, helloMs: 40, build: nil, error: nil) }
         }
         server = FakeHelperServer(path: socket, session: session)
@@ -170,7 +172,7 @@ final class Rig: @unchecked Sendable {
 
     // Finders. `table` is the server list.
     var table: AX? { ax.find { $0.role == "AXTable" || $0.role == "AXOutline" } }
-    func shows(_ text: String) -> Bool { (table ?? ax).find { $0.names.contains(text) || $0.value == text } != nil }
+    func shows(_ text: String) -> Bool { (table ?? ax).find { n in n.names.contains { $0 == text || $0.hasSuffix(" " + text) } } != nil }  // cells read "🇯🇵 Japan"
     var rowCount: Int { table?.findAll { $0.role == "AXRow" }.count ?? 0 }
     var filterButton: AX? { ax.named("toolbar.filter") ?? ax.named("Filter", roles: ["AXMenuButton", "AXPopUpButton", "AXButton"]) }
     var testButton: AX? { ax.named("toolbar.test") ?? ax.named("Test Connection", roles: ["AXButton"]) }
@@ -250,9 +252,9 @@ test("launch/country-menu-stays-open-while-test-connection-streams-results", tim
     need(await eventuallyA(10) { rig.session.probes.count > probesBefore }, "Test Connection sent no probes", "probe-none-sent")
 
     await openCountryMenu("probe")
-    let sentAtOpen = rig.session.probes.count
+    let sentAtOpen = rig.replied.value
     await holdMenuOpen(seconds: 3) {}
-    let sentAfter = rig.session.probes.count
+    let sentAfter = rig.replied.value
     need(sentAfter > sentAtOpen, "no probe results arrived while the menu was open, so this proves nothing (\(sentAtOpen) -> \(sentAfter))", "probe-idle")
     need(rig.menuItem("United States") != nil, "the Country submenu closed while Test Connection was running", "probe-closed")
     _ = rig.menuItem("United States")!.press()
