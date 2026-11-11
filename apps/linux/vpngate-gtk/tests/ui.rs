@@ -584,7 +584,6 @@ fn country_drop_down_stays_open_while_the_list_and_probes_update(h: &Harness) {
     assert_eq!(string_items(&country.model().unwrap())[0], "All countries");
 
     // Choosing still works.
-    country.popdown();
     select_string(&country, "Japan");
     wait_until("the country filter", || r.visible_ids() == ["tokyo1.opengw.net", "osaka.opengw.net"]);
 }
