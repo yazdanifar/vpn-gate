@@ -77,6 +77,31 @@ jobs:
             echo "::warning title=ThreadSanitizer::$n data race report(s), informational (see the job log)"
             { echo "### ThreadSanitizer reports"; grep 'SUMMARY: ThreadSanitizer' sanitizer.log | sort | uniq -c; } >> "$GITHUB_STEP_SUMMARY"
           fi
+  mac-ui:
+    timeout-minutes: 30
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain (version pinned in rust-toolchain.toml)
+        uses: ./.github/actions/rust-toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+      - name: Build the app
+        run: scripts/build-app.sh
+      - name: Allow the test to drive the app through the accessibility API
+        run: scripts/grant-accessibility-ci.sh
+      # The real app against a fake helper, clicked through with accessibility events: the Filter menu stays open while
+      # probe results and helper events arrive, and picking a country filters the list. Takes over the runner's mouse.
+      - name: Launch test of the real app
+        run: |
+          set -o pipefail
+          scripts/test-app-launch.sh --no-build 2>&1 | tee launch.log
+          grep -Eq '^[0-9]+ passed, 0 failed' launch.log
+      - name: Accessibility trees and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with: { name: launch-test-evidence, path: build/launch-test, if-no-files-found: ignore }
   screenshots:
     timeout-minutes: 20
     runs-on: macos-15
