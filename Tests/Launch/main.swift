@@ -188,8 +188,9 @@ final class Rig: @unchecked Sendable {
 let rig = Rig()
 
 /// Fails the test with the accessibility tree attached.
-func need(_ cond: Bool, _ msg: String, _ label: String) {
-    if !cond { fail(msg + rig.evidence(label)) }
+struct Aborted: Error {}
+func need(_ cond: Bool, _ msg: String, _ label: String) throws {
+    if !cond { fail(msg + rig.evidence(label)); throw Aborted() }
 }
 
 func ensureRunning() async throws {
@@ -198,26 +199,27 @@ func ensureRunning() async throws {
     // The disclaimer sheet comes first on a fresh profile.
     let agreed = await eventuallyA(30) {
         rig.activate()
-        if let b = rig.ax.named("Agree and Continue", roles: ["AXButton"]) { return b.press() }
-        return false
+        // Pressing closes the sheet, so the call may report an error; the sheet being gone is the success.
+        if let b = rig.ax.named("Agree and Continue", roles: ["AXButton"]) { _ = b.press(); return true }
+        return rig.rowCount > 0
     }
-    need(agreed, "the disclaimer sheet never appeared", "no-disclaimer")
+    try need(agreed, "the disclaimer sheet never appeared", "no-disclaimer")
     let listed = await eventuallyA(30) { rig.shows("South Korea") && rig.shows("Japan") }
-    need(listed, "the server list never showed the fake relays", "no-list")
+    try need(listed, "the server list never showed the fake relays", "no-list")
 }
 
 /// Opens the Filter menu with a real click and descends into the Country submenu.
-func openCountryMenu(_ label: String) async {
+func openCountryMenu(_ label: String) async throws {
     rig.activate()
     let btn = await eventuallyA(10) { rig.filterButton != nil }
-    need(btn, "no Filter toolbar item", "\(label)-no-filter")
+    try need(btn, "no Filter toolbar item", "\(label)-no-filter")
     _ = clickCenter(rig.filterButton!)
     let country = await eventuallyA(5) { rig.menuItem("Country") != nil }
-    need(country, "the Filter menu did not open", "\(label)-no-menu")
+    try need(country, "the Filter menu did not open", "\(label)-no-menu")
     // Open the submenu (a press selects it without closing the menu).
     _ = rig.menuItem("Country")!.press()
     let items = await eventuallyA(5) { rig.menuItem("South Korea") != nil }
-    need(items, "the Country submenu did not open", "\(label)-no-submenu")
+    try need(items, "the Country submenu did not open", "\(label)-no-submenu")
 }
 
 func holdMenuOpen(seconds: Double, tickEvery: Double = 0.25, tick: () -> Void) async {
@@ -234,15 +236,15 @@ test("launch/the-app-starts-and-lists-the-relays-from-the-helper", timeout: 120)
 
 test("launch/country-menu-stays-open-while-the-helper-publishes-and-applies-a-country", timeout: 90) {
     try await ensureRunning()
-    await openCountryMenu("idle")
+    try await openCountryMenu("idle")
     // Everything that used to rebuild the toolbar: status events, list refreshes, log lines.
     await holdMenuOpen(seconds: 3) {
         rig.session.emit?(HelperEvent(state: .disconnected))
     }
-    need(rig.menuItem("South Korea") != nil, "the Country submenu closed by itself while events arrived", "idle-closed")
+    try need(rig.menuItem("South Korea") != nil, "the Country submenu closed by itself while events arrived", "idle-closed")
     _ = rig.menuItem("South Korea")!.press()
     let filtered = await eventuallyA(8) { !rig.shows("Japan") && rig.shows("South Korea") }
-    need(filtered, "choosing South Korea did not filter the list", "idle-not-filtered")
+    try need(filtered, "choosing South Korea did not filter the list", "idle-not-filtered")
 }
 
 test("launch/country-menu-stays-open-while-test-connection-streams-results", timeout: 120) {
@@ -251,20 +253,20 @@ test("launch/country-menu-stays-open-while-test-connection-streams-results", tim
     rig.activate()
     if let b = rig.filterButton { _ = clickCenter(b) }
     if await eventuallyA(5, { rig.menuItem("Clear Filters") != nil }) { _ = rig.menuItem("Clear Filters")!.press() } else { pressEscape() }
-    need(await eventuallyA(8) { rig.shows("Japan") }, "Clear Filters did not restore the list", "probe-clear")
+    try need(await eventuallyA(8) { rig.shows("Japan") }, "Clear Filters did not restore the list", "probe-clear")
 
     let probesBefore = rig.session.probes.count
-    need(rig.testButton != nil && clickCenter(rig.testButton!), "no Test Connection button", "probe-no-test")
-    need(await eventuallyA(10) { rig.session.probes.count > probesBefore }, "Test Connection sent no probes", "probe-none-sent")
+    try need(rig.testButton != nil && clickCenter(rig.testButton!), "no Test Connection button", "probe-no-test")
+    try need(await eventuallyA(10) { rig.session.probes.count > probesBefore }, "Test Connection sent no probes", "probe-none-sent")
 
-    await openCountryMenu("probe")
+    try await openCountryMenu("probe")
     let sentAtOpen = rig.replied.value
     await holdMenuOpen(seconds: 3) {}
     let sentAfter = rig.replied.value
-    need(sentAfter > sentAtOpen, "no probe results arrived while the menu was open, so this proves nothing (\(sentAtOpen) -> \(sentAfter))", "probe-idle")
-    need(rig.menuItem("United States") != nil, "the Country submenu closed while Test Connection was running", "probe-closed")
+    try need(sentAfter > sentAtOpen, "no probe results arrived while the menu was open, so this proves nothing (\(sentAtOpen) -> \(sentAfter))", "probe-idle")
+    try need(rig.menuItem("United States") != nil, "the Country submenu closed while Test Connection was running", "probe-closed")
     _ = rig.menuItem("United States")!.press()
-    need(await eventuallyA(8) { !rig.shows("Japan") && rig.shows("United States") }, "choosing United States did not filter the list", "probe-not-filtered")
+    try need(await eventuallyA(8) { !rig.shows("Japan") && rig.shows("United States") }, "choosing United States did not filter the list", "probe-not-filtered")
 }
 
 test("launch/typing-in-the-search-field-narrows-the-list", timeout: 90) {
@@ -275,12 +277,12 @@ test("launch/typing-in-the-search-field-narrows-the-list", timeout: 90) {
         _ = clickCenter(b)
         if await eventuallyA(5, { rig.menuItem("Clear Filters") != nil }) { _ = rig.menuItem("Clear Filters")!.press() } else { pressEscape() }
     }
-    need(await eventuallyA(8) { rig.shows("Japan") && rig.shows("South Korea") }, "could not get the full list back", "search-start")
+    try need(await eventuallyA(8) { rig.shows("Japan") && rig.shows("South Korea") }, "could not get the full list back", "search-start")
     let field = rig.ax.find { $0.role == "AXTextField" && ($0.names.contains { $0.localizedCaseInsensitiveContains("search") } || $0.role == "AXSearchField") }
         ?? rig.ax.find { $0.role == "AXSearchField" || $0.role == "AXTextField" }
-    need(field != nil && clickCenter(field!), "no search field", "search-no-field")
+    try need(field != nil && clickCenter(field!), "no search field", "search-no-field")
     typeText("Korea")
-    need(await eventuallyA(8) { !rig.shows("Japan") && rig.shows("South Korea") }, "typing Korea did not narrow the list", "search-not-narrowed")
+    try need(await eventuallyA(8) { !rig.shows("Japan") && rig.shows("South Korea") }, "typing Korea did not narrow the list", "search-not-narrowed")
 }
 
 Task {
