@@ -152,12 +152,18 @@ final class Rig: @unchecked Sendable {
         env["VPNGATE_HELPER_SOCKET"] = socket
         env["VPNGATE_SUPPORT_DIR"] = support
         p.environment = env
+        // Not the runner's pipes: a child holding them open keeps `tee` (and the CI step) waiting after the test is done.
+        let log = FileHandle(forWritingAtPath: { FileManager.default.createFile(atPath: "\(shotsDir)/app.log", contents: nil); return "\(shotsDir)/app.log" }())
+        p.standardOutput = log; p.standardError = log; p.standardInput = FileHandle.nullDevice
         try p.run()
         proc = p
         ax = AX(el: AXUIElementCreateApplication(p.processIdentifier))
         AXUIElementSetMessagingTimeout(ax.el, 5)
     }
-    func stop() { proc?.terminate(); server?.stop() }
+    func stop() {
+        if let p = proc { p.terminate(); usleep(500_000); kill(p.processIdentifier, SIGKILL) }  // a menu left open can ignore SIGTERM
+        server?.stop()
+    }
 
     func activate() { NSRunningApplication(processIdentifier: proc!.processIdentifier)?.activate(options: [.activateIgnoringOtherApps]) }
 

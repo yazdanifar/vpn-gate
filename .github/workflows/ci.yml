@@ -94,6 +94,7 @@ jobs:
       # The real app against a fake helper, clicked through with accessibility events: the Filter menu stays open while
       # probe results and helper events arrive, and picking a country filters the list. Takes over the runner's mouse.
       - name: Launch test of the real app
+        timeout-minutes: 12
         run: |
           set -o pipefail
           scripts/test-app-launch.sh --no-build 2>&1 | tee launch.log
