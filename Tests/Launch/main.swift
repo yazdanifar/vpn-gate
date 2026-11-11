@@ -42,12 +42,14 @@ struct AX {
     }
 
     /// Depth-first search; stops after `limit` elements so a huge table cannot stall the test.
-    func find(limit: Int = 6000, _ match: (AX) -> Bool) -> AX? {
+    func find(limit: Int = 6000, skipTable: Bool = true, _ match: (AX) -> Bool) -> AX? {
         var seen = 0
         func walk(_ n: AX, _ depth: Int) -> AX? {
             seen += 1
             if seen > limit || depth > 40 { return nil }
             if match(n) { return n }
+            // The 240-row table alone has thousands of elements and would use up the budget before the toolbar is reached.
+            if skipTable && (n.role == "AXOutline" || n.role == "AXTable") { return nil }
             for c in n.children { if let r = walk(c, depth + 1) { return r } }
             return nil
         }
@@ -74,6 +76,7 @@ struct AX {
         func walk(_ n: AX, _ depth: Int) {
             if lines.count >= maxLines { return }
             lines.append(String(repeating: "  ", count: depth) + "\(n.role) \(n.names.map { "\"\($0.prefix(40))\"" }.joined(separator: " "))")
+            if n.role == "AXOutline" || n.role == "AXTable" { lines.append(String(repeating: "  ", count: depth + 1) + "(\(n.children.count) rows, not listed)"); return }
             for c in n.children { walk(c, depth + 1) }
         }
         walk(self, 0)
@@ -177,8 +180,8 @@ final class Rig: @unchecked Sendable {
     }
 
     // Finders. `table` is the server list.
-    var table: AX? { ax.find { $0.role == "AXTable" || $0.role == "AXOutline" } }
-    func shows(_ text: String) -> Bool { (table ?? ax).find { n in n.names.contains { $0 == text || $0.hasSuffix(" " + text) } } != nil }  // cells read "🇯🇵 Japan"
+    var table: AX? { ax.find(skipTable: false) { $0.role == "AXTable" || $0.role == "AXOutline" } }
+    func shows(_ text: String) -> Bool { (table ?? ax).find(skipTable: false) { n in n.names.contains { $0 == text || $0.hasSuffix(" " + text) } } != nil }  // cells read "🇯🇵 Japan"
     var rowCount: Int { table?.findAll { $0.role == "AXRow" }.count ?? 0 }
     var filterButton: AX? { ax.named("toolbar.filter") ?? ax.named("Filter", roles: ["AXMenuButton", "AXPopUpButton", "AXButton"]) }
     var testButton: AX? { ax.named("toolbar.test") ?? ax.named("Test Connection", roles: ["AXButton"]) }
