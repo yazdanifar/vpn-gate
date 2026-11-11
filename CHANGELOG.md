@@ -2,6 +2,9 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+### Fixed
+- macOS: the Filter menu in the toolbar (Country, Logging, Favorites) no longer closes by itself while you pick. The toolbar now watches only what it shows, so Test Connection results, log lines, traffic and helper polling no longer rebuild it, and Test Connection results reach the table in batches (at most four a second).
+- Windows: the Country box no longer closes when a list refresh brings the same countries.
 
 ## [1.1.0] - 2026-11-10
 Test Connection on Windows, per-relay results on every app, and a live CI check on every OS.

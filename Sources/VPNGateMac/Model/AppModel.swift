@@ -6,8 +6,12 @@ import SwiftUI
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var servers: [VPNServer] = []
-    @Published var loading = false
+    @Published var servers: [VPNServer] = [] { didSet { facets.setCountries(from: servers) } }
+    @Published var loading = false { didSet { facets.setLoading(loading) } }
+    /// What the toolbar shows (countries, logging filter, loading); see `ListFacets`.
+    let facets = ListFacets()
+    /// Test Connection results; see `ProbeStore`. Not part of this model's own publishing.
+    let probeStore = ProbeStore()
     @Published var loadError: String?
     @Published var event = HelperEvent(state: .disconnected)
     /// Live byte counters, kept out of `event` so their once-a-second updates only redraw the views that show them.
@@ -15,7 +19,11 @@ final class AppModel: ObservableObject {
     @Published var helperRunning = false
     @Published var helperInstalled = HelperInstaller.isInstalled
     @Published var logLines: [String] = []
-    @Published var probes: [String: ProbeOutcome] = [:]  // connectivity test results from this Mac
+    /// Connectivity test results from this Mac. Published by `probeStore`, not by the model.
+    var probes: [String: ProbeOutcome] {
+        get { probeStore.outcomes }
+        set { probeStore.replace(newValue) }
+    }
     private var probeTask: Task<Void, Never>?
     @Published var connectedAt: Date?
     @Published var notice: String?
@@ -46,7 +54,12 @@ final class AppModel: ObservableObject {
     }
     @Published var lastServerID: String? { didSet { defaults.set(lastServerID, forKey: "lastServerID") } }
     /// Hide servers that keep logs longer than this many weeks (-1 = show all).
-    @Published var maxLogWeeks: Int { didSet { defaults.set(maxLogWeeks, forKey: "maxLogWeeks") } }
+    @Published var maxLogWeeks: Int {
+        didSet {
+            defaults.set(maxLogWeeks, forKey: "maxLogWeeks")
+            facets.setMaxLogWeeks(maxLogWeeks)
+        }
+    }
     @Published var mirrorURL: String { didSet { defaults.set(mirrorURL, forKey: "mirrorURL") } }
     @Published var launchAtLogin: Bool {
         didSet {
@@ -133,6 +146,7 @@ final class AppModel: ObservableObject {
         maxLogWeeks = d.object(forKey: "maxLogWeeks") as? Int ?? -1
         mirrorURL = d.string(forKey: "mirrorURL") ?? ""
         launchAtLogin = autoStart ? loginItem.status == .enabled : d.bool(forKey: "launchAtLogin")
+        facets.setMaxLogWeeks(maxLogWeeks)
         // Views observe the model only; relay changes of the nested stores so their screens refresh.
         forwarded = [statistics.objectWillChange, self.accountManager.objectWillChange, self.connectionLog.objectWillChange]
             .map { $0.sink { [weak self] _ in self?.objectWillChange.send() } }
@@ -535,7 +549,7 @@ final class AppModel: ObservableObject {
     func measure(_ list: [VPNServer]) {
         probeTask?.cancel()
         let targets = list
-        for s in targets { probes[s.id] = .queued }
+        probeStore.setAll(targets.map(\.id), .queued)
         let proxy = currentProxy
         // One relay per request with a few in flight, so each row shows its result as soon as that relay is done and
         // a relay that times out holds up nobody else (on a filtered network most of them time out).
@@ -557,7 +571,7 @@ final class AppModel: ObservableObject {
     /// so the queue and `probes` are only touched on the main actor whatever context starts it.
     private func probeWorker(_ queue: ProbeQueue, proxy: ProxySettings) async {
         while !Task.isCancelled, let s = queue.next() {
-            probes[s.id] = .testing
+            probeStore.set(s.id, .testing)
             let target = ProbeTarget(host: s.ip, ports: ServerProbe.ports(for: s).map(Int.init))
             let outcome: ProbeOutcome
             do {
@@ -567,7 +581,7 @@ final class AppModel: ObservableObject {
             }
             // A cancelled run must not overwrite the state of a newer one.
             if Task.isCancelled { return }
-            probes[s.id] = outcome
+            probeStore.set(s.id, outcome)
         }
     }
 

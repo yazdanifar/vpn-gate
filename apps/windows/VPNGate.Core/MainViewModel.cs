@@ -556,7 +556,10 @@ public sealed partial class MainViewModel : ObservableObject
         ListSource = r.Source;
         ListTimestamp = r.Timestamp;
         ListError = null;
-        Countries = _all.Select(s => s.CountryLong).Where(c => c.Length > 0).Distinct().Order(StringComparer.CurrentCultureIgnoreCase).ToList();
+        // Assigned only when the countries changed: the window refills the Country box on every change, which closes
+        // the box while the user has it open (a refresh every few minutes would do that).
+        var countries = _all.Select(s => s.CountryLong).Where(c => c.Length > 0).Distinct().Order(StringComparer.CurrentCultureIgnoreCase).ToList();
+        if (!countries.SequenceEqual(Countries)) Countries = countries;
         if (Selected is { } sel) Selected = _all.FirstOrDefault(s => s.Id == sel.Id);
         Rebuild();
         OnPropertyChanged(nameof(ServerName));

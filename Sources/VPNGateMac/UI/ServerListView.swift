@@ -80,30 +80,114 @@ private struct FilterMenu: View, Equatable {
     }
 }
 
-/// The window of the Windows client's VPN Gate plug-in (D_VGC_LIST): title, intro, the relay list, and the
-/// Connect button. Proxy Settings and VPN Connection Settings live in the macOS-native Settings window and the
-/// Window menu instead of a button row here; VPN Gate Web Site is in the Help menu.
-struct ServerListView: View {
-    @EnvironmentObject var model: AppModel
-    // @State is a macro whose plugin only ships with full Xcode, so view state lives in an ObservableObject.
-    @StateObject private var ui = ListState()
-
-    private var countries: [String] {
-        ["All"] + Set(model.servers.map(\.countryLong)).sorted()
-    }
-
-    private var rows: [VPNServer] {
+/// The rows the table shows: the list with the search, country, favorites and logging filters applied, each carrying
+/// its Test Connection rank, in the user's sort order.
+@MainActor private enum ServerRows {
+    static func make(model: AppModel, ui: ListState) -> [VPNServer] {
         var f = ServerFilter()
         f.search = ui.search; f.country = ui.country; f.favoritesOnly = ui.favoritesOnly; f.favorites = model.favorites
         f.maxLogWeeks = model.maxLogWeeks >= 0 ? model.maxLogWeeks : nil
+        let probes = model.probes
         return f.apply(model.servers).map { s -> VPNServer in
-            var s = s; s.testRank = ProbeOutcome.sortRank(model.probes[s.id]); return s
+            var s = s; s.testRank = ProbeOutcome.sortRank(probes[s.id]); return s
         }.sorted(using: ui.sortOrder)
     }
+}
 
-    private var filterActive: Bool {
-        ui.country != "All" || ui.favoritesOnly || model.maxLogWeeks >= 0
+/// The main window. It owns the toolbar and the window state but does not observe `AppModel`: every toolbar item
+/// observes only the small object it shows (`ListFacets`, `ListState`), so unrelated model changes (probe results,
+/// log lines, traffic, helper polling) never touch the toolbar, and an open Filter menu stays open. The content
+/// below the toolbar (`ServerListContent`) observes the whole model.
+struct ServerListView: View {
+    @EnvironmentObject var model: AppModel
+    var body: some View { ServerListWindow(model: model) }
+}
+
+private struct ServerListWindow: View {
+    let model: AppModel
+    // @State is a macro whose plugin only ships with full Xcode, so view state lives in an ObservableObject.
+    @StateObject private var ui = ListState()
+
+    var body: some View {
+        ServerListContent(ui: ui, probes: model.probeStore)
+            .searchable(text: $ui.search, placement: .toolbar, prompt: "Search host, IP, country, operator")
+            .toolbar {
+                ToolbarItemGroup {
+                    FilterToolbarItem(ui: ui, facets: model.facets, model: model)
+                    DetailsToolbarButton(ui: ui, model: model)
+                    Button {
+                        model.measure(ServerRows.make(model: model, ui: ui))
+                    } label: {
+                        Label("Test Connection", systemImage: "speedometer")
+                    }
+                    .help("Try a real VPN handshake with the listed servers and show the connect time from this Mac")
+                    RefreshToolbarButton(facets: model.facets, model: model)
+                }
+            }
+            .sheet(isPresented: $ui.showingDetails) {
+                if let s = ui.selectedServerForDetails { ServerDetailsSheet(server: s) }
+            }
+            .onAppear {
+                if model.servers.isEmpty { model.refresh() }
+            }
     }
+}
+
+private struct FilterToolbarItem: View {
+    @ObservedObject var ui: ListState
+    @ObservedObject var facets: ListFacets
+    let model: AppModel
+
+    var body: some View {
+        FilterMenu(
+            countries: facets.countries, country: ui.country, maxLogWeeks: facets.maxLogWeeks,
+            favoritesOnly: ui.favoritesOnly, active: ui.country != "All" || ui.favoritesOnly || facets.maxLogWeeks >= 0,
+            setCountry: { ui.country = $0 }, setLogWeeks: { model.maxLogWeeks = $0 },
+            setFavoritesOnly: { ui.favoritesOnly = $0 },
+            clear: {
+                ui.country = "All"; ui.favoritesOnly = false; model.maxLogWeeks = -1
+            }
+        )
+        .equatable()
+    }
+}
+
+private struct DetailsToolbarButton: View {
+    @ObservedObject var ui: ListState
+    let model: AppModel
+
+    var body: some View {
+        Button {
+            if let s = model.servers.first(where: { $0.id == ui.selection }) { ui.selectedServerForDetails = s; ui.showingDetails = true }
+        } label: {
+            Label("Details", systemImage: "info.circle")
+        }
+        .disabled(ui.selection == nil).help("Server details (⌘I)").keyboardShortcut("i")
+    }
+}
+
+private struct RefreshToolbarButton: View {
+    @ObservedObject var facets: ListFacets
+    let model: AppModel
+
+    var body: some View {
+        Button {
+            model.refresh()
+        } label: {
+            Label("Refresh List", systemImage: "arrow.clockwise")
+        }
+        .disabled(facets.loading).help("Refresh List (⌘R)")
+    }
+}
+
+/// Everything under the toolbar: header, list status, table and the Connect button.
+private struct ServerListContent: View {
+    @EnvironmentObject var model: AppModel
+    @ObservedObject var ui: ListState
+    /// Observed so the table redraws when Test Connection results arrive (the model no longer publishes them).
+    @ObservedObject var probes: ProbeStore
+
+    private var rows: [VPNServer] { ServerRows.make(model: model, ui: ui) }
 
     private var selected: VPNServer? { rows.first { $0.id == ui.selection } }
 
@@ -204,7 +288,7 @@ struct ServerListView: View {
     private var qualityColumns: some TableColumnContent<VPNServer, KeyPathComparator<VPNServer>> {
         TableColumn("Ping (Google, SE)", value: \.ping) { (s: VPNServer) in PingCell(server: s) }
             .width(min: 110, ideal: 130).customizationID("ping")
-        TableColumn("Test from this Mac", value: \.testRank) { (s: VPNServer) in ProbeCell(outcome: model.probes[s.id]) }
+        TableColumn("Test from this Mac", value: \.testRank) { (s: VPNServer) in ProbeCell(outcome: probes.outcomes[s.id]) }
             .width(min: 120, ideal: 150).customizationID("probe")
         TableColumn("Logging Policy", value: \.logType) { (s: VPNServer) in Text(ListFormat.logging(s.logType)) }
             .width(min: 80, ideal: 100).customizationID("logging")
@@ -273,42 +357,6 @@ struct ServerListView: View {
             .padding(.horizontal, 16).padding(.bottom, 8)
         }
         .frame(minWidth: 860, minHeight: 560)
-        .searchable(text: $ui.search, placement: .toolbar, prompt: "Search host, IP, country, operator")
-        .toolbar {
-            ToolbarItemGroup {
-                FilterMenu(
-                    countries: countries, country: ui.country, maxLogWeeks: model.maxLogWeeks,
-                    favoritesOnly: ui.favoritesOnly, active: filterActive,
-                    setCountry: { ui.country = $0 }, setLogWeeks: { model.maxLogWeeks = $0 },
-                    setFavoritesOnly: { ui.favoritesOnly = $0 },
-                    clear: {
-                        ui.country = "All"; ui.favoritesOnly = false; model.maxLogWeeks = -1
-                    }
-                )
-                .equatable()
-                Button {
-                    if let s = selected { ui.selectedServerForDetails = s; ui.showingDetails = true }
-                } label: {
-                    Label("Details", systemImage: "info.circle")
-                }
-                .disabled(selected == nil).help("Server details (⌘I)").keyboardShortcut("i")
-                Button {
-                    model.measure(rows)
-                } label: {
-                    Label("Test Connection", systemImage: "speedometer")
-                }
-                .help("Try a real VPN handshake with the listed servers and show the connect time from this Mac")
-                Button {
-                    model.refresh()
-                } label: {
-                    Label("Refresh List", systemImage: "arrow.clockwise")
-                }
-                .disabled(model.loading).help("Refresh List (⌘R)")
-            }
-        }
-        .sheet(isPresented: $ui.showingDetails) {
-            if let s = ui.selectedServerForDetails { ServerDetailsSheet(server: s) }
-        }
         .alert(setupTitle, isPresented: Binding(get: { model.setupPrompt != nil }, set: { if !$0 { model.cancelSetup() } })) {
             Button("Continue") { model.beginSetup() }
             Button("Not Now", role: .cancel) { model.cancelSetup() }
@@ -316,9 +364,6 @@ struct ServerListView: View {
             Text(
                 "VPN Gate needs a small background component to create the VPN connection. macOS will open its standard installer and ask for your password once. After that, VPN Gate connects by itself."
             )
-        }
-        .onAppear {
-            if model.servers.isEmpty { model.refresh() }
         }
     }
 }

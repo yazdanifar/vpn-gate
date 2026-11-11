@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 // App-side parity: the reconnect policy of VPN Gate connections, telemetry host label, list text and account file
@@ -180,6 +181,81 @@ func registerAppParityTests() {
         expectEqual(fake.probes.map(\.count), Array(repeating: 1, count: 20))
         expectEqual(Set(fake.probes.flatMap { $0.map(\.host) }), Set(list.map(\.ip)), "every relay tested once")
     }
+    // The toolbar's open Filter menu is closed by macOS whenever its observed objects publish. These tests count what
+    // each one publishes while unrelated things happen.
+    test("filter/toolbar-state-is-silent-while-a-test-connection-runs") {
+        let path = tempPath("filt-\(UUID().uuidString.prefix(6)).sock")
+        let (srv, fake) = startFake(path); defer { srv.stop() }
+        fake.probeReply = { ts in ts.map { ProbeEntry(host: $0.host, ok: true, port: 443, connectMs: 12, helloMs: 30, build: nil, error: nil) } }
+        let m = await makeModel(path)
+        await ready(m, fake)
+        let list = (1...20).map { host($0, ports: [443]) }
+        try await Task.sleep(nanoseconds: 300_000_000)  // let the helper's first snapshot settle
+        let (counts, subs) = await MainActor.run { () -> (Counter, [AnyCancellable]) in
+            let c = Counter()
+            return (
+                c,
+                [
+                    m.facets.objectWillChange.sink { _ in c.facets += 1 },
+                    m.objectWillChange.sink { _ in c.model += 1 },
+                    m.probeStore.objectWillChange.sink { _ in c.probes += 1 },
+                ]
+            )
+        }
+        _ = subs
+        let started = Date()
+        await MainActor.run { m.measure(list) }
+        await expectA(
+            await eventuallyA(5) { await MainActor.run { list.allSatisfy { m.probes[$0.id]?.isOK == true } } }, "not every relay tested")
+        let seconds = Date().timeIntervalSince(started)
+        expectEqual(counts.facets, 0, "the toolbar's state published during a run")
+        expectEqual(counts.model, 0, "the model published during a run")
+        // One publish for the queued state, then at most one per flush interval.
+        let allowed = 1 + Int(seconds * 1000 / Double(ProbeStore.flushMilliseconds)) + 2
+        expect(counts.probes >= 2 && counts.probes <= allowed, "probe store published \(counts.probes) times in \(seconds) s (allowed \(allowed))")
+    }
+    test("filter/toolbar-state-is-silent-for-log-lines-traffic-and-polling") {
+        let path = tempPath("filt2-\(UUID().uuidString.prefix(6)).sock")
+        let (srv, fake) = startFake(path); defer { srv.stop() }
+        let m = await makeModel(path)
+        await ready(m, fake)
+        let counts = await MainActor.run { () -> Counter in
+            let c = Counter(); m.facets.objectWillChange.sink { _ in c.facets += 1 }.store(in: &c.bag); return c
+        }
+        for i in 0..<10 {
+            var e = HelperEvent(state: .connecting); e.log = "line \(i)"
+            fake.emit?(e)
+            await MainActor.run { m.pollHelper() }
+        }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        let lines = await MainActor.run { m.logLines.count }
+        expect(lines >= 10, "the log lines did not arrive (\(lines))")
+        expectEqual(counts.facets, 0, "log lines or polling published the toolbar's state")
+    }
+    test("filter/facets-change-only-when-the-list-or-the-filter-does") {
+        let path = tempPath("filt3-\(UUID().uuidString.prefix(6)).sock")
+        let m = await makeModel(path)
+        let counts = await MainActor.run { () -> Counter in
+            let c = Counter(); m.facets.objectWillChange.sink { _ in c.facets += 1 }.store(in: &c.bag); return c
+        }
+        var a = host(1, ports: [443]); a.countryLong = "Japan"
+        var b = host(2, ports: [443]); b.countryLong = "France"
+        var c2 = host(3, ports: [443]); c2.countryLong = "Japan"
+        await MainActor.run { m.servers = [a, b, c2] }
+        let first = await MainActor.run { m.facets.countries }
+        expectEqual(first, ["All", "France", "Japan"])
+        expectEqual(counts.facets, 1)
+        await MainActor.run { m.servers = [c2, a, b] }  // same countries, other order
+        expectEqual(counts.facets, 1, "same countries republished")
+        await MainActor.run {
+            m.maxLogWeeks = 2; m.maxLogWeeks = 2
+        }
+        expectEqual(counts.facets, 2, "a repeated logging choice republished")
+        await MainActor.run { m.servers = [a] }
+        let last = await MainActor.run { m.facets.countries }
+        expectEqual(last, ["All", "Japan"])
+        expectEqual(counts.facets, 3)
+    }
     test("reconnect/off-means-no-retry") {
         let path = tempPath("rc-\(UUID().uuidString.prefix(6)).sock")
         let (srv, fake) = startFake(path); defer { srv.stop() }
@@ -269,4 +345,10 @@ func registerAppParityTests() {
     }
 
     // MARK: 7. old files with the removed hide key
+}
+
+/// Counts what the observed objects publish in a test (written from the main actor, read after the work is done).
+final class Counter: @unchecked Sendable {
+    var facets = 0, model = 0, probes = 0
+    var bag: Set<AnyCancellable> = []
 }
