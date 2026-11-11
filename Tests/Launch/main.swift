@@ -285,8 +285,12 @@ Task {
     rig.stop()
     exit(code)
 }
-DispatchQueue.global().asyncAfter(deadline: .now() + 420) {
-    print("GLOBAL WATCHDOG: launch test exceeded 420s"); rig.stop(); exit(3)
+// A plain thread: it must fire even when the Swift concurrency pool is stuck in a blocking accessibility call.
+Thread.detachNewThread {
+    Thread.sleep(forTimeInterval: 420)
+    print("GLOBAL WATCHDOG: launch test exceeded 420s")
+    if let p = rig.proc { kill(p.processIdentifier, SIGKILL) }
+    exit(3)
 }
 _ = NSApplication.shared
 RunLoop.main.run()
