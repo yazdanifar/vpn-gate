@@ -181,6 +181,54 @@ public class MainWindowTests
         await Probe.Shot(root, "main-connected");
     });
 
+    /// <summary>An open dropdown must survive everything the window receives while the user is choosing: a list refresh, a Test
+    /// Connection run (a probe result per relay) and status polls. The Country box once closed on every refresh because the
+    /// window rebuilt its items; the same class of bug closed the macOS Filter menu.</summary>
+    [Fact]
+    public async Task CountryDropdownStaysOpenWhileTheListRefreshesAndProbesArrive() => await WithMain(async (rig, w, root) =>
+    {
+        var country = (ComboBox)root.FindName("CountryBox");
+        country.IsDropDownOpen = true;
+        await Probe.Settle();
+        Assert.True(country.IsDropDownOpen, "the dropdown did not open");
+
+        await rig.Vm.RefreshAsync();
+        await Probe.Settle();
+        Assert.True(country.IsDropDownOpen, "a list refresh with the same countries closed the dropdown");
+
+        await rig.Vm.TestConnectionsAsync();
+        await Probe.Settle();
+        Assert.True(country.IsDropDownOpen, "Test Connection results closed the dropdown");
+
+        rig.Status = FakeDaemon.Snapshot("connected", ",\"server\":\"2.2.2.2\",\"virtualIP\":\"10.21.0.5\"");
+        await rig.Vm.PollAsync();
+        await Probe.Settle();
+        Assert.True(country.IsDropDownOpen, "a status change closed the dropdown");
+        Assert.Equal(4, country.Items.Count);
+
+        // Choosing still works.
+        country.SelectedIndex = 2;
+        await Probe.Settle();
+        Assert.Equal(new[] { "b.opengw.net" }, RowHosts(root));
+    });
+
+    [Fact]
+    public async Task FavoritesOnlyShowsJustTheStarredServers() => await WithMain(async (rig, w, root) =>
+    {
+        rig.Vm.ToggleFavorite(Rig.Servers[2]);
+        await Probe.Settle();
+        Assert.True(rig.Vm.IsFavorite(Rig.Servers[2]));
+        Assert.Equal(4, RowHosts(root).Count());
+        var toggle = (Microsoft.UI.Xaml.Controls.Primitives.ToggleButton)root.FindName("FavoritesToggle");
+        var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(toggle);
+        var provider = peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Toggle) as Microsoft.UI.Xaml.Automation.Provider.IToggleProvider
+                       ?? throw new Xunit.Sdk.XunitException("no Toggle pattern");
+        provider.Toggle();
+        await Probe.Settle();
+        Assert.Equal(new[] { "c.opengw.net" }, RowHosts(root));
+        Assert.True(rig.Settings.Favorites.Contains(Rig.Servers[2].Id));
+    });
+
     [Fact]
     public async Task TheWindowPollsTheServiceOnATimer() => await WithMain(async (rig, w, root) =>
     {
