@@ -226,7 +226,7 @@ public class MainWindowTests
         provider.Toggle();
         await Probe.Settle();
         Assert.Equal(new[] { "c.opengw.net" }, RowHosts(root));
-        Assert.True(rig.Settings.Favorites.Contains(Rig.Servers[2].Id));
+        Assert.Contains(Rig.Servers[2].Id, rig.Settings.Favorites);
     });
 
     [Fact]
