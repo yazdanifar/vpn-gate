@@ -121,6 +121,29 @@ covers per platform are in [PLATFORMS.md](cross-platform/PLATFORMS.md).
 | Installer | `.pkg` | `.msi` | `.deb` | `.apk` / `.aab` |
 | Opt-in diagnostics upload | yes | no | no | no |
 
+### Test coverage
+
+Where each feature is tested on each platform. "—" means no automated test; a gap here is a gap in the suite, not necessarily in the app.
+"GUI" means a test that operates the real widgets (clicks, opens menus) and not only the model behind them.
+
+| Feature | macOS | Windows | Linux (GTK) | Android |
+|---|---|---|---|---|
+| Server list, search, filters, sort | model: `Tests/App` (`ServerFilter`, sorting); GUI: `scripts/test-app-launch.sh` (search, country menu) | GUI: `MainWindowTests` (list, headers, sort, search, country/logging, clear filters) | GUI: `tests/ui.rs` (`search_and_clear_filters`, `country_and_logging_filters`, `sort_drop_down_and_direction`, `header_click_sorts`) | JVM: `FilterTest`, `MainModelTest`; Paparazzi: `ScreenshotTest` |
+| Filter menu / dropdown stays open while the window updates | model: `filter/…` (toolbar state is silent during probes, polls, log and traffic); GUI: launch test (idle and during Test Connection) | GUI: `CountryDropdownStaysOpenWhileTheListRefreshesAndProbesArrive`; view model: `ARefreshWithTheSameCountriesDoesNotRepublishThem` | GUI: `country_drop_down_stays_open_while_the_list_and_probes_update` | GUI (emulator): `FilterMenuTest` |
+| Favorites | model: `Tests/App` | GUI: `FavoritesOnlyShowsJustTheStarredServers` | GUI: `row_context_menu_and_actions` | JVM: `MainModelTest` |
+| Test Connection column | model: `probe/…` in `Tests/App` | GUI: `TestConnectionFillsTheColumnAndTheHeaderSortsByIt` | model: `vpngate-app-model` tests; GUI: dropdown test above | JVM: `MainModelTest`; live: `ProbeLiveTest` |
+| Disclaimer gate | screenshot: `ui/…`; GUI: launch test (agrees to it) | GUI: `DisclaimerBlocksUntilAgreed` | GUI: `disclaimer_gates_the_app` | GUI (emulator): `SmokeTest` |
+| Connect, disconnect, reconnect | model: `Tests/App` against `FakeHelperServer` | view model: `MainViewModelTests`; GUI: `ConnectedStateShowsTheConnectionCard` | GUI: `connect_and_disconnect_buttons` | emulator: `ConsentTest`, `TunnelTest` (real tunnel) |
+| Accounts (all auth types, validation, certificates) | model: `account/…`, `AccountTests` | GUI: `SecondaryWindowTests` (list, editor, validation) | GUI: `accounts_window_and_editor`; model: `cert_import` (PEM/DER/PKCS#12) | JVM: `AccountsTest`, `AccountConnectTest`, `CertImportTest`, `ValidationTest` |
+| Settings, proxy, SOCKS5-only, routing rules | model: `Tests/App` | GUI: `SettingsHasFourTabsAndSavesWhatTheyChange`, `RoutingEditorShowsRulesAndWritesChangesBack` | GUI: `settings_dialog_tabs_and_routing`, `drag_reorder_moves_the_rule` | JVM: `RouteSplitTest` |
+| History, log | model: `Tests/App` | GUI: `HistoryListsConnectionsAndClearEmptiesIt`, `LogWindowShowsTheConnectionLog` | GUI: `history_window_lists_and_clears`, `log_window_follows_the_daemon` | JVM: `MainModelTest` |
+| Column chooser | — (SwiftUI `Table` column customization is not reachable from a test) | — (the app has none) | GUI: `column_chooser` | — (the app has none) |
+| Tray / menu bar | — | FlaUI smoke: `VPNGate.Smoke` (window only) | `tests/tray.rs` | — |
+| Installer, helper / service, tunnel | CI: `scripts/test-pkg.sh`, tunnel e2e | CI: MSI install/upgrade, tunnel e2e | CI: deb install, netns tunnel | emulator: `TunnelTest` |
+
+The GUI tests that open real menus on macOS need Accessibility permission and take over the mouse, so they only run in CI (job `mac-ui`).
+Not tested anywhere yet: the Windows tray menu entries, the macOS menu-bar extra, the Android Settings screen and routing editor by clicking.
+
 ### What has and has not been verified
 **Verified against real servers.**
 - *Tunnels*: the weekly `Tunnel e2e (real relay)` workflow probes the bundled list, picks a working public relay and connects from a

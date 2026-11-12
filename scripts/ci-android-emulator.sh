@@ -79,7 +79,7 @@ run_instr() {
   ok "$name ($passed passed)"
 }
 
-run_instr smoke-manifest-consent "$T.SmokeTest,$T.ManifestTest,$T.ConsentTest"
+run_instr smoke-manifest-consent "$T.SmokeTest,$T.ManifestTest,$T.ConsentTest,$T.FilterMenuTest"
 # The main screen against both system navigation bars (the overlays are those of AOSP's SystemUI); the screenshots are
 # kept with the logs to look at.
 for mode in threebutton gestural; do

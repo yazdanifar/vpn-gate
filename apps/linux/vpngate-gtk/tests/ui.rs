@@ -21,7 +21,9 @@ use vpngate_app_model::columns;
 use vpngate_app_model::model::SortKey;
 use vpngate_app_model::settings::{MemorySettings, Settings};
 use vpngate_app_model::{Controller, Stores, Timing};
-use vpngate_core::ipc::{ConnectionState, HelperEvent, HelperReply, ListSource, ServerListResult, SyncOutcome};
+use vpngate_core::ipc::{
+    ConnectionState, HelperEvent, HelperReply, ListSource, ProbeEntry, ProbeResult, ServerListResult, SyncOutcome,
+};
 use vpngate_core::routing_rule::{RoutingAction, RoutingRule, RoutingRuleType};
 use vpngate_core::server_list::VpnServer;
 use vpngate_gtk::routing_editor;
@@ -529,6 +531,62 @@ fn country_and_logging_filters(h: &Harness) {
     });
     select_string(&logging, "Any logging policy");
     wait_until("any logging policy", || r.visible_ids().len() == 5);
+}
+
+/// An open drop-down must survive what the window receives while the user is choosing: a list refresh, a Test Connection
+/// run (a probe result per relay) and daemon events. The Country box, like the macOS Filter menu, once closed whenever
+/// the window rebuilt it.
+fn country_drop_down_stays_open_while_the_list_and_probes_update(h: &Harness) {
+    let r = Rig::new(h, true);
+    r.loaded();
+    let list = servers();
+    r.daemon.on_request(move |req| match req.cmd.as_str() {
+        "listServers" | "refreshServers" => vec![list_line(req.id, &req.cmd, list.clone())],
+        "probe" => {
+            let results = req
+                .targets
+                .clone()
+                .unwrap_or_default()
+                .iter()
+                .map(|t| ProbeEntry {
+                    host: t.host.clone(),
+                    ok: true,
+                    port: Some(443),
+                    connect_ms: Some(20),
+                    hello_ms: Some(30),
+                    build: None,
+                    error: None,
+                })
+                .collect();
+            vec![Line::Reply(HelperReply::success("probe", req.id, &ProbeResult { results }))]
+        }
+        _ => vec![],
+    });
+    wait_until("the daemon connection", || r.daemon.client_count() > 0);
+    let country: gtk::DropDown = named(r.win(), "country");
+    let open = || all::<gtk::Popover>(&country).iter().any(|p| p.is_visible());
+    gtk::prelude::WidgetExt::activate(&country);
+    wait_until("the country list to open", open);
+
+    let count = |cmd: &str| r.requests().iter().filter(|c| *c == cmd).count();
+    let refreshes = count("refreshServers");
+    click(&named::<gtk::Button>(r.win(), "refresh"));
+    wait_until("the refresh request", || count("refreshServers") > refreshes);
+    settle(600);
+    assert!(open(), "a list refresh with the same countries closed the drop-down");
+
+    click(&named::<gtk::Button>(r.win(), "test"));
+    r.wait_request("probe");
+    let mut ev = HelperEvent::new(ConnectionState::Disconnected);
+    ev.log = Some("noise while the drop-down is open".into());
+    r.daemon.push(&Line::Event(ev));
+    settle(800);
+    assert!(open(), "Test Connection results or daemon events closed the drop-down");
+    assert_eq!(string_items(&country.model().unwrap())[0], "All countries");
+
+    // Choosing still works.
+    select_string(&country, "Japan");
+    wait_until("the country filter", || r.visible_ids() == ["tokyo1.opengw.net", "osaka.opengw.net"]);
 }
 
 fn sort_drop_down_and_direction(h: &Harness) {
@@ -1133,6 +1191,10 @@ fn main() {
         ("main_window_lists_servers", main_window_lists_servers),
         ("search_and_clear_filters", search_and_clear_filters),
         ("country_and_logging_filters", country_and_logging_filters),
+        (
+            "country_drop_down_stays_open_while_the_list_and_probes_update",
+            country_drop_down_stays_open_while_the_list_and_probes_update,
+        ),
         ("sort_drop_down_and_direction", sort_drop_down_and_direction),
         ("header_click_sorts", header_click_sorts),
         ("column_chooser", column_chooser),
