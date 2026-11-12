@@ -324,16 +324,18 @@ that connects and then carries no data leaves the user offline.
   (a bare TCP connect passes on relays that carry no data); two missed probes in a row (the counter must survive a trickle of
   keep-alive echoes) pull the capture routes (fail-open) and emit a "relay stopped sending data" event; recapture only after
   healthy volume. Also run the tunnel-alive check before enabling capture at connect. Tested with `start_paused` and the
-  fake network; live check handed to the user. Needs a platform-backend `fail_open`/`fail_close` on the route set.
+  fake network; live check handed to the user. Needs a platform-backend `fail_open`/`fail_close` on the route set. The connect-time "is the tunnel alive" check of the reference was left out: a network that blocks every probe host would then never connect.
 - **U39 Rotate to the next relay on stall or throttle (`vpngate-app-model`).** On U38's event, when the connection came from the
   server list and "Reconnect automatically" is on: disconnect, remember the failed relay (skipped for a while), pick the next
-  candidate. A throttle detector (speed collapses after a peak) emits a separate event. Depends on U38.
+  candidate. Depends on U38. Done in the Rust controller (Linux GTK) only; the Swift, C# and Kotlin apps are U39b. A speed-collapse (throttle) detector was left out: a user who simply stops downloading looks the same as a throttled relay, so it would rotate healthy relays.
 - **U40 DNS proxy walks the resolver list (`vpngate-net`).** Replaces the documented "an upstream failure is SERVFAIL, not a
   fallback" rule (see DECISIONS): on timeout try the next server of the list, then tunnelled 1.1.1.1 / 8.8.8.8 as the last
   resort. Update the test `upstream_failure_is_servfail_not_a_fallback`. Independent of U38/U39.
-- **U41 Socket tuning (`vpngate-net/src/tls.rs`).** 512 KB send/receive buffers on the relay socket, and on Linux
-  `TCP_QUICKACK` and an opt-in BBR (`TCP_CONGESTION`, silent fallback). Measure before keeping BBR: a throughput comparison on
-  a high-RTT relay is handed to the user. Independent.
+- **U41 Socket tuning (`vpngate-net/src/socket_tuning.rs`).** Opt-in through the daemon's environment: `VPNGATE_TCP_BUFFER_KB`
+  and, on Linux, `VPNGATE_TCP_CONGESTION=bbr`. Defaults unchanged: a fixed `SO_SNDBUF`/`SO_RCVBUF` turns off the kernel's
+  buffer autotuning on Linux, so a bigger fixed value is a measurement to make, not a better default (the reference's
+  512 KB claim rests on a 16 KB default that Linux does not have). `TCP_QUICKACK` was left out (it is not sticky). A
+  throughput comparison on a high-RTT relay is handed to the user.
 
 ## Dependency graph
 ```

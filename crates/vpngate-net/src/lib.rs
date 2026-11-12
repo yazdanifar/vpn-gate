@@ -14,6 +14,7 @@ pub mod host_unique_id;
 pub mod probe;
 pub mod proxy;
 pub mod session;
+pub mod socket_tuning;
 pub mod socks;
 pub mod softether_client;
 pub mod stream;

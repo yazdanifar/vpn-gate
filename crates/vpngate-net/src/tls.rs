@@ -159,6 +159,7 @@ impl TlsStream {
             None => crate::connect::connect_tcp(&self.host, self.port).await?,
         };
         tcp.set_nodelay(true)?;
+        crate::socket_tuning::apply(&tcp);
         SockRef::from(&tcp).set_tcp_keepalive(&TcpKeepalive::new().with_time(KEEPALIVE_IDLE))?;
         self.peer = tcp.peer_addr().ok();
 
