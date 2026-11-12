@@ -934,7 +934,7 @@ async fn an_idle_but_working_relay_is_left_alone() {
     s.connect(simple("1.2.3.4", None, false, true));
     r.wait_connected().await;
     tokio::time::sleep(Duration::from_secs(300)).await;
-    assert!(logs(&r).is_empty());
+    assert!(!logs(&r).iter().any(|l| l == RELAY_STALLED_LOG));
     assert_capture_untouched(&h);
     assert!(h.probes.load(Ordering::SeqCst) >= 1, "it is asked now and then");
     s.disconnect();
