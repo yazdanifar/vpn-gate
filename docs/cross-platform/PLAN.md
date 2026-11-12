@@ -315,6 +315,26 @@ over AT-SPI under Xvfb, Gradle Managed Devices (ATD), UiAutomator + `DevicePolic
   U04 trailing-deflate vector, the U07 system-trust accept path in `live.yml`.
 Left to a human afterwards: approving golden images once, SmartScreen on the unsigned MSI, OEM phone quirks.
 
+### Phase 9 — Relay resilience and speed (ideas from HRSadeghi/vpngate_ubuntu, 2026-11-12)
+Source: the Python/Linux port <https://github.com/HRSadeghi/vpngate_ubuntu> (read as untrusted reference; nothing is copied,
+the behaviour is re-implemented in Rust). Our `spawn_counters` in `vpngate-net/src/session.rs` only reports bytes, so a relay
+that connects and then carries no data leaves the user offline.
+- **U38 Dead-relay watchdog with fail-open (`vpngate-net`, `vpngate-daemon`).** Judge the inbound rate over a 20 s window
+  (starving < 1500 B/s, healthy >= 3000 B/s); when starving or silent, probe the tunnel with a real TLS handshake through it
+  (a bare TCP connect passes on relays that carry no data); two missed probes in a row (the counter must survive a trickle of
+  keep-alive echoes) pull the capture routes (fail-open) and emit a "relay stopped sending data" event; recapture only after
+  healthy volume. Also run the tunnel-alive check before enabling capture at connect. Tested with `start_paused` and the
+  fake network; live check handed to the user. Needs a platform-backend `fail_open`/`fail_close` on the route set.
+- **U39 Rotate to the next relay on stall or throttle (`vpngate-app-model`).** On U38's event, when the connection came from the
+  server list and "Reconnect automatically" is on: disconnect, remember the failed relay (skipped for a while), pick the next
+  candidate. A throttle detector (speed collapses after a peak) emits a separate event. Depends on U38.
+- **U40 DNS proxy walks the resolver list (`vpngate-net`).** Replaces the documented "an upstream failure is SERVFAIL, not a
+  fallback" rule (see DECISIONS): on timeout try the next server of the list, then tunnelled 1.1.1.1 / 8.8.8.8 as the last
+  resort. Update the test `upstream_failure_is_servfail_not_a_fallback`. Independent of U38/U39.
+- **U41 Socket tuning (`vpngate-net/src/tls.rs`).** 512 KB send/receive buffers on the relay socket, and on Linux
+  `TCP_QUICKACK` and an opt-in BBR (`TCP_CONGESTION`, silent fallback). Measure before keeping BBR: a throughput comparison on
+  a high-RTT relay is handed to the user. Independent.
+
 ## Dependency graph
 ```
 U00 → U01a → U01b → U02 → {U03, U04, U05, U06} → U07 → U08a → U08b → U09 → U10a → U10b → U11 → U12 → U13 → U14 → U15
