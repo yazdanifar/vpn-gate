@@ -155,6 +155,7 @@ fn full_handshake(ip: &str, port: u16) -> bool {
 /// looks like to a user. Relays come and go, so the test fails only when Test Connection is clearly wrong: no relay ok
 /// while full handshakes work, most working relays missed, or measurements that are not plausible.
 ///   VPNGATE_LIVE_PROBE_COUNT (default 24): how many relays of the list to test.
+///   VPNGATE_LIVE_RELAYS: only these relays of the list (host names or IPs, comma separated).
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs the network"]
 async fn test_connection_like_the_apps() {
@@ -188,6 +189,12 @@ async fn test_connection_like_the_apps() {
         started.elapsed().as_secs_f64()
     );
     let mut servers: Vec<_> = list.servers.into_iter().filter(|s| !s.ssl_ports.is_empty()).collect();
+    // VPNGATE_LIVE_RELAYS=laud.opengw.net,1.2.3.4 tests just those relays (matched by host name or IP, ports from the
+    // list) instead of the best by score, e.g. to aim at a relay known to work or to hang.
+    if let Some(raw) = std::env::var("VPNGATE_LIVE_RELAYS").ok().filter(|r| !r.is_empty()) {
+        let wanted: Vec<&str> = raw.split(',').map(|r| r.split(':').next().unwrap_or(r)).collect();
+        servers.retain(|s| wanted.contains(&s.ip.as_str()) || wanted.contains(&s.host_name.as_str()));
+    }
     servers.sort_by_key(|s| std::cmp::Reverse(s.score));
     servers.truncate(count);
     assert!(!servers.is_empty(), "no relay with an SSL port in the list");
