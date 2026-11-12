@@ -15,7 +15,7 @@ use tokio::task::JoinHandle;
 use vpngate_core::cert_pin::ServerCertPolicy;
 use vpngate_core::ipc::{
     ConnectConfig, ConnectionState, HelperEvent, ProxyKind, ProxySettings, TunnelMode, DEFAULT_SOCKS_PORT,
-    HELPER_VERSION, IPC_VERSION,
+    HELPER_VERSION, IPC_VERSION, RELAY_RECOVERED_LOG, RELAY_STALLED_LOG,
 };
 use vpngate_core::packets::ip_string;
 use vpngate_core::routing_rule::{RoutingAction, RoutingConfig};
@@ -31,6 +31,7 @@ use crate::host_unique_id::HostUniqueId;
 use crate::softether_client::{ClientAuth, ClientConfig, SoftEtherClient, Welcome};
 use crate::stream::{StreamError, StreamFactory};
 use crate::tls::TlsStream;
+use crate::watchdog::{Step, Verdict, Watchdog};
 
 /// Ports tried after the ones the caller listed.
 pub const DEFAULT_PORTS: [i64; 4] = [443, 992, 5555, 1194];
@@ -71,6 +72,12 @@ pub trait DnsProxyService: Send + Sync {
     fn set_servers(&self, tunnel: Vec<String>, direct: Vec<String>);
 }
 
+/// Asks the tunnel itself whether it carries data (see `tunnel_probe`); the watchdog uses it.
+#[async_trait]
+pub trait TunnelProbe: Send + Sync {
+    async fn alive(&self) -> bool;
+}
+
 /// SOCKS mode: the local proxy that is the only way into the tunnel.
 pub trait SocksService: Send + Sync {
     fn start(&self) -> Result<(), PlatformError>;
@@ -93,6 +100,9 @@ type MakeNet = Arc<dyn Fn() -> Arc<dyn NetConfiguring> + Send + Sync>;
 type MakeDnsProxy = Arc<
     dyn Fn(Arc<dyn NetConfiguring>, RoutingConfig) -> Result<Arc<dyn DnsProxyService>, PlatformError> + Send + Sync,
 >;
+/// The liveness probe for the tunnel interface of this attempt; `None` where the platform cannot pin a socket to it
+/// (the watchdog is then off).
+type MakeProbe = Arc<dyn Fn(&str) -> Option<Arc<dyn TunnelProbe>> + Send + Sync>;
 type MakeSocks = Arc<dyn Fn(u16, &str, Vec<String>) -> Arc<dyn SocksService> + Send + Sync>;
 
 /// The factories for everything one attempt owns, so tests and each OS backend supply their own.
@@ -104,6 +114,8 @@ pub struct SessionDependencies {
     pub make_dns_proxy: MakeDnsProxy,
     /// SOCKS mode: the proxy for (listen port, tunnel interface name, the VPN's DNS servers).
     pub make_socks: MakeSocks,
+    /// Relay liveness watchdog: probes through the tunnel when the inbound rate says the relay is starving.
+    pub make_probe: MakeProbe,
 }
 
 #[derive(Debug, Clone)]
@@ -840,7 +852,8 @@ impl Session {
         }
 
         self.set(gen, ConnectionState::Connected, None, Some(&ip_string(lease.ip)), Some(connected_log), None);
-        let counters = self.spawn_counters(gen, &client);
+        let watch = if socks_mode { None } else { (self.deps.make_probe)(&tun_name).map(|probe| (net.clone(), probe)) };
+        let counters = self.spawn_counters(gen, &client, watch);
         let wait = (f64::from(lease.seconds) / 2.0).max(self.timing.min_renew_seconds);
         let wb = Arc::downgrade(&bridge);
         let renew = tokio::spawn(async move {
@@ -862,23 +875,65 @@ impl Session {
         Ok(())
     }
 
-    fn spawn_counters(&self, gen: u64, client: &Arc<dyn VpnTransport>) -> JoinHandle<()> {
+    fn spawn_counters(
+        &self,
+        gen: u64,
+        client: &Arc<dyn VpnTransport>,
+        watch: Option<(Arc<dyn NetConfiguring>, Arc<dyn TunnelProbe>)>,
+    ) -> JoinHandle<()> {
         let (weak_session, weak_client) = (self.me.clone(), Arc::downgrade(client));
+        let first_in = client.bytes_in();
         tokio::spawn(async move {
+            let started = tokio::time::Instant::now();
             let mut tick =
                 tokio::time::interval_at(tokio::time::Instant::now() + Duration::from_secs(1), Duration::from_secs(1));
+            let mut dog = Watchdog::new(0.0, first_in);
+            let mut pending: Option<JoinHandle<bool>> = None;
             loop {
                 tick.tick().await;
                 let (Some(s), Some(c)) = (weak_session.upgrade(), weak_client.upgrade()) else { return };
+                let now = started.elapsed().as_secs_f64();
+                // The probe runs beside the counters (it can take several seconds), and its answer is read here.
+                let mut note = None;
+                if let Some((net, probe)) = &watch {
+                    if pending.as_ref().is_some_and(JoinHandle::is_finished) {
+                        let alive = match pending.take() {
+                            Some(h) => h.await.unwrap_or(false),
+                            None => false,
+                        };
+                        let was_open = dog.failed_open();
+                        match dog.probed(now, alive) {
+                            Verdict::FailOpen if !was_open => {
+                                net.fail_open();
+                                note = Some(RELAY_STALLED_LOG);
+                            }
+                            Verdict::Recover => {
+                                net.fail_close();
+                                note = Some(RELAY_RECOVERED_LOG);
+                            }
+                            _ => {}
+                        }
+                    }
+                    if pending.is_none() && dog.tick(now, c.bytes_in()) == Step::Probe {
+                        let probe = probe.clone();
+                        pending = Some(tokio::spawn(async move { probe.alive().await }));
+                    }
+                }
                 let mut st = s.state();
                 if st.generation != gen {
+                    if let Some(h) = pending.take() {
+                        h.abort();
+                    }
                     return;
                 }
                 st.current.bytes_in = c.bytes_in();
                 st.current.bytes_out = c.bytes_out();
-                st.current.log = None;
+                st.current.log = note.map(str::to_string);
                 st.current.error = None;
                 let e = st.current.clone();
+                if note.is_some() {
+                    st.current.log = None;
+                }
                 drop(st);
                 s.emit_event(e);
             }

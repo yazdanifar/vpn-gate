@@ -36,6 +36,11 @@ struct Active {
     gateway: String,
     original: Option<DefaultRoute>,
     captured_dns: Vec<String>,
+    /// The routes that capture all traffic (`ip` argument lists to add and to delete them), for `fail_open`.
+    capture: Vec<(Vec<String>, Vec<String>)>,
+    /// What `dns.set` was given, to publish it again after a `fail_open`.
+    published_dns: Option<(Vec<String>, String, String, String)>,
+    failed_open: bool,
     /// How to undo each change that really happened, oldest first.
     undo: Vec<UndoOp>,
 }
@@ -97,6 +102,21 @@ impl LinuxNetConfig {
         let (add, del): (Vec<&str>, Vec<&str>) =
             (add.iter().map(String::as_str).collect(), del.iter().map(String::as_str).collect());
         self.add(active, UNDO_ROUTE, &add, &del);
+    }
+
+    /// A capture route: like `add_route`, and remembered so `fail_open` can pull it and `fail_close` put it back.
+    fn add_capture_route(&self, active: &mut Active, v6: bool, spec: &[&str], undo: &[&str]) {
+        self.add_route(active, v6, spec, undo);
+        let family: Vec<String> = if v6 { vec!["-6".into()] } else { vec![] };
+        let build = |verb: &str, rest: &[&str]| -> Vec<String> {
+            family
+                .iter()
+                .cloned()
+                .chain(["route".into(), verb.into()])
+                .chain(rest.iter().map(|s| s.to_string()))
+                .collect()
+        };
+        active.capture.push((build("add", spec), build("del", undo)));
     }
 
     /// Host route that keeps traffic to `host` on the original default path instead of the tunnel.
@@ -215,13 +235,13 @@ impl NetConfiguring for LinuxNetConfig {
         } else {
             // Two halves beat the real default route by prefix length without replacing it.
             for half in ["0.0.0.0/1", "128.0.0.0/1"] {
-                self.add_route(&mut active, false, &[half, "via", &gw, "dev", iface], &[half]);
+                self.add_capture_route(&mut active, false, &[half, "via", &gw, "dev", iface], &[half]);
             }
             route_rules(self, &mut active, |a| a != RoutingAction::Proxy);
         }
         // Both halves of the IPv6 space point at the tunnel either way, so native IPv6 never leaks around it.
         for half in ["::/1", "8000::/1"] {
-            self.add_route(&mut active, true, &[half, "dev", iface], &[half]);
+            self.add_capture_route(&mut active, true, &[half, "dev", iface], &[half]);
         }
 
         // Captured before the resolver is switched over, so a `direct` domain rule can still be resolved by the
@@ -243,6 +263,7 @@ impl NetConfiguring for LinuxNetConfig {
             };
             if self.dns.set(&published, iface, &ip, &gw) {
                 self.remember(&mut active, UndoOp::new(UNDO_DNS, &[]));
+                active.published_dns = Some((published, iface.to_string(), ip.clone(), gw.clone()));
             }
         }
         *guard = Some(active);
@@ -313,6 +334,41 @@ impl NetConfiguring for LinuxNetConfig {
         }
         let (iface, gw, original) = (active.iface.clone(), active.gateway.clone(), active.original.clone());
         self.add_rule_route(active, ip, action, &iface, &gw, original.as_ref());
+    }
+
+    fn fail_open(&self) {
+        let mut guard = lock(&self.state);
+        let Some(active) = guard.as_mut() else { return };
+        if active.failed_open {
+            return;
+        }
+        active.failed_open = true;
+        for (_, del) in &active.capture {
+            let args: Vec<&str> = del.iter().map(String::as_str).collect();
+            self.runner.run(IP, &args);
+        }
+        if active.published_dns.is_some() {
+            self.dns.remove();
+        }
+    }
+
+    fn fail_close(&self) {
+        let mut guard = lock(&self.state);
+        let Some(active) = guard.as_mut() else { return };
+        if !active.failed_open {
+            return;
+        }
+        active.failed_open = false;
+        for (add, _) in &active.capture {
+            let args: Vec<&str> = add.iter().map(String::as_str).collect();
+            let r = self.runner.run(IP, &args);
+            if r.status != 0 {
+                println!("[ip] {} failed ({}): {}", add.join(" "), r.status, r.output.trim());
+            }
+        }
+        if let Some((servers, iface, ip, gw)) = &active.published_dns {
+            self.dns.set(servers, iface, ip, gw);
+        }
     }
 
     fn teardown(&self) {

@@ -30,6 +30,11 @@ struct Active {
     gateway: Option<Ipv4Addr>,
     original: Option<BestRoute>,
     captured_dns: Vec<String>,
+    /// The routes that capture all traffic, for `fail_open`.
+    capture: Vec<Route>,
+    /// What `dns.set` was given, to publish it again after a `fail_open`.
+    published_dns: Option<(Vec<String>, String, String, String)>,
+    failed_open: bool,
     undo: Vec<UndoOp>,
 }
 
@@ -68,6 +73,12 @@ impl WinNetConfig {
             }
             Err(e) => println!("[route] add {} failed: {e}", route.to_args().join(" ")),
         }
+    }
+
+    /// A capture route: like `add_route`, and remembered so `fail_open` can pull it and `fail_close` put it back.
+    fn add_capture_route(&self, active: &mut Active, route: Route) {
+        active.capture.push(route.clone());
+        self.add_route(active, route);
     }
 
     fn remember(&self, active: &mut Active, op: UndoOp) {
@@ -175,13 +186,16 @@ impl NetConfiguring for WinNetConfig {
             route_rules(self, &mut active, |a| a != RoutingAction::Direct);
         } else {
             for half in [Ipv4Addr::new(0, 0, 0, 0), Ipv4Addr::new(128, 0, 0, 0)] {
-                self.add_route(&mut active, Self::route(half.into(), 1, Some(gw.into()), if_index, TUNNEL_METRIC));
+                self.add_capture_route(
+                    &mut active,
+                    Self::route(half.into(), 1, Some(gw.into()), if_index, TUNNEL_METRIC),
+                );
             }
             route_rules(self, &mut active, |a| a != RoutingAction::Proxy);
         }
         // Both halves of the IPv6 space point at the tunnel either way, so native IPv6 never leaks around it.
         for half in [Ipv6Addr::UNSPECIFIED, Ipv6Addr::new(0x8000, 0, 0, 0, 0, 0, 0, 0)] {
-            self.add_route(&mut active, Self::route(half.into(), 1, None, if_index, TUNNEL_METRIC));
+            self.add_capture_route(&mut active, Self::route(half.into(), 1, None, if_index, TUNNEL_METRIC));
         }
 
         if !routing.is_empty() {
@@ -201,9 +215,10 @@ impl NetConfiguring for WinNetConfig {
                 Some(a) => vec![a.clone()],
                 None => request.lease.dns.iter().map(|d| Ipv4Addr::from(*d).to_string()).collect(),
             };
-            if self.dns.set(&published, &request.iface, &Ipv4Addr::from(request.lease.ip).to_string(), &gw.to_string())
-            {
+            let (ip, gw_text) = (Ipv4Addr::from(request.lease.ip).to_string(), gw.to_string());
+            if self.dns.set(&published, &request.iface, &ip, &gw_text) {
                 self.remember(&mut active, UndoOp::new(UNDO_DNS, &[]));
+                active.published_dns = Some((published, request.iface.clone(), ip, gw_text));
             }
         }
         *guard = Some(active);
@@ -262,6 +277,38 @@ impl NetConfiguring for WinNetConfig {
             return;
         }
         self.add_rule_route(active, ip, action);
+    }
+
+    fn fail_open(&self) {
+        let mut guard = lock(&self.state);
+        let Some(active) = guard.as_mut() else { return };
+        if active.failed_open {
+            return;
+        }
+        active.failed_open = true;
+        for route in &active.capture {
+            let _ = self.api.delete_route(route);
+        }
+        if active.published_dns.is_some() {
+            self.dns.remove();
+        }
+    }
+
+    fn fail_close(&self) {
+        let mut guard = lock(&self.state);
+        let Some(active) = guard.as_mut() else { return };
+        if !active.failed_open {
+            return;
+        }
+        active.failed_open = false;
+        for route in &active.capture {
+            if let Err(e) = self.api.add_route(route) {
+                println!("[route] add {} failed: {e}", route.to_args().join(" "));
+            }
+        }
+        if let Some((servers, iface, ip, gw)) = &active.published_dns {
+            self.dns.set(servers, iface, ip, gw);
+        }
     }
 
     fn teardown(&self) {

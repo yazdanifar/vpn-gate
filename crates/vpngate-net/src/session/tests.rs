@@ -9,7 +9,7 @@ use tokio::sync::watch;
 use vpngate_core::ipc::{ConnectConfig, ConnectionState, ProxyKind, ProxySettings, TunnelMode, HELPER_VERSION};
 use vpngate_core::packets::{be32, ethernet_frame, icmpv6_checksum, ipv4_packet, ipv6_header, ipv6_slaac, Mac};
 use vpngate_core::routing_rule::{RoutingAction, RoutingConfig, RoutingRule, RoutingRuleType};
-use vpngate_testkit::fakes::{FakeNet, FakeTun};
+use vpngate_testkit::fakes::{FakeNet, FakeTun, NetOp};
 
 use super::*;
 use crate::testing::fake_network::FakeNetworkServer;
@@ -210,6 +210,22 @@ struct Harness {
     tun_error: Mutex<Option<String>>,
     bypass_hosts: Mutex<Vec<String>>,
     remote_ipv4: Mutex<Option<String>>,
+    /// Answers of the relay liveness probe, in order; the last one repeats.
+    probe_answers: Mutex<Vec<bool>>,
+    probes: AtomicUsize,
+    /// Whether the watchdog exists at all (off by default so other tests never see a probe).
+    probe_enabled: AtomicBool,
+}
+
+struct FakeProbe(Arc<Harness>);
+
+#[async_trait]
+impl TunnelProbe for FakeProbe {
+    async fn alive(&self) -> bool {
+        let n = self.0.probes.fetch_add(1, Ordering::SeqCst);
+        let answers = lock(&self.0.probe_answers);
+        answers.get(n).or(answers.last()).copied().unwrap_or(true)
+    }
 }
 
 impl Harness {
@@ -238,7 +254,8 @@ impl Harness {
     }
 
     fn deps(self: &Arc<Self>) -> SessionDependencies {
-        let (h1, h2, h3, h4, h5) = (self.clone(), self.clone(), self.clone(), self.clone(), self.clone());
+        let (h1, h2, h3, h4, h5, h6) =
+            (self.clone(), self.clone(), self.clone(), self.clone(), self.clone(), self.clone());
         SessionDependencies {
             make_transport: Arc::new(move |config, port| {
                 let t = Arc::new(FakeTransport {
@@ -282,6 +299,9 @@ impl Harness {
                 let s = Arc::new(FakeSocks { port, running: AtomicBool::new(false) });
                 lock(&h5.socks).push(s.clone());
                 s
+            }),
+            make_probe: Arc::new(move |_iface| {
+                h6.probe_enabled.load(Ordering::SeqCst).then(|| Arc::new(FakeProbe(h6.clone())) as Arc<dyn TunnelProbe>)
             }),
         }
     }
@@ -860,4 +880,74 @@ fn legacy_config_puts_the_listed_port_first_and_keeps_the_vpn_gate_account() {
     );
     assert_eq!(cfg.ports, [992, 443], "a port already listed is not repeated");
     assert_eq!(simple_connect_config("h", None, ProxySettings::default(), true, true).ports, DEFAULT_PORTS);
+}
+
+fn net_ops(h: &Harness) -> Vec<NetOp> {
+    h.nets()[0].ops().into_iter().filter(|o| matches!(o, NetOp::FailOpen | NetOp::FailClose)).collect()
+}
+
+fn logs(r: &Recorder) -> Vec<String> {
+    lock(&r.events).iter().filter_map(|e| e.log.clone()).collect()
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_relay_that_carries_nothing_fails_the_capture_open_once_and_says_so() {
+    let h = Harness::new();
+    h.probe_enabled.store(true, Ordering::SeqCst);
+    *lock(&h.probe_answers) = vec![false];
+    let (s, r) = h.session();
+    s.connect(simple("1.2.3.4", None, false, true));
+    r.wait_connected().await;
+    tokio::time::sleep(Duration::from_secs(60)).await;
+    assert_eq!(net_ops(&h), [NetOp::FailOpen], "pulled once, not on every missed probe");
+    assert_eq!(logs(&r).iter().filter(|l| *l == RELAY_STALLED_LOG).count(), 1);
+    assert_eq!(s.snapshot().state, ConnectionState::Connected, "the app decides what happens next");
+    s.disconnect();
+    idle(&s, 3).await;
+    assert_eq!(h.nets()[0].torn_down(), 1, "teardown still cleans up after a fail-open");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_probe_that_goes_through_again_puts_the_capture_back() {
+    let h = Harness::new();
+    h.probe_enabled.store(true, Ordering::SeqCst);
+    *lock(&h.probe_answers) = vec![false, false, false, true];
+    let (s, r) = h.session();
+    s.connect(simple("1.2.3.4", None, false, true));
+    r.wait_connected().await;
+    tokio::time::sleep(Duration::from_secs(90)).await;
+    assert_eq!(net_ops(&h), [NetOp::FailOpen, NetOp::FailClose]);
+    assert!(logs(&r).iter().any(|l| l == RELAY_RECOVERED_LOG));
+    s.disconnect();
+    idle(&s, 3).await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_idle_but_working_relay_is_left_alone() {
+    let h = Harness::new();
+    h.probe_enabled.store(true, Ordering::SeqCst);
+    *lock(&h.probe_answers) = vec![true];
+    let (s, r) = h.session();
+    s.connect(simple("1.2.3.4", None, false, true));
+    r.wait_connected().await;
+    tokio::time::sleep(Duration::from_secs(300)).await;
+    assert!(net_ops(&h).is_empty());
+    assert!(h.probes.load(Ordering::SeqCst) >= 1, "it is asked now and then");
+    s.disconnect();
+    idle(&s, 3).await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn socks_mode_has_no_watchdog() {
+    let h = Harness::new();
+    h.probe_enabled.store(true, Ordering::SeqCst);
+    let (s, r) = h.session();
+    let mut cfg = simple("1.2.3.4", None, false, true);
+    cfg.tunnel_mode = TunnelMode::SocksProxy;
+    s.connect(cfg);
+    r.wait_connected().await;
+    tokio::time::sleep(Duration::from_secs(60)).await;
+    assert_eq!(h.probes.load(Ordering::SeqCst), 0);
+    s.disconnect();
+    idle(&s, 3).await;
 }

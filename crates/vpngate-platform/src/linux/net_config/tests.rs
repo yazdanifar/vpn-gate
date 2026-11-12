@@ -414,3 +414,47 @@ fn default_route_parsing() {
     assert_eq!(p("10.0.0.0/8 dev eth1 scope link"), None);
     assert_eq!(p(""), None);
 }
+
+#[test]
+fn fail_open_pulls_the_capture_routes_and_the_resolver_and_fail_close_puts_them_back() {
+    let f = make();
+    f.net.apply(&request("5.5.5.5")).unwrap();
+    let before = f.runner.log().len();
+    f.net.fail_open();
+    f.net.fail_open(); // idempotent
+    let pulled: Vec<String> = f.runner.log().into_iter().skip(before).collect();
+    assert_eq!(
+        pulled,
+        [
+            "/usr/sbin/ip route del 0.0.0.0/1",
+            "/usr/sbin/ip route del 128.0.0.0/1",
+            "/usr/sbin/ip -6 route del ::/1",
+            "/usr/sbin/ip -6 route del 8000::/1",
+        ],
+        "the bypass route to the relay stays"
+    );
+    assert_eq!(*f.dns.removes.lock().unwrap(), 1);
+    let before = f.runner.log().len();
+    f.net.fail_close();
+    f.net.fail_close();
+    let back: Vec<String> = f.runner.log().into_iter().skip(before).collect();
+    assert_eq!(
+        back,
+        [
+            format!("/usr/sbin/ip route add 0.0.0.0/1 via {GW} dev vpngate0"),
+            format!("/usr/sbin/ip route add 128.0.0.0/1 via {GW} dev vpngate0"),
+            "/usr/sbin/ip -6 route add ::/1 dev vpngate0".to_string(),
+            "/usr/sbin/ip -6 route add 8000::/1 dev vpngate0".to_string(),
+        ]
+    );
+    assert_eq!(f.dns.set_calls.lock().unwrap().len(), 2, "the resolver is published again");
+}
+
+#[test]
+fn fail_close_without_fail_open_changes_nothing() {
+    let f = make();
+    f.net.apply(&request("5.5.5.5")).unwrap();
+    let before = f.runner.log().len();
+    f.net.fail_close();
+    assert_eq!(f.runner.log().len(), before);
+}

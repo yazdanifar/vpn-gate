@@ -11,6 +11,13 @@ use crate::server_list::VpnServer;
 
 pub const HELPER_SOCKET_PATH: &str = "/var/run/vpngate-mac.sock";
 /// Bumped whenever the helper's behaviour or IPC changes.
+/// The log line of the event that says the relay stopped carrying data (the daemon has pulled the capture routes and
+/// the machine works directly). The app matches it to switch to another relay; the text is the contract.
+pub const RELAY_STALLED_LOG: &str =
+    "The relay stopped sending data (it may be capping this session). Reconnect or pick another server.";
+/// The log line of the event that says the relay carries data again and the capture routes are back.
+pub const RELAY_RECOVERED_LOG: &str = "The relay is carrying data again; traffic goes through the tunnel.";
+
 pub const HELPER_VERSION: i64 = 8;
 /// Revision of the request/reply protocol. 9 added the request/reply commands (`listServers`, `refreshServers`,
 /// `syncDat`, `probe`, `validateAccount`); every snapshot event carries it as `ipcVersion`. See `docs/cross-platform/IPC.md`.

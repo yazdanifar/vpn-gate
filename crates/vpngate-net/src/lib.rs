@@ -20,5 +20,7 @@ pub mod stream;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 pub mod tls;
+pub mod tunnel_probe;
 pub mod udp_accel;
+pub mod watchdog;
 pub mod watermark;

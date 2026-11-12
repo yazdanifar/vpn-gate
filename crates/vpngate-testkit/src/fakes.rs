@@ -101,6 +101,8 @@ pub enum NetOp {
     ConfigureIpv6 { address: Ipv6Addr, prefix_length: usize },
     DynamicRule { ip: String, action: RoutingAction },
     ApplySocks { iface: String, mtu_override: Option<i64> },
+    FailOpen,
+    FailClose,
     Teardown,
 }
 
@@ -211,6 +213,14 @@ impl NetConfiguring for FakeNet {
     fn apply_socks(&self, iface: &str, _lease: &Lease, mtu_override: Option<i64>) -> Result<(), PlatformError> {
         self.record(NetOp::ApplySocks { iface: iface.to_string(), mtu_override });
         Ok(())
+    }
+
+    fn fail_open(&self) {
+        self.record(NetOp::FailOpen);
+    }
+
+    fn fail_close(&self) {
+        self.record(NetOp::FailClose);
     }
 
     fn teardown(&self) {

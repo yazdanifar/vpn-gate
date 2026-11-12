@@ -108,6 +108,11 @@ fn client_config(policy: &ServerCertPolicy, failure: &FailureSlot) -> Result<Cli
         .with_no_client_auth())
 }
 
+/// A client configuration for the tunnel liveness probe: only the handshake matters, not whose certificate it is.
+pub fn client_config_for_probe(policy: &ServerCertPolicy) -> Result<ClientConfig, StreamError> {
+    client_config(policy, &FailureSlot::default())
+}
+
 pub struct TlsStream {
     host: String,
     port: u16,

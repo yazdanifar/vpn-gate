@@ -96,6 +96,11 @@ pub trait NetConfiguring: Send + Sync {
     fn apply_socks(&self, _iface: &str, _lease: &Lease, _mtu_override: Option<i64>) -> Result<(), PlatformError> {
         Ok(())
     }
+    /// The relay stopped carrying data: pull the capture routes (and the tunnel's resolver) so the machine keeps working
+    /// directly while another relay is picked. The undo list is untouched, so `teardown` still cleans up. Idempotent.
+    fn fail_open(&self) {}
+    /// Puts back what `fail_open` pulled, once the relay carries data again. Idempotent; a no-op unless failed open.
+    fn fail_close(&self) {}
     fn teardown(&self);
 }
 
