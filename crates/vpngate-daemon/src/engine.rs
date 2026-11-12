@@ -25,6 +25,8 @@ pub const MAX_PROBE_TARGETS: usize = 200;
 /// Relays tested at the same time.
 pub const PROBE_CONCURRENCY: usize = 8;
 pub const DEFAULT_PROBE_TIMEOUT_SECONDS: f64 = 8.0;
+/// Longest the login + address step may take per relay (a silent relay is given up on after about 9 s).
+const ADDRESS_CHECK_LIMIT: Duration = Duration::from_secs(20);
 const MIN_PROBE_TIMEOUT_SECONDS: f64 = 1.0;
 const MAX_PROBE_TIMEOUT_SECONDS: f64 = 60.0;
 
@@ -35,6 +37,8 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 pub struct Engine {
     fetcher: DatFetcher,
     probe_streams: StreamFactory,
+    /// Also log in and get an address after the hello (production only: the test fakes answer just the hello).
+    check_address: bool,
     /// One sync at a time: a second request waits and then answers from the first one's cache.
     sync_lock: AsyncMutex<()>,
     /// The servers of the last list, which are the relays the next sync asks for the new one.
@@ -43,7 +47,13 @@ pub struct Engine {
 
 impl Engine {
     pub fn new(fetcher: DatFetcher, probe_streams: StreamFactory) -> Self {
-        Engine { fetcher, probe_streams, sync_lock: AsyncMutex::new(()), current: Mutex::new(Vec::new()) }
+        Engine {
+            fetcher,
+            probe_streams,
+            check_address: false,
+            sync_lock: AsyncMutex::new(()),
+            current: Mutex::new(Vec::new()),
+        }
     }
 
     /// The real network, with the list kept at `cache_path` and `bundle_paths` as the shipped fallback.
@@ -51,7 +61,7 @@ impl Engine {
         let mut config = DatFetcherConfig::new(cache_path);
         config.bundle_paths = bundle_paths;
         let streams = tls_stream_factory(&vpngate_core::ipc::ConnectConfig::new(""));
-        Engine::new(DatFetcher::new(streams.clone(), config), streams)
+        Engine { check_address: true, ..Engine::new(DatFetcher::new(streams.clone(), config), streams) }
     }
 
     fn remember(&self, servers: &[VpnServer]) {
@@ -133,9 +143,19 @@ impl Engine {
         for target in targets {
             let ports = ports_for(&target, &known);
             let (gate, streams, proxy) = (gate.clone(), self.probe_streams.clone(), proxy.clone());
+            let check_address = self.check_address;
             tasks.push(tokio::spawn(async move {
                 let _slot = gate.acquire_owned().await;
-                let outcome = probe::run(&target.host, &ports, &proxy, timeout, &streams).await;
+                let mut outcome = probe::run(&target.host, &ports, &proxy, timeout, &streams).await;
+                if let (true, ProbeOutcome::Ok { port, .. }) = (check_address, &outcome) {
+                    // The hello only proves the relay speaks SoftEther; a relay can still log in and then hand out
+                    // nothing (no DHCP, no forwarding), which is where connecting would hang.
+                    if let Err(why) =
+                        crate::probe::check_address(&target.host, *port, &proxy, ADDRESS_CHECK_LIMIT).await
+                    {
+                        outcome = ProbeOutcome::Failed(format!("Reachable, but no address: {why}"));
+                    }
+                }
                 entry(target.host, outcome)
             }));
         }

@@ -431,7 +431,7 @@ private struct PingCell: View {
     let server: VPNServer
     var body: some View { Text(ListFormat.pings(google: server.pingToGoogle, japan: server.ping)).monospacedDigit() }
 }
-/// Result of "Test Connection": a real SoftEther hello from this Mac. "ok" means the relay speaks the protocol, not that login or DHCP will succeed.
+/// Result of "Test Connection": a real SoftEther hello, login and DHCP address from this Mac, so "ok" means a connection gets an address.
 private struct ProbeCell: View {
     let outcome: ProbeOutcome?
     var body: some View {
@@ -449,7 +449,7 @@ private struct ProbeCell: View {
                 Label("\(connectMs) ms", systemImage: "checkmark.circle.fill").foregroundStyle(.green).monospacedDigit()
                 Text("handshake \(helloMs) ms · port \(port)").font(.caption).foregroundStyle(.secondary)
             }
-            .help("The relay answered the VPN handshake. Login and getting an address are only checked when you connect.")
+            .help("The relay answered the VPN handshake, logged in and handed out an address.")
         case .failed(let why)?:
             Label(why, systemImage: "xmark.circle.fill").foregroundStyle(.red).lineLimit(2).help(why)
         }

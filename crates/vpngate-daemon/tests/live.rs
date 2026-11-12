@@ -208,7 +208,8 @@ async fn test_connection_like_the_apps() {
         let r = engine.probe(batch.to_vec(), &ProxySettings::default(), DEFAULT_PROBE_TIMEOUT_SECONDS).await.unwrap();
         assert_eq!(r.results.len(), batch.len(), "one result per target");
         // A batch runs in parallel: at most 3 ports x timeout, plus slack; serial testing would take up to 8x longer.
-        let limit = 3.0 * DEFAULT_PROBE_TIMEOUT_SECONDS + 10.0;
+        // Then the login + address step (at most 20 s) for a relay that answered the hello.
+        let limit = 3.0 * DEFAULT_PROBE_TIMEOUT_SECONDS + 20.0 + 10.0;
         assert!(bt.elapsed().as_secs_f64() < limit, "batch took {:.1} s (> {limit} s)", bt.elapsed().as_secs_f64());
         batched.extend(r.results);
     }

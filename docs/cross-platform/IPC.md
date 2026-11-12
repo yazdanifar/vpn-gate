@@ -91,7 +91,9 @@ returned, with `isFresh:false`). One sync runs at a time.
 #### `ProbeEntry`
 
 `{"host","ok","port"?,"connectMs"?,"helloMs"?,"build"?,"error"?}`. `ok` means a SoftEther server answered the protocol
-hello on `port`; `connectMs` is TCP+TLS, `helloMs` the whole test. Without `ports` the relay's own SSL ports are tried
+hello on `port` and, in the production daemon, a one-connection login then got an address by DHCP (otherwise `ok` is
+false with `error` "Reachable, but no address: ..."; the step takes at most 20 s per relay); `connectMs` is TCP+TLS,
+`helloMs` the hello only. Without `ports` the relay's own SSL ports are tried
 (at most 3, in the Windows client's priority order), then 443.
 
 ## Android (in-process)

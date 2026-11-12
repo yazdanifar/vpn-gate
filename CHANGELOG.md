@@ -2,6 +2,8 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+### Changed
+- Test Connection now also logs in (one TCP link) and gets an address by DHCP, so a green row means connecting gets past "Getting address…". A relay that logs in but hands out nothing shows "Reachable, but no address" in red. Each test takes a few seconds longer.
 ### Fixed
 - Connecting no longer hangs on "Getting address…" with slow relays: late DHCP replies (an Offer or Ack that arrives after the retry) are accepted instead of being dropped.
 - A relay that logs you in but forwards no traffic at all now fails after about 8 seconds with "Try another server", instead of waiting out all six DHCP attempts (about 48 seconds).
