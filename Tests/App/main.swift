@@ -30,4 +30,4 @@ Task {
     let code = await runAllTests(args: Array(CommandLine.arguments.dropFirst()))
     exit(code)
 }
-dispatchMain()
+RunLoop.main.run()  // not dispatchMain(): with it TSan saw main-actor jobs on GCD worker threads and reported false races
