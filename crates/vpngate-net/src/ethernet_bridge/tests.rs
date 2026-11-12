@@ -130,6 +130,110 @@ async fn dhcp_fails_when_nobody_answers() {
     assert_eq!(net.count(DhcpType::Discover), 2);
 }
 
+/// A relay that answers every Discover later than the per-try timeout: the Offer to an earlier Discover must still
+/// count, or each reply lands one round late and the connection never gets an address.
+#[tokio::test]
+async fn dhcp_accepts_an_offer_that_arrives_after_the_retry() {
+    let net = Arc::new(FakeNetworkServer::new());
+    let b = EthernetBridge::new(timing(0.2, 4));
+    let (weak, n) = (Arc::downgrade(&b), net.clone());
+    b.set_send_frame(move |f| {
+        let delayed = n.count(DhcpType::Request) == 0;
+        for r in n.handle(&f) {
+            let weak = weak.clone();
+            tokio::spawn(async move {
+                if delayed {
+                    tokio::time::sleep(Duration::from_millis(300)).await;
+                }
+                if let Some(b) = weak.upgrade() {
+                    b.from_hub(&r);
+                }
+            });
+        }
+    });
+    assert_eq!(b.acquire_lease().await.unwrap().ip, MY_IP);
+}
+
+/// A relay that sends every reply twice: a duplicate Offer must not push the Ack out of the way.
+#[tokio::test]
+async fn dhcp_ack_survives_a_duplicate_late_offer() {
+    let net = Arc::new(FakeNetworkServer::new());
+    let b = EthernetBridge::new(timing(0.5, 3));
+    let (weak, n) = (Arc::downgrade(&b), net.clone());
+    b.set_send_frame(move |f| {
+        for r in n.handle(&f) {
+            let weak = weak.clone();
+            tokio::spawn(async move {
+                if let Some(b) = weak.upgrade() {
+                    b.from_hub(&r);
+                    b.from_hub(&r);
+                }
+            });
+        }
+    });
+    assert_eq!(b.acquire_lease().await.unwrap().ip, MY_IP);
+    assert_eq!(net.count(DhcpType::Discover), 1);
+}
+
+/// The Ack comes after the Request wait timed out: the Request is retransmitted, not restarted from a Discover.
+#[tokio::test]
+async fn dhcp_accepts_an_ack_that_arrives_after_the_request_timed_out() {
+    let net = Arc::new(FakeNetworkServer::new());
+    let b = EthernetBridge::new(timing(0.2, 4));
+    let (weak, n) = (Arc::downgrade(&b), net.clone());
+    b.set_send_frame(move |f| {
+        let delayed = n.count(DhcpType::Request) == 0 && n.count(DhcpType::Discover) > 0;
+        for r in n.handle(&f) {
+            let weak = weak.clone();
+            let is_ack = n.count(DhcpType::Request) > 0;
+            tokio::spawn(async move {
+                if delayed && is_ack {
+                    tokio::time::sleep(Duration::from_millis(300)).await;
+                }
+                if let Some(b) = weak.upgrade() {
+                    b.from_hub(&r);
+                }
+            });
+        }
+    });
+    assert_eq!(b.acquire_lease().await.unwrap().ip, MY_IP);
+    assert_eq!(net.count(DhcpType::Discover), 1);
+}
+
+/// A relay that forwards nothing at all: give up after two silent rounds instead of all of them.
+#[tokio::test]
+async fn dhcp_fails_fast_when_the_relay_forwards_nothing() {
+    let net = Arc::new(FakeNetworkServer::new());
+    let b = EthernetBridge::new(timing(0.1, 6));
+    let n = net.clone();
+    b.set_send_frame(move |f| {
+        let _ = n.handle(&f); // counted, never delivered
+    });
+    let e = b.acquire_lease().await.unwrap_err().to_string();
+    assert!(e.contains("Try another server"), "{e}");
+    assert_eq!(net.count(DhcpType::Discover), 2);
+}
+
+/// Traffic from other clients proves the relay forwards frames, so the full retry budget is kept.
+#[tokio::test]
+async fn dhcp_keeps_retrying_when_the_relay_forwards_other_traffic() {
+    let net = Arc::new(FakeNetworkServer::new());
+    let b = EthernetBridge::new(timing(0.1, 4));
+    let n = net.clone();
+    let weak = Arc::downgrade(&b);
+    b.set_send_frame(move |f| {
+        let _ = n.handle(&f);
+        // Someone else's broadcast ARP request.
+        let arp =
+            ArpPacket { op: 1, sender_mac: [2; 6], sender_ip: 0x0a00_0001, target_mac: [0; 6], target_ip: 0x0a00_0002 };
+        if let Some(b) = weak.upgrade() {
+            b.from_hub(&ethernet_frame(BROADCAST_MAC, [2; 6], 0x0806, &arp.encode()));
+        }
+    });
+    assert!(b.acquire_lease().await.is_err());
+    assert_eq!(net.count(DhcpType::Discover), 4);
+}
+
 #[tokio::test]
 async fn dhcp_ignores_replies_with_foreign_xid() {
     let b = EthernetBridge::new(timing(0.3, 1));

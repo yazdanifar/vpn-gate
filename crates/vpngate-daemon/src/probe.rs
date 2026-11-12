@@ -25,11 +25,21 @@ pub async fn run_probe(host: &str, port: i64, watch_udp: Option<u64>) -> i32 {
     }
 }
 
-async fn probe(host: &str, port: i64, watch_udp: Option<u64>) -> Result<(), String> {
+/// Logs in to the relay and wires a fresh bridge to the connection, the way a real connection starts (no tun, no
+/// routes, so no root). `max_connections` is 1 for the list test so a test costs the volunteer relay one TCP link.
+async fn open(
+    host: &str,
+    port: i64,
+    proxy: ProxySettings,
+    max_connections: usize,
+    log: &mut (dyn FnMut(&str) + Send),
+) -> Result<(Arc<SoftEtherConnection>, Arc<EthernetBridge>), String> {
     let mut key = [0u8; 32];
     key.copy_from_slice(&SystemEntropy.bytes(32));
+    let mut config = ClientConfig::new(host, port as u16, proxy);
+    config.max_connections = max_connections;
     let client = SoftEtherClient::new(
-        ClientConfig::new(host, port as u16, ProxySettings::default()),
+        config,
         HostUniqueId::new(key),
         tls_stream_factory(&ConnectConfig::new(host)),
         Box::new(SystemEntropy),
@@ -47,12 +57,30 @@ async fn probe(host: &str, port: i64, watch_udp: Option<u64>) -> Result<(), Stri
     }
     let hub = bridge.clone();
     let events = ConnectionEvents { on_frame: Arc::new(move |f| hub.from_hub(&f)), on_close: Arc::new(|_| {}) };
-    let conn = client
-        .connect(&mut |m: &str| println!("  {m}"), events, ConnectOptions::default())
-        .await
-        .map_err(|e| e.to_string())?;
+    let conn = client.connect(log, events, ConnectOptions::default()).await.map_err(|e| e.to_string())?;
     let conn = Arc::new(conn);
     let _ = slot.set(conn.clone());
+    Ok((conn, bridge))
+}
+
+/// The list test's second step: log in and get an address, so a green row means a connection will get past
+/// "Getting address…". Returns the milliseconds the address took. Bounded by `limit` as a whole.
+pub async fn check_address(host: &str, port: u16, proxy: &ProxySettings, limit: Duration) -> Result<i64, String> {
+    let work = async {
+        let (conn, bridge) = open(host, i64::from(port), proxy.clone(), 1, &mut |_: &str| {}).await?;
+        let t0 = std::time::Instant::now();
+        let lease = bridge.acquire_lease().await.map_err(|e| e.to_string());
+        conn.close(None);
+        lease.map(|_| i64::try_from(t0.elapsed().as_millis()).unwrap_or(i64::MAX).max(1))
+    };
+    match tokio::time::timeout(limit, work).await {
+        Ok(r) => r,
+        Err(_) => Err(format!("No address within {} s", limit.as_secs())),
+    }
+}
+
+async fn probe(host: &str, port: i64, watch_udp: Option<u64>) -> Result<(), String> {
+    let (conn, bridge) = open(host, port, ProxySettings::default(), 8, &mut |m: &str| println!("  {m}")).await?;
     let w = conn.welcome();
     println!("OK session {} timeout {}ms", w.session_name, w.timeout_ms);
     let l = bridge.acquire_lease().await.map_err(|e| e.to_string())?;
