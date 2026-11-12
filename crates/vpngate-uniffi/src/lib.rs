@@ -167,8 +167,6 @@ pub fn android_dependencies(host: Arc<dyn VpnHost>, unique_id_path: &std::path::
         make_socks: Arc::new(|_, _, _| {
             Arc::new(Unsupported("SOCKS5 mode is not available on Android")) as Arc<dyn SocksService>
         }),
-        // All traffic is already inside the VpnService, so there are no capture routes to pull: no watchdog.
-        make_probe: Arc::new(|_| None),
     }
 }
 

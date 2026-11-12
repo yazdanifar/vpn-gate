@@ -14,14 +14,11 @@ pub mod host_unique_id;
 pub mod probe;
 pub mod proxy;
 pub mod session;
-pub mod socket_tuning;
 pub mod socks;
 pub mod softether_client;
 pub mod stream;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 pub mod tls;
-pub mod tunnel_probe;
 pub mod udp_accel;
-pub mod watchdog;
 pub mod watermark;

@@ -108,11 +108,6 @@ fn client_config(policy: &ServerCertPolicy, failure: &FailureSlot) -> Result<Cli
         .with_no_client_auth())
 }
 
-/// A client configuration for the tunnel liveness probe: only the handshake matters, not whose certificate it is.
-pub fn client_config_for_probe(policy: &ServerCertPolicy) -> Result<ClientConfig, StreamError> {
-    client_config(policy, &FailureSlot::default())
-}
-
 pub struct TlsStream {
     host: String,
     port: u16,
@@ -159,7 +154,6 @@ impl TlsStream {
             None => crate::connect::connect_tcp(&self.host, self.port).await?,
         };
         tcp.set_nodelay(true)?;
-        crate::socket_tuning::apply(&tcp);
         SockRef::from(&tcp).set_tcp_keepalive(&TcpKeepalive::new().with_time(KEEPALIVE_IDLE))?;
         self.peer = tcp.peer_addr().ok();
 

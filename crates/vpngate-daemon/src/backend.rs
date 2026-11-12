@@ -96,10 +96,8 @@ pub fn platform_dependencies(make_transport: MakeTransport, stale: Arc<StaleStat
     use std::net::{Ipv4Addr, SocketAddrV4};
 
     use vpngate_net::dns_server::{DnsProxyServer, SocketDnsUpstream};
-    use vpngate_net::session::TunnelProbe;
     use vpngate_net::session::{NetRuleSink, DNS_PROXY_LISTEN_ADDRESS};
     use vpngate_net::socks::{SocksServer, TunnelConnector};
-    use vpngate_net::tunnel_probe::TlsTunnelProbe;
     use vpngate_platform::macos::dns::SystemDns;
     use vpngate_platform::macos::socket_binder::MacSocketBinder;
     use vpngate_platform::macos::utun::Utun;
@@ -132,11 +130,6 @@ pub fn platform_dependencies(make_transport: MakeTransport, stale: Arc<StaleStat
                 Arc::new(Unsupported(format!("SOCKS proxy cannot bind to {iface}: {e}"))) as Arc<dyn SocksService>
             }
         }),
-        make_probe: Arc::new(|iface: &str| {
-            MacSocketBinder::for_interface(iface)
-                .ok()
-                .map(|b| Arc::new(TlsTunnelProbe::new(Arc::new(b))) as Arc<dyn TunnelProbe>)
-        }),
     }
 }
 
@@ -145,10 +138,8 @@ pub fn platform_dependencies(make_transport: MakeTransport, stale: Arc<StaleStat
     use std::net::{Ipv4Addr, SocketAddrV4};
 
     use vpngate_net::dns_server::{DnsProxyServer, SocketDnsUpstream};
-    use vpngate_net::session::TunnelProbe;
     use vpngate_net::session::{NetRuleSink, DNS_PROXY_LISTEN_ADDRESS};
     use vpngate_net::socks::{SocksServer, TunnelConnector};
-    use vpngate_net::tunnel_probe::TlsTunnelProbe;
     use vpngate_platform::windows::dns::WinDns;
     use vpngate_platform::windows::ip_helper::IpHelper;
     use vpngate_platform::windows::socket_binder::WinSocketBinder;
@@ -184,12 +175,6 @@ pub fn platform_dependencies(make_transport: MakeTransport, stale: Arc<StaleStat
                 }
             }
         }),
-        make_probe: Arc::new(|iface: &str| {
-            let ip: &dyn IpHelper = &SystemIpHelper;
-            WinSocketBinder::for_interface(iface, ip)
-                .ok()
-                .map(|b| Arc::new(TlsTunnelProbe::new(Arc::new(b))) as Arc<dyn TunnelProbe>)
-        }),
     }
 }
 
@@ -198,10 +183,8 @@ pub fn platform_dependencies(make_transport: MakeTransport, stale: Arc<StaleStat
     use std::net::{Ipv4Addr, SocketAddrV4};
 
     use vpngate_net::dns_server::{DnsProxyServer, SocketDnsUpstream};
-    use vpngate_net::session::TunnelProbe;
     use vpngate_net::session::{NetRuleSink, DNS_PROXY_LISTEN_ADDRESS};
     use vpngate_net::socks::{SocksServer, TunnelConnector};
-    use vpngate_net::tunnel_probe::TlsTunnelProbe;
     use vpngate_platform::linux::socket_binder::LinuxSocketBinder;
     use vpngate_platform::linux::tun::LinuxTun;
     use vpngate_platform::linux::{LinuxDns, LinuxNetConfig};
@@ -233,11 +216,6 @@ pub fn platform_dependencies(make_transport: MakeTransport, stale: Arc<StaleStat
                 Arc::new(Unsupported(format!("SOCKS proxy cannot bind to {iface}: {e}"))) as Arc<dyn SocksService>
             }
         }),
-        make_probe: Arc::new(|iface: &str| {
-            LinuxSocketBinder::for_interface(iface)
-                .ok()
-                .map(|b| Arc::new(TlsTunnelProbe::new(Arc::new(b))) as Arc<dyn TunnelProbe>)
-        }),
     }
 }
 
@@ -260,7 +238,6 @@ pub fn platform_dependencies(make_transport: MakeTransport, _stale: Arc<StaleSta
             Ok(Arc::new(Unsupported::missing()) as Arc<dyn DnsProxyService>)
         }),
         make_socks: Arc::new(|_port, _iface, _dns| Arc::new(Unsupported::missing()) as Arc<dyn SocksService>),
-        make_probe: Arc::new(|_iface: &str| None),
     }
 }
 

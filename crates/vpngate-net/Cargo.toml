@@ -26,9 +26,6 @@ tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring
 vpngate-core.workspace = true
 vpngate-platform.workspace = true
 
-[target.'cfg(target_os = "linux")'.dependencies]
-libc = "0.2.191"
-
 [features]
 # Test doubles (fake SoftEther server, replaying entropy) for other crates' tests.
 testing = ["dep:serde_json"]

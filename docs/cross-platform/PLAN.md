@@ -315,26 +315,18 @@ over AT-SPI under Xvfb, Gradle Managed Devices (ATD), UiAutomator + `DevicePolic
   U04 trailing-deflate vector, the U07 system-trust accept path in `live.yml`.
 Left to a human afterwards: approving golden images once, SmartScreen on the unsigned MSI, OEM phone quirks.
 
-### Phase 9 — Relay resilience and speed (ideas from HRSadeghi/vpngate_ubuntu, 2026-11-12)
-Source: the Python/Linux port <https://github.com/HRSadeghi/vpngate_ubuntu> (read as untrusted reference; nothing is copied,
-the behaviour is re-implemented in Rust). Our `spawn_counters` in `vpngate-net/src/session.rs` only reports bytes, so a relay
-that connects and then carries no data leaves the user offline.
-- **U38 Dead-relay watchdog, report only (`vpngate-net`).** Judge the inbound rate over a 20 s window (starving < 1500 B/s);
-  when starving or silent, probe the tunnel with a real TLS handshake through it (a bare TCP connect passes on relays that
-  carry no data); two missed probes in a row (the counter survives a trickle of keep-alive echoes) put "The relay stopped
-  sending data" in the log, and a later successful probe says it is carrying data again. **Fail closed (user decision):**
-  the capture routes and the resolver are never touched, so a dead relay means offline, never a leak. Off in SOCKS mode and
-  on Android. The connect-time "is the tunnel alive" check of the reference was left out: a network that blocks every probe
-  host would never connect.
-- **U39 (dropped, user decision).** Rotating to another relay on a stall (and any throttle detector) will not be added to any app.
-- **U40 DNS proxy walks the resolver list (`vpngate-net`).** Replaces the documented "an upstream failure is SERVFAIL, not a
-  fallback" rule (see DECISIONS): on timeout try the next server of the list, then tunnelled 1.1.1.1 / 8.8.8.8 as the last
-  resort. Update the test `upstream_failure_is_servfail_not_a_fallback`. Independent of U38/U39.
-- **U41 Socket tuning (`vpngate-net/src/socket_tuning.rs`).** Opt-in through the daemon's environment: `VPNGATE_TCP_BUFFER_KB`
-  and, on Linux, `VPNGATE_TCP_CONGESTION=bbr`. Defaults unchanged: a fixed `SO_SNDBUF`/`SO_RCVBUF` turns off the kernel's
-  buffer autotuning on Linux, so a bigger fixed value is a measurement to make, not a better default (the reference's
-  512 KB claim rests on a 16 KB default that Linux does not have). `TCP_QUICKACK` was left out (it is not sticky). A
-  throughput comparison on a high-RTT relay is handed to the user.
+### Phase 9 — Ideas from HRSadeghi/vpngate_ubuntu (2026-11-12)
+Source: the Python/Linux port <https://github.com/HRSadeghi/vpngate_ubuntu> (read as untrusted reference; nothing copied).
+Of four ideas, only U40 was kept after review with the user.
+- **U38 Relay watchdog. Dropped.** A first version (probe through the tunnel, fail-open, report) was built and removed: fail-open
+  leaks the real address (user wants offline-but-private), and a report-only version adds background probes to third-party
+  hosts for a log line.
+- **U39 Rotate to another relay on a stall. Dropped** (user decision: not wanted in any app).
+- **U40 DNS proxy walks the resolver list (`vpngate-net/src/dns_proxy.rs`).** Replaces the rule that an upstream failure is a
+  SERVFAIL and never a fallback: a timeout or a SERVFAIL answer moves on to the next resolver of the list (tunnel resolvers for
+  tunnelled names, the physical ones for `direct` names); NXDOMAIN is final; an empty list still fails closed. No public
+  resolver is ever added (user decision), so queries stay with the resolvers the network gave.
+- **U41 Socket tuning. Dropped.** Speculative (a fixed buffer turns off Linux autotuning); revisit only with a measured problem.
 
 ## Dependency graph
 ```

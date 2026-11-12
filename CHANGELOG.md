@@ -2,11 +2,8 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
-### Added
-- A watchdog for the relay: when the connection to a relay stops carrying data (or only trickles keep-alives), the service tests the tunnel with a TLS handshake through it and the log says "The relay stopped sending data…" (and later that it is carrying data again). Traffic stays blocked meanwhile; nothing goes outside the tunnel (Windows, macOS, Linux; not in SOCKS mode or on Android).
-- Optional TCP tuning for the relay connection through the service's environment: `VPNGATE_TCP_BUFFER_KB`, and on Linux `VPNGATE_TCP_CONGESTION` (e.g. `bbr`).
 ### Changed
-- The DNS proxy (used by domain routing rules) now tries the next resolver when one times out or answers SERVFAIL, and finally 1.1.1.1 and 8.8.8.8 through the tunnel, instead of failing on the first one. Domains with a Direct rule never use the public resolvers.
+- The DNS proxy (used by domain routing rules) now tries the next resolver of the list when one times out or answers SERVFAIL, instead of failing on the first one. It only uses the resolvers the network provides, never a public one.
 
 ## [1.1.1] - 2026-11-12
 Filter menu fix release.
