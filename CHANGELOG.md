@@ -2,6 +2,9 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+
+## [1.1.2] - 2026-11-12
+DNS resolver fallback.
 ### Changed
 - The DNS proxy (used by domain routing rules) now tries the next resolver of the list when one times out or answers SERVFAIL, instead of failing on the first one. It only uses the resolvers the network provides, never a public one.
 
