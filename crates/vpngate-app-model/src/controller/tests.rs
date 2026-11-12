@@ -417,3 +417,85 @@ async fn test_connection_probes_one_relay_per_request_and_sorts_by_result() {
     let order: Vec<String> = ctl.read(|m| m.servers().iter().map(|s| s.host_name.clone()).collect());
     assert_eq!((order[0].as_str(), order[9].as_str()), ("h10", "h3"), "fastest first, failures last: {order:?}");
 }
+
+fn stalled(server: &str) -> Line {
+    let mut e = HelperEvent::new(ConnectionState::Connected);
+    e.server = Some(server.into());
+    e.log = Some(vpngate_core::ipc::RELAY_STALLED_LOG.into());
+    Line::Event(e)
+}
+
+fn connects(r: &Rig) -> Vec<String> {
+    r.daemon.requests().iter().filter(|q| q.cmd == "connect").filter_map(|q| q.host.clone()).collect()
+}
+
+#[tokio::test]
+async fn a_stalled_relay_is_replaced_by_the_best_tested_other_one() {
+    let r = rig(true, vec![server("a", "1.1.1.1"), server("b", "2.2.2.2"), server("c", "3.3.3.3")]).await;
+    r.ctl.load_list().await;
+    let (b, c) = (server("b", "2.2.2.2").id().to_string(), server("c", "3.3.3.3").id().to_string());
+    r.ctl.change(|m| {
+        m.set_probe(&b, Probe::Failed("timeout".into()));
+        m.set_probe(&c, Probe::Ok { connect_ms: 90, hello_ms: None, port: None });
+    });
+    r.ctl.connect("a").await;
+    r.daemon.push(&event(ConnectionState::Connected, "1.1.1.1"));
+    assert!(eventually(|| r.ctl.read(|m| m.state) == ConnectionState::Connected).await);
+    r.daemon.push(&stalled("1.1.1.1"));
+    assert!(
+        eventually(|| r.daemon.requests().iter().any(|q| q.cmd == "disconnect")).await,
+        "the dead session is dropped"
+    );
+    assert!(r.ctl.read(|m| m.log_text()).contains("switching to c"), "{}", r.ctl.read(|m| m.log_text()));
+    r.daemon.push(&event(ConnectionState::Disconnected, "1.1.1.1"));
+    assert!(eventually(|| connects(&r).len() == 2).await);
+    assert_eq!(connects(&r), ["1.1.1.1", "3.3.3.3"], "the tested one, not the one that failed its test");
+}
+
+#[tokio::test]
+async fn a_stall_with_no_other_server_retries_the_same_one() {
+    let r = rig(true, vec![server("a", "1.1.1.1")]).await;
+    r.ctl.load_list().await;
+    r.ctl.connect("a").await;
+    r.daemon.push(&event(ConnectionState::Connected, "1.1.1.1"));
+    assert!(eventually(|| r.ctl.read(|m| m.state) == ConnectionState::Connected).await);
+    r.daemon.push(&stalled("1.1.1.1"));
+    assert!(eventually(|| r.daemon.requests().iter().any(|q| q.cmd == "disconnect")).await);
+    r.daemon.push(&event(ConnectionState::Disconnected, "1.1.1.1"));
+    assert!(eventually(|| connects(&r).len() == 2).await);
+    assert_eq!(connects(&r), ["1.1.1.1", "1.1.1.1"]);
+}
+
+#[tokio::test]
+async fn a_stall_is_left_to_the_user_when_auto_reconnect_is_off() {
+    let r = rig(true, vec![server("a", "1.1.1.1"), server("b", "2.2.2.2")]).await;
+    r.ctl.update_settings(|s| s.auto_reconnect = false);
+    r.ctl.load_list().await;
+    r.ctl.connect("a").await;
+    r.daemon.push(&event(ConnectionState::Connected, "1.1.1.1"));
+    assert!(eventually(|| r.ctl.read(|m| m.state) == ConnectionState::Connected).await);
+    r.daemon.push(&stalled("1.1.1.1"));
+    assert!(eventually(|| r.ctl.read(|m| m.log_text()).contains("stopped sending data")).await);
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    assert!(!r.daemon.requests().iter().any(|q| q.cmd == "disconnect"));
+    assert_eq!(r.ctl.read(|m| m.state), ConnectionState::Connected);
+}
+
+#[tokio::test]
+async fn relays_that_stalled_are_not_picked_again_until_a_manual_connect() {
+    let r = rig(true, vec![server("a", "1.1.1.1"), server("b", "2.2.2.2")]).await;
+    r.ctl.load_list().await;
+    r.ctl.connect("a").await;
+    for (from, expect) in [("1.1.1.1", 2), ("2.2.2.2", 3)] {
+        r.daemon.push(&event(ConnectionState::Connected, from));
+        assert!(eventually(|| r.ctl.read(|m| m.state) == ConnectionState::Connected).await);
+        r.daemon.push(&stalled(from));
+        assert!(
+            eventually(|| r.daemon.requests().iter().filter(|q| q.cmd == "disconnect").count() == expect - 1).await
+        );
+        r.daemon.push(&event(ConnectionState::Disconnected, from));
+        assert!(eventually(|| connects(&r).len() == expect).await);
+    }
+    // a stalled, then b stalled: nothing left, so it goes back to retrying b (the current one)
+    assert_eq!(connects(&r)[..2], ["1.1.1.1", "2.2.2.2"]);
+}

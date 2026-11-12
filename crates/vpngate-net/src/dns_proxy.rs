@@ -33,7 +33,13 @@ pub struct DnsProxy {
     pub routing: RoutingConfig,
     pub tunnel_dns_servers: Vec<String>,
     pub direct_dns_servers: Vec<String>,
+    /// Tried after the tunnel's own resolvers fail (never for a `direct` domain, and never when no tunnel resolver is
+    /// configured yet).
+    pub tunnel_fallback_dns: Vec<String>,
 }
+
+/// The last resort for a tunnelled query, after the lease's own resolvers.
+pub const TUNNEL_FALLBACK_DNS: [&str; 2] = ["1.1.1.1", "8.8.8.8"];
 
 impl DnsProxy {
     pub fn new(sink: Arc<dyn DynamicRuleSink>, upstream: Arc<dyn DnsUpstream>) -> Self {
@@ -44,6 +50,7 @@ impl DnsProxy {
             routing: RoutingConfig::default(),
             tunnel_dns_servers: Vec::new(),
             direct_dns_servers: Vec::new(),
+            tunnel_fallback_dns: TUNNEL_FALLBACK_DNS.iter().map(|s| s.to_string()).collect(),
         }
     }
 
@@ -56,12 +63,26 @@ impl DnsProxy {
         if action == Some(RoutingAction::Block) {
             return dns_message::blocked_response(query);
         }
-        let servers =
-            if action == Some(RoutingAction::Direct) { &self.direct_dns_servers } else { &self.tunnel_dns_servers };
-        let Some(server) = servers.first() else { return dns_message::servfail_response(query) };
-        let Some(response) = self.upstream.query(query, server, self.timeout_ms).await else {
-            return dns_message::servfail_response(query);
-        };
+        let direct = action == Some(RoutingAction::Direct);
+        let servers = if direct { &self.direct_dns_servers } else { &self.tunnel_dns_servers };
+        // The lease's resolver is often a half-broken home router on a volunteer relay: walk the list instead of
+        // wedging on the first server. A tunnelled query may finally go to a public resolver; a `direct` one never
+        // does (its route would be the tunnel's under a full capture, against the rule).
+        let fallbacks = self.tunnel_fallback_dns.iter().filter(|s| !servers.contains(s));
+        let order: Vec<String> =
+            servers.iter().cloned().chain(fallbacks.filter(|_| !direct && !servers.is_empty()).cloned()).collect();
+        let mut response = None;
+        for server in &order {
+            match self.upstream.query(query, server, self.timeout_ms).await {
+                // A resolver that answers SERVFAIL is as useless as one that does not answer.
+                Some(r) if dns_message::response_code(&r) != Some(2) => {
+                    response = Some(r);
+                    break;
+                }
+                other => response = response.or(other),
+            }
+        }
+        let Some(response) = response else { return dns_message::servfail_response(query) };
         // Only for an address a rule explicitly decided on: the structural routes (full capture, or its absence with
         // `default_action: direct`) already do the right thing for everything else.
         if let Some(action) = action {
@@ -88,15 +109,27 @@ mod tests {
         calls: Mutex<Vec<(String, u32, Vec<u8>)>>,
         /// A records to answer with; `None` = no answer (timeout).
         answers: Mutex<Option<Vec<String>>>,
+        /// Servers that never answer.
+        fail_servers: Mutex<Vec<String>>,
+        /// The RCODE of the n-th answer (0 when the list is shorter).
+        rcodes: Mutex<Vec<u8>>,
     }
 
     #[async_trait]
     impl DnsUpstream for Upstream {
         async fn query(&self, message: &[u8], server: &str, timeout_ms: u32) -> Option<Vec<u8>> {
-            self.calls.lock().unwrap().push((server.to_string(), timeout_ms, message.to_vec()));
+            let n = {
+                let mut calls = self.calls.lock().unwrap();
+                calls.push((server.to_string(), timeout_ms, message.to_vec()));
+                calls.len() - 1
+            };
+            if self.fail_servers.lock().unwrap().iter().any(|s| s == server) {
+                return None;
+            }
             let answers = self.answers.lock().unwrap().clone()?;
             let mut p = message.to_vec();
             p[2] |= 0x80;
+            p[3] = (p[3] & 0xf0) | self.rcodes.lock().unwrap().get(n).copied().unwrap_or(0);
             p[6] = (answers.len() >> 8) as u8;
             p[7] = (answers.len() & 0xff) as u8;
             for a in &answers {
@@ -133,6 +166,10 @@ mod tests {
 
     fn std_proxy(rules: Vec<RoutingRule>, default_action: RoutingAction) -> (DnsProxy, Arc<Upstream>, Arc<Sink>) {
         make(rules, default_action, &["10.0.0.1"], &["9.9.9.9"])
+    }
+
+    fn rule(v: &str, a: RoutingAction) -> RoutingRule {
+        suffix(v, a)
     }
 
     fn suffix(v: &str, a: RoutingAction) -> RoutingRule {
@@ -196,11 +233,46 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn upstream_failure_is_servfail_not_a_fallback() {
+    async fn every_resolver_failing_is_servfail() {
         let (p, up, _) = std_proxy(vec![], RoutingAction::Proxy);
         let r = p.handle(&dns_message::a_query("example.com", 1)).await;
         assert_eq!(rcode(&r), 2);
-        assert_eq!(servers(&up).len(), 1);
+        // the lease's resolver, then the public ones
+        assert_eq!(servers(&up), ["10.0.0.1", "1.1.1.1", "8.8.8.8"]);
+    }
+
+    #[tokio::test]
+    async fn a_resolver_that_times_out_is_skipped_for_the_next_one() {
+        let (p, up, _) = std_proxy(vec![], RoutingAction::Proxy);
+        up.fail_servers.lock().unwrap().push("10.0.0.1".to_string());
+        answer(&up, &["93.184.216.34"]);
+        let r = p.handle(&dns_message::a_query("example.com", 1)).await;
+        assert_eq!(rcode(&r), 0);
+        assert_eq!(servers(&up), ["10.0.0.1", "1.1.1.1"], "stops at the first resolver that answers");
+    }
+
+    #[tokio::test]
+    async fn a_servfail_answer_moves_on_but_nxdomain_is_final() {
+        let (p, up, _) = std_proxy(vec![], RoutingAction::Proxy);
+        *up.rcodes.lock().unwrap() = vec![2, 0];
+        answer(&up, &["93.184.216.34"]);
+        let r = p.handle(&dns_message::a_query("example.com", 1)).await;
+        assert_eq!(rcode(&r), 0);
+        assert_eq!(servers(&up), ["10.0.0.1", "1.1.1.1"]);
+        let (p, up, _) = std_proxy(vec![], RoutingAction::Proxy);
+        *up.rcodes.lock().unwrap() = vec![3];
+        answer(&up, &[]);
+        let r = p.handle(&dns_message::a_query("nope.example", 1)).await;
+        assert_eq!(rcode(&r), 3);
+        assert_eq!(servers(&up), ["10.0.0.1"]);
+    }
+
+    #[tokio::test]
+    async fn a_direct_domain_never_falls_back_to_a_public_resolver() {
+        let (p, up, _) = std_proxy(vec![rule("example.com", RoutingAction::Direct)], RoutingAction::Proxy);
+        let r = p.handle(&dns_message::a_query("a.example.com", 1)).await;
+        assert_eq!(rcode(&r), 2);
+        assert_eq!(servers(&up), ["9.9.9.9"], "only the physical network's own resolvers");
     }
 
     #[tokio::test]
@@ -233,6 +305,8 @@ mod tests {
             }
             let (mut p, up, sink) = make(rules, default_action, &strs(&cfg["tunnelDns"]), &strs(&cfg["directDns"]));
             p.timeout_ms = cfg["timeoutMs"].as_u64().unwrap() as u32;
+            // The recorded transcripts predate the public fallback resolvers; the walk itself is covered above.
+            p.tunnel_fallback_dns.clear();
             // The recorded upstream is deterministic: it answers with the recorded A records, or not at all.
             let calls = c["upstreamCalls"].as_array().unwrap();
             if let Some(call) = calls.first() {

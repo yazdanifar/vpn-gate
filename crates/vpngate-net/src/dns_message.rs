@@ -26,6 +26,11 @@ pub fn query_name(p: &[u8]) -> Option<String> {
 }
 
 /// A recursive type-A query for `name` (a plain dotted DNS name).
+/// The RCODE of a DNS message (0 = no error, 2 = SERVFAIL, 3 = NXDOMAIN); `None` if it is too short to have one.
+pub fn response_code(p: &[u8]) -> Option<u8> {
+    (p.len() >= 12).then(|| p[3] & 0x0F)
+}
+
 pub fn a_query(name: &str, id: u16) -> Vec<u8> {
     let mut q = vec![(id >> 8) as u8, (id & 0xff) as u8, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0];
     for label in name.split('.').filter(|l| !l.is_empty()) {

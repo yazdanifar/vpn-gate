@@ -32,7 +32,7 @@ fn an_idle_but_healthy_tunnel_is_probed_rarely_and_stays_open() {
 fn a_silent_relay_fails_open_after_two_misses() {
     let (mut w, mut now, mut bytes) = (Watchdog::new(0.0, 0), 0.0, 0);
     let verdicts = run(&mut w, &mut now, &mut bytes, 40, 0, false);
-        assert_eq!(verdicts[0], Verdict::Healthy, "one miss is not enough");
+    assert_eq!(verdicts[0], Verdict::Healthy, "one miss is not enough");
     assert_eq!(verdicts[1], Verdict::FailOpen);
     assert!(w.failed_open());
 }
