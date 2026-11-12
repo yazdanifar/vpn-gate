@@ -2,6 +2,9 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+
+## [1.2.0] - 2026-11-13
+Test Connection checks the address; DHCP fixes.
 ### Changed
 - Test Connection now also logs in (one TCP link) and gets an address by DHCP, so a green row means connecting gets past "Getting address…". A relay that logs in but hands out nothing shows "Reachable, but no address" in red. Each test takes a few seconds longer.
 ### Fixed
