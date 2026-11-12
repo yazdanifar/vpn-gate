@@ -315,6 +315,19 @@ over AT-SPI under Xvfb, Gradle Managed Devices (ATD), UiAutomator + `DevicePolic
   U04 trailing-deflate vector, the U07 system-trust accept path in `live.yml`.
 Left to a human afterwards: approving golden images once, SmartScreen on the unsigned MSI, OEM phone quirks.
 
+### Phase 9 — Ideas from HRSadeghi/vpngate_ubuntu (2026-11-12)
+Source: the Python/Linux port <https://github.com/HRSadeghi/vpngate_ubuntu> (read as untrusted reference; nothing copied).
+Of four ideas, only U40 was kept after review with the user.
+- **U38 Relay watchdog. Dropped.** A first version (probe through the tunnel, fail-open, report) was built and removed: fail-open
+  leaks the real address (user wants offline-but-private), and a report-only version adds background probes to third-party
+  hosts for a log line.
+- **U39 Rotate to another relay on a stall. Dropped** (user decision: not wanted in any app).
+- **U40 DNS proxy walks the resolver list (`vpngate-net/src/dns_proxy.rs`).** Replaces the rule that an upstream failure is a
+  SERVFAIL and never a fallback: a timeout or a SERVFAIL answer moves on to the next resolver of the list (tunnel resolvers for
+  tunnelled names, the physical ones for `direct` names); NXDOMAIN is final; an empty list still fails closed. No public
+  resolver is ever added (user decision), so queries stay with the resolvers the network gave.
+- **U41 Socket tuning. Dropped.** Speculative (a fixed buffer turns off Linux autotuning); revisit only with a measured problem.
+
 ## Dependency graph
 ```
 U00 → U01a → U01b → U02 → {U03, U04, U05, U06} → U07 → U08a → U08b → U09 → U10a → U10b → U11 → U12 → U13 → U14 → U15
