@@ -2,9 +2,17 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+
+## [1.1.1] - 2026-11-12
+Filter menu fix release.
 ### Fixed
 - macOS: the Filter menu in the toolbar (Country, Logging, Favorites) no longer closes by itself while you pick. The toolbar now watches only what it shows, so Test Connection results, log lines, traffic and helper polling no longer rebuild it, and Test Connection results reach the table in batches (at most four a second).
 - Windows: the Country box no longer closes when a list refresh brings the same countries.
+### Added
+- Tests that an open Country menu survives list refreshes, Test Connection results and daemon events: on macOS (the real app is launched against a fake helper and clicked through with the accessibility API, CI job `mac-ui`), Windows, Linux and Android; a favorites-only test on Windows; a feature-to-test coverage table in `docs/FEATURES.md`.
+- The macOS app honours `VPNGATE_HELPER_SOCKET` (for the launch test).
+### Changed
+- The macOS test runner uses the main run loop, which removes the false ThreadSanitizer data-race reports.
 
 ## [1.1.0] - 2026-11-10
 Test Connection on Windows, per-relay results on every app, and a live CI check on every OS.
