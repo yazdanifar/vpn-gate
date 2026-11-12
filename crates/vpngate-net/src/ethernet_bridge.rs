@@ -88,7 +88,10 @@ struct State {
     lease: Option<Lease>,
     arp_cache: HashMap<u32, ArpEntry>,
     waiting: HashMap<u32, Pending>,
-    last_dhcp: Option<DhcpMessage>,
+    /// Replies to the current transaction not yet consumed by `wait_dhcp` (bounded).
+    dhcp_inbox: Vec<DhcpMessage>,
+    /// Frames received from the hub since the bridge was made (of any kind): zero means the relay forwards nothing.
+    rx_frames: u64,
     xid: u32,
     v6_prefix: Option<V6Prefix>,
     v6_router: Option<V6Router>,
@@ -250,22 +253,54 @@ impl EthernetBridge {
         let x = 1 + lock(&self.entropy).below(u32::MAX as usize) as u32;
         let mut s = lock(&self.state);
         s.xid = x;
-        s.last_dhcp = None;
+        s.dhcp_inbox.clear();
         x
     }
 
     pub async fn acquire_lease(&self) -> Result<Lease, StreamError> {
-        for _ in 0..self.timing.dhcp_retries {
-            let x = self.new_xid();
-            self.send_dhcp(&DhcpMessage::new(DhcpType::Discover, x, self.mac));
-            let Some(offer) = self.wait_dhcp(&[DhcpType::Offer]).await else { continue };
-            let mut req = DhcpMessage::new(DhcpType::Request, x, self.mac);
-            req.requested_ip = Some(offer.yiaddr);
-            req.server_id = offer.server_id;
-            lock(&self.state).last_dhcp = None;
-            self.send_dhcp(&req);
-            let Some(reply) = self.wait_dhcp(&[DhcpType::Ack, DhcpType::Nak]).await else { continue };
+        // One transaction id for every retransmission (RFC 2131 §4.1): a slow relay's Offer to an earlier Discover is
+        // still accepted instead of being dropped as a stranger, which made a relay answering in over `dhcp_timeout`
+        // fail every attempt by one round. Only a NAK starts a fresh transaction.
+        let mut x = self.new_xid();
+        // The Offer we sent a Request for: a late Ack in a later round still completes the lease.
+        let mut pending: Option<DhcpMessage> = None;
+        for round in 0..self.timing.dhcp_retries {
+            // Two silent rounds with not one frame from the hub (not even other clients' broadcasts): the relay logs us
+            // in but forwards nothing, so more retries only keep the user waiting.
+            if round >= 2 && lock(&self.state).rx_frames == 0 {
+                return Err(StreamError::Protocol(
+                    "DHCP failed: the relay accepted the login but sends no traffic. Try another server".into(),
+                ));
+            }
+            let offer = match pending.clone() {
+                Some(o) => o,
+                None => {
+                    self.send_dhcp(&DhcpMessage::new(DhcpType::Discover, x, self.mac));
+                    let Some(m) = self.wait_dhcp(&[DhcpType::Offer, DhcpType::Ack, DhcpType::Nak]).await else {
+                        continue;
+                    };
+                    if m.kind == DhcpType::Nak {
+                        x = self.new_xid();
+                        continue;
+                    }
+                    m
+                }
+            };
+            let reply = if offer.kind == DhcpType::Ack {
+                // An Ack for a Request sent in an earlier round arrived while waiting for an Offer.
+                offer.clone()
+            } else {
+                let mut req = DhcpMessage::new(DhcpType::Request, x, self.mac);
+                req.requested_ip = Some(offer.yiaddr);
+                req.server_id = offer.server_id;
+                self.send_dhcp(&req);
+                pending = Some(offer.clone());
+                let Some(reply) = self.wait_dhcp(&[DhcpType::Ack, DhcpType::Nak]).await else { continue };
+                reply
+            };
             if reply.kind == DhcpType::Nak {
+                x = self.new_xid();
+                pending = None;
                 continue; // start over immediately
             }
             let l = Lease {
@@ -320,8 +355,11 @@ impl EthernetBridge {
     async fn wait_dhcp(&self, types: &[DhcpType]) -> Option<DhcpMessage> {
         let end = Instant::now() + Duration::from_secs_f64(self.timing.dhcp_timeout);
         while Instant::now() < end {
-            if let Some(m) = lock(&self.state).last_dhcp.clone().filter(|m| types.contains(&m.kind)) {
-                return Some(m);
+            {
+                let mut st = lock(&self.state);
+                if let Some(i) = st.dhcp_inbox.iter().position(|m| types.contains(&m.kind)) {
+                    return Some(st.dhcp_inbox.remove(i));
+                }
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
@@ -340,6 +378,7 @@ impl EthernetBridge {
         if f.len() < 14 {
             return;
         }
+        lock(&self.state).rx_frames += 1;
         let dst: Mac = f[0..6].try_into().expect("6 bytes");
         let ethertype = rd16(f, 12);
         let payload = &f[14..];
@@ -386,7 +425,10 @@ impl EthernetBridge {
                         if let Some(m) = DhcpMessage::parse(&u.payload) {
                             let mut s = lock(&self.state);
                             if m.xid == s.xid {
-                                s.last_dhcp = Some(m);
+                                if s.dhcp_inbox.len() >= 8 {
+                                    s.dhcp_inbox.remove(0);
+                                }
+                                s.dhcp_inbox.push(m);
                             }
                             return;
                         }

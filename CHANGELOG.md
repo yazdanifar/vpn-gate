@@ -2,6 +2,9 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+### Fixed
+- Connecting no longer hangs on "Getting address…" with slow relays: late DHCP replies (an Offer or Ack that arrives after the retry) are accepted instead of being dropped.
+- A relay that logs you in but forwards no traffic at all now fails after about 8 seconds with "Try another server", instead of waiting out all six DHCP attempts (about 48 seconds).
 
 ## [1.1.2] - 2026-11-12
 DNS resolver fallback.
