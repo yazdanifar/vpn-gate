@@ -77,6 +77,7 @@ private struct FilterMenu: View, Equatable {
         } label: {
             Label("Filter", systemImage: active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
         }
+        .accessibilityIdentifier("toolbar.filter")
     }
 }
 
@@ -120,6 +121,7 @@ private struct ServerListWindow: View {
                     } label: {
                         Label("Test Connection", systemImage: "speedometer")
                     }
+                    .accessibilityIdentifier("toolbar.test")
                     .help("Try a real VPN handshake with the listed servers and show the connect time from this Mac")
                     RefreshToolbarButton(facets: model.facets, model: model)
                 }

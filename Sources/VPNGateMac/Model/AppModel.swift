@@ -110,9 +110,16 @@ final class AppModel: ObservableObject {
     /// Failed attempts since the last good connection (shown in the log only; there is no limit).
     private(set) var reconnectAttempts = 0
 
+    /// The helper's socket. `VPNGATE_HELPER_SOCKET` points the app at another one; the launch test (scripts/test-app-launch.sh)
+    /// uses it to run the real app against a fake helper. It only reaches a process the user started themselves.
+    nonisolated static var defaultSocketPath: String {
+        let v = ProcessInfo.processInfo.environment["VPNGATE_HELPER_SOCKET"] ?? ""
+        return v.isEmpty ? helperSocketPath : v
+    }
+
     /// `autoStart: false` (tests) skips the background timer, the cache and the server-list download.
     init(
-        socketPath: String = helperSocketPath, defaults: UserDefaults = .standard, autoStart: Bool = true,
+        socketPath: String = AppModel.defaultSocketPath, defaults: UserDefaults = .standard, autoStart: Bool = true,
         openInstaller: @escaping () -> Bool = { HelperInstaller.openInstaller() },
         loginItem: LoginItemControlling = SMAppLoginItem(),
         accountManager: AccountManager? = nil, connectionLog: ConnectionLogStore? = nil,
