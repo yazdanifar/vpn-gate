@@ -501,8 +501,9 @@ fn search_and_clear_filters(h: &Harness) {
     wait_until("the country search", || r.visible_ids().len() == 2);
     click(&clear);
     wait_until("the filters to clear", || r.visible_ids().len() == 5);
-    assert_eq!(search.text(), "");
-    assert!(!clear.is_visible());
+    // The model is cleared first and the window follows on its next refresh, so wait for the entry and the button too.
+    wait_until("the search entry to empty", || search.text() == "");
+    wait_until("the Clear Filters button to hide", || !clear.is_visible());
     assert_eq!(r.table_ids(), BY_SCORE);
 }
 
