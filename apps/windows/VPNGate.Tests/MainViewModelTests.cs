@@ -49,6 +49,18 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public async Task ARefreshWithTheSameCountriesDoesNotRepublishThem()
+    {
+        var (d, ipc, vm, _) = await Make();
+        await using var _d = d; await using var _i = ipc;
+        var changes = new List<string?>();
+        vm.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+        await vm.RefreshAsync();
+        Assert.DoesNotContain(nameof(MainViewModel.Countries), changes);
+        Assert.Equal(new[] { "Japan", "Korea" }, vm.Countries);
+    }
+
+    [Fact]
     public async Task FallsBackToADownloadWhenThereIsNoList()
     {
         await using var d = new FakeDaemon().Start();
