@@ -906,7 +906,7 @@ async fn a_relay_that_carries_nothing_is_reported_once_and_the_capture_stays() {
     assert_eq!(s.snapshot().state, ConnectionState::Connected);
     s.disconnect();
     idle(&s, 3).await;
-    assert_eq!(h.nets()[0].torn_down(), 1, "teardown still cleans up after a fail-open");
+    assert_eq!(h.nets()[0].torn_down(), 1, "teardown still cleans up after a stall");
 }
 
 #[tokio::test(start_paused = true)]
