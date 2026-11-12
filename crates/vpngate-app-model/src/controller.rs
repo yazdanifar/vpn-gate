@@ -2,16 +2,13 @@
 //! retries list connections (the daemon makes a single attempt; `MainViewModel.cs` does the same on Windows).
 //! Everything runs on the caller's tokio runtime; the UI is told about changes through `notify` and reads the model.
 
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::sync::mpsc::UnboundedReceiver;
 use uuid::Uuid;
 use vpngate_core::client_account::{AccountAuthType, ConnectOptions};
-use vpngate_core::ipc::{
-    ConnectionState, HelperEvent, HelperRequest, ProbeTarget, ProxyKind, ProxySettings, RELAY_STALLED_LOG,
-};
+use vpngate_core::ipc::{ConnectionState, HelperEvent, HelperRequest, ProbeTarget, ProxyKind, ProxySettings};
 use vpngate_core::server_list::VpnServer;
 use vpngate_ipc_client::{ClientError, ClientEvent, IpcClient};
 
@@ -35,22 +32,6 @@ impl Stores {
         let path = std::env::temp_dir().join(format!("vg-mem-{}/accounts.json", Uuid::new_v4()));
         Stores { accounts: AccountStore::new(path, secrets.clone()), history: History::new(None), secrets }
     }
-}
-
-/// The server to switch to after `current` stalled: from the list as the user sees it (filter and sort), the ones that
-/// tested fine first by connect time, then untested ones in list order; never one that failed its test or that stalled
-/// recently. `None` when nothing is left.
-fn next_candidate(m: &AppModel, stalled: &HashMap<String, u64>, current: &str) -> Option<String> {
-    let mut candidates: Vec<(i64, usize, &str)> = m
-        .servers()
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| s.id() != current && !stalled.contains_key(s.id()))
-        .filter(|(_, s)| !matches!(m.probes.get(s.id()), Some(Probe::Failed(_))))
-        .map(|(i, s)| (Probe::sort_rank(m.probes.get(s.id())), i, s.id()))
-        .collect();
-    candidates.sort();
-    candidates.first().map(|c| c.2.to_string())
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -88,12 +69,7 @@ struct Flow {
     /// The history entry of the connected period in progress.
     history_id: Option<Uuid>,
     testing: bool,
-    /// List servers that stalled (carried no data), by the time they did; skipped when picking the next relay.
-    stalled: HashMap<String, u64>,
 }
-
-/// How long a relay that stalled is left out of the choice of the next one.
-const STALLED_MEMORY_MS: u64 = 10 * 60 * 1000;
 
 struct Inner {
     ipc: IpcClient,
@@ -206,12 +182,8 @@ impl Controller {
         let (was_in, was_out) = self.read(|m| (m.bytes_in, m.bytes_out));
         self.change(|m| m.apply_event(e, now, pending));
         if e.state == ConnectionState::Connected {
-            if e.log.as_deref() == Some(RELAY_STALLED_LOG) {
-                self.rotate_relay(now);
-            } else {
-                lock(&self.0.flow).attempts = 0;
-                self.history_start(now);
-            }
+            lock(&self.0.flow).attempts = 0;
+            self.history_start(now);
         } else if e.state == ConnectionState::Disconnected {
             self.history_end(now, was_in.max(e.bytes_in), was_out.max(e.bytes_out), e.error.clone());
             self.consider_reconnect();
@@ -275,37 +247,6 @@ impl Controller {
         });
     }
 
-    /// The daemon says the relay carries no data (it has already let traffic go direct). For a list connection with
-    /// automatic reconnect: remember the relay as stalled, aim the reconnect at the next candidate and drop the session;
-    /// the daemon's "disconnected" then starts the usual reconnect timer. Otherwise the user decides.
-    fn rotate_relay(&self, now: u64) {
-        let auto = lock(&self.0.settings).auto_reconnect;
-        let next = {
-            let mut f = lock(&self.0.flow);
-            let Some(current) = f.wanted.clone().filter(|_| auto && f.reconnect.is_none()) else { return };
-            if self.read(|m| m.active_account.is_some()) {
-                return;
-            }
-            f.stalled.retain(|_, at| now.saturating_sub(*at) < STALLED_MEMORY_MS);
-            f.stalled.insert(current.clone(), now);
-            let next = self.read(|m| next_candidate(m, &f.stalled, &current));
-            if let Some(id) = &next {
-                f.wanted = Some(id.clone());
-            }
-            next
-        };
-        let line = match &next {
-            Some(id) => {
-                let name = self.read(|m| m.find(id).map(|s| s.host_name.clone())).unwrap_or_else(|| id.clone());
-                format!("The relay stopped sending data; switching to {name}")
-            }
-            None => "The relay stopped sending data; no other server to try, retrying it".to_string(),
-        };
-        self.change(|m| m.append_log(line));
-        let ipc = self.0.ipc.clone();
-        tokio::spawn(async move { ipc.disconnect_vpn().await });
-    }
-
     fn cancel_reconnect(&self) {
         lock(&self.0.flow).reconnect = None;
     }
@@ -353,7 +294,6 @@ impl Controller {
         self.cancel_reconnect();
         {
             let mut f = lock(&self.0.flow);
-            f.stalled.clear();
             f.wanted = Some(id.to_string());
             f.last_server = Some(id.to_string());
             f.attempts = 0;

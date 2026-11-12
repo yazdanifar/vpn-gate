@@ -3,8 +3,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
 
 ## [Unreleased]
 ### Added
-- A watchdog for the relay: when the connection to a relay stops carrying data (or only trickles keep-alives), the service tests the tunnel with a TLS handshake through it, and after two failures lets traffic go direct instead of leaving the computer offline, then restores the tunnel when it works again (Windows, macOS, Linux; not in SOCKS mode or on Android). The log says "The relay stopped sending data…".
-- Linux app: a relay that stops carrying data is replaced by the next best one (tested ones first), remembered for 10 minutes.
+- A watchdog for the relay: when the connection to a relay stops carrying data (or only trickles keep-alives), the service tests the tunnel with a TLS handshake through it and the log says "The relay stopped sending data…" (and later that it is carrying data again). Traffic stays blocked meanwhile; nothing goes outside the tunnel (Windows, macOS, Linux; not in SOCKS mode or on Android).
 - Optional TCP tuning for the relay connection through the service's environment: `VPNGATE_TCP_BUFFER_KB`, and on Linux `VPNGATE_TCP_CONGESTION` (e.g. `bbr`).
 ### Changed
 - The DNS proxy (used by domain routing rules) now tries the next resolver when one times out or answers SERVFAIL, and finally 1.1.1.1 and 8.8.8.8 through the tunnel, instead of failing on the first one. Domains with a Direct rule never use the public resolvers.

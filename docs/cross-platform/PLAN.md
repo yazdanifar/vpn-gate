@@ -319,15 +319,14 @@ Left to a human afterwards: approving golden images once, SmartScreen on the uns
 Source: the Python/Linux port <https://github.com/HRSadeghi/vpngate_ubuntu> (read as untrusted reference; nothing is copied,
 the behaviour is re-implemented in Rust). Our `spawn_counters` in `vpngate-net/src/session.rs` only reports bytes, so a relay
 that connects and then carries no data leaves the user offline.
-- **U38 Dead-relay watchdog with fail-open (`vpngate-net`, `vpngate-daemon`).** Judge the inbound rate over a 20 s window
-  (starving < 1500 B/s, healthy >= 3000 B/s); when starving or silent, probe the tunnel with a real TLS handshake through it
-  (a bare TCP connect passes on relays that carry no data); two missed probes in a row (the counter must survive a trickle of
-  keep-alive echoes) pull the capture routes (fail-open) and emit a "relay stopped sending data" event; recapture only after
-  healthy volume. Also run the tunnel-alive check before enabling capture at connect. Tested with `start_paused` and the
-  fake network; live check handed to the user. Needs a platform-backend `fail_open`/`fail_close` on the route set. The connect-time "is the tunnel alive" check of the reference was left out: a network that blocks every probe host would then never connect.
-- **U39 Rotate to the next relay on stall or throttle (`vpngate-app-model`).** On U38's event, when the connection came from the
-  server list and "Reconnect automatically" is on: disconnect, remember the failed relay (skipped for a while), pick the next
-  candidate. Depends on U38. Done in the Rust controller (Linux GTK) only; the Swift, C# and Kotlin apps are U39b. A speed-collapse (throttle) detector was left out: a user who simply stops downloading looks the same as a throttled relay, so it would rotate healthy relays.
+- **U38 Dead-relay watchdog, report only (`vpngate-net`).** Judge the inbound rate over a 20 s window (starving < 1500 B/s);
+  when starving or silent, probe the tunnel with a real TLS handshake through it (a bare TCP connect passes on relays that
+  carry no data); two missed probes in a row (the counter survives a trickle of keep-alive echoes) put "The relay stopped
+  sending data" in the log, and a later successful probe says it is carrying data again. **Fail closed (user decision):**
+  the capture routes and the resolver are never touched, so a dead relay means offline, never a leak. Off in SOCKS mode and
+  on Android. The connect-time "is the tunnel alive" check of the reference was left out: a network that blocks every probe
+  host would never connect.
+- **U39 (dropped, user decision).** Rotating to another relay on a stall (and any throttle detector) will not be added to any app.
 - **U40 DNS proxy walks the resolver list (`vpngate-net`).** Replaces the documented "an upstream failure is SERVFAIL, not a
   fallback" rule (see DECISIONS): on timeout try the next server of the list, then tunnelled 1.1.1.1 / 8.8.8.8 as the last
   resort. Update the test `upstream_failure_is_servfail_not_a_fallback`. Independent of U38/U39.

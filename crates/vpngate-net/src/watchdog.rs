@@ -2,8 +2,9 @@
 //! session). A relay can accept the session and then carry nothing, or trickle a few hundred bytes per second of
 //! keep-alive echoes and stray DNS replies, which a "no bytes at all" check never notices. So the inbound *rate* over a
 //! window decides when to ask the tunnel directly (a real TLS handshake through it), and two misses in a row mean the
-//! relay is not carrying data: the session then fails open (the capture routes come off, the machine keeps working
-//! directly) while the app picks another relay. While failed open, a probe that succeeds puts the capture back.
+//! relay is not carrying data: the session says so in the log. Nothing else changes: the capture routes stay, so no
+//! traffic ever leaves outside the tunnel (the machine is offline until the relay works or the user reconnects). While
+//! stalled, a probe that succeeds reports the recovery.
 
 /// Seconds of inbound traffic that make one rate sample.
 pub const WINDOW: f64 = 20.0;
@@ -11,13 +12,13 @@ pub const WINDOW: f64 = 20.0;
 pub const STARVING_BPS: f64 = 1500.0;
 /// No inbound byte for this long also arms a probe (an idle tunnel is healthy, so the probe decides).
 pub const QUIET: f64 = 10.0;
-/// Pause between probes after a miss, and while failed open.
+/// Pause between probes after a miss, and while stalled.
 pub const RETRY_PROBE_EVERY: f64 = 5.0;
 /// Pause between probes after a success while the tunnel stays quiet (an idle tunnel must not be probed every few
 /// seconds).
 pub const IDLE_PROBE_EVERY: f64 = 30.0;
-/// Consecutive misses that fail the session open.
-pub const MISSES_TO_FAIL: u32 = 2;
+/// Consecutive misses that mark the relay as stalled.
+pub const MISSES_TO_STALL: u32 = 2;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Step {
@@ -29,10 +30,10 @@ pub enum Step {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Verdict {
     Healthy,
-    /// The relay is not carrying data: pull the capture routes.
-    FailOpen,
-    /// A probe went through again after a fail-open: put the capture back.
-    Recover,
+    /// The relay is not carrying data: tell the user.
+    Stalled,
+    /// A probe went through again after a stall: say so.
+    Recovered,
 }
 
 #[derive(Debug)]
@@ -45,7 +46,7 @@ pub struct Watchdog {
     last_probe: f64,
     probe_gap: f64,
     misses: u32,
-    failed_open: bool,
+    stalled: bool,
 }
 
 impl Watchdog {
@@ -59,12 +60,12 @@ impl Watchdog {
             last_probe: f64::NEG_INFINITY,
             probe_gap: IDLE_PROBE_EVERY,
             misses: 0,
-            failed_open: false,
+            stalled: false,
         }
     }
 
-    pub fn failed_open(&self) -> bool {
-        self.failed_open
+    pub fn stalled(&self) -> bool {
+        self.stalled
     }
 
     /// Called once a second with the monotonic time (seconds) and the inbound byte counter.
@@ -81,7 +82,7 @@ impl Watchdog {
         }
         let due = now - self.last_probe >= self.probe_gap;
         let suspicious = now - self.last_progress >= QUIET || self.starving;
-        if due && (suspicious || self.failed_open) {
+        if due && (suspicious || self.stalled) {
             // Claimed now, so a slow probe is not started twice.
             self.last_probe = now;
             return Step::Probe;
@@ -96,23 +97,23 @@ impl Watchdog {
             self.misses = 0;
             self.last_progress = now;
             self.probe_gap = IDLE_PROBE_EVERY;
-            if self.failed_open {
-                self.failed_open = false;
+            if self.stalled {
+                self.stalled = false;
                 // Judge the next window afresh, not by the starved one that failed the session open.
                 self.starving = false;
-                return Verdict::Recover;
+                return Verdict::Recovered;
             }
             return Verdict::Healthy;
         }
         self.probe_gap = RETRY_PROBE_EVERY;
-        if self.failed_open {
-            return Verdict::FailOpen;
+        if self.stalled {
+            return Verdict::Stalled;
         }
         // A trickle of echoes between probes must not reset this: they are not "carrying data".
         self.misses += 1;
-        if self.misses >= MISSES_TO_FAIL {
-            self.failed_open = true;
-            return Verdict::FailOpen;
+        if self.misses >= MISSES_TO_STALL {
+            self.stalled = true;
+            return Verdict::Stalled;
         }
         Verdict::Healthy
     }

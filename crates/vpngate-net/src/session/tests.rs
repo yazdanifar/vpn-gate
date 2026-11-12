@@ -9,7 +9,7 @@ use tokio::sync::watch;
 use vpngate_core::ipc::{ConnectConfig, ConnectionState, ProxyKind, ProxySettings, TunnelMode, HELPER_VERSION};
 use vpngate_core::packets::{be32, ethernet_frame, icmpv6_checksum, ipv4_packet, ipv6_header, ipv6_slaac, Mac};
 use vpngate_core::routing_rule::{RoutingAction, RoutingConfig, RoutingRule, RoutingRuleType};
-use vpngate_testkit::fakes::{FakeNet, FakeTun, NetOp};
+use vpngate_testkit::fakes::{FakeNet, FakeTun};
 
 use super::*;
 use crate::testing::fake_network::FakeNetworkServer;
@@ -882,8 +882,10 @@ fn legacy_config_puts_the_listed_port_first_and_keeps_the_vpn_gate_account() {
     assert_eq!(simple_connect_config("h", None, ProxySettings::default(), true, true).ports, DEFAULT_PORTS);
 }
 
-fn net_ops(h: &Harness) -> Vec<NetOp> {
-    h.nets()[0].ops().into_iter().filter(|o| matches!(o, NetOp::FailOpen | NetOp::FailClose)).collect()
+/// The routes are never touched after `apply`: a stalled relay means offline, not a leak.
+fn assert_capture_untouched(h: &Harness) {
+    assert_eq!(h.nets()[0].torn_down(), 0, "no teardown while connected");
+    assert_eq!(h.nets()[0].ops().len(), 1, "only the initial apply: {:?}", h.nets()[0].ops());
 }
 
 fn logs(r: &Recorder) -> Vec<String> {
@@ -891,7 +893,7 @@ fn logs(r: &Recorder) -> Vec<String> {
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_relay_that_carries_nothing_fails_the_capture_open_once_and_says_so() {
+async fn a_relay_that_carries_nothing_is_reported_once_and_the_capture_stays() {
     let h = Harness::new();
     h.probe_enabled.store(true, Ordering::SeqCst);
     *lock(&h.probe_answers) = vec![false];
@@ -899,16 +901,16 @@ async fn a_relay_that_carries_nothing_fails_the_capture_open_once_and_says_so() 
     s.connect(simple("1.2.3.4", None, false, true));
     r.wait_connected().await;
     tokio::time::sleep(Duration::from_secs(60)).await;
-    assert_eq!(net_ops(&h), [NetOp::FailOpen], "pulled once, not on every missed probe");
-    assert_eq!(logs(&r).iter().filter(|l| *l == RELAY_STALLED_LOG).count(), 1);
-    assert_eq!(s.snapshot().state, ConnectionState::Connected, "the app decides what happens next");
+    assert_capture_untouched(&h);
+    assert_eq!(logs(&r).iter().filter(|l| *l == RELAY_STALLED_LOG).count(), 1, "said once, not on every missed probe");
+    assert_eq!(s.snapshot().state, ConnectionState::Connected);
     s.disconnect();
     idle(&s, 3).await;
     assert_eq!(h.nets()[0].torn_down(), 1, "teardown still cleans up after a fail-open");
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_probe_that_goes_through_again_puts_the_capture_back() {
+async fn a_probe_that_goes_through_again_reports_the_recovery() {
     let h = Harness::new();
     h.probe_enabled.store(true, Ordering::SeqCst);
     *lock(&h.probe_answers) = vec![false, false, false, true];
@@ -916,7 +918,8 @@ async fn a_probe_that_goes_through_again_puts_the_capture_back() {
     s.connect(simple("1.2.3.4", None, false, true));
     r.wait_connected().await;
     tokio::time::sleep(Duration::from_secs(90)).await;
-    assert_eq!(net_ops(&h), [NetOp::FailOpen, NetOp::FailClose]);
+    assert_capture_untouched(&h);
+    assert!(logs(&r).iter().any(|l| l == RELAY_STALLED_LOG));
     assert!(logs(&r).iter().any(|l| l == RELAY_RECOVERED_LOG));
     s.disconnect();
     idle(&s, 3).await;
@@ -931,7 +934,8 @@ async fn an_idle_but_working_relay_is_left_alone() {
     s.connect(simple("1.2.3.4", None, false, true));
     r.wait_connected().await;
     tokio::time::sleep(Duration::from_secs(300)).await;
-    assert!(net_ops(&h).is_empty());
+    assert!(logs(&r).is_empty());
+    assert_capture_untouched(&h);
     assert!(h.probes.load(Ordering::SeqCst) >= 1, "it is asked now and then");
     s.disconnect();
     idle(&s, 3).await;

@@ -607,23 +607,3 @@ fn default_route_parsing() {
     );
     assert_eq!(parse_default_route("route: not in table"), None);
 }
-
-#[test]
-fn fail_open_pulls_the_capture_routes_and_the_resolver_and_fail_close_puts_them_back() {
-    let f = make();
-    f.net.apply(&request("5.5.5.5")).unwrap();
-    f.net.fail_open();
-    f.net.fail_open(); // idempotent
-    for c in
-        [format!("/sbin/route -n delete -net 0.0.0.0/1 {GW}"), format!("/sbin/route -n delete -net 128.0.0.0/1 {GW}")]
-    {
-        assert_eq!(f.runner.log().iter().filter(|l| **l == c).count(), 1, "{c} once");
-    }
-    assert!(!f.runner.has("/sbin/route -n delete -host 5.5.5.5"), "the bypass route to the relay stays");
-    assert_eq!(f.dns.removes(), 1);
-    f.net.fail_close();
-    f.net.fail_close();
-    let c = format!("/sbin/route -n add -net 0.0.0.0/1 {GW}");
-    assert_eq!(f.runner.log().iter().filter(|l| **l == c).count(), 2, "added at apply and again at fail_close");
-    assert_eq!(f.dns.set_calls().len(), 2);
-}

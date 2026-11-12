@@ -29,11 +29,6 @@ struct Active {
     gateway: String,
     original: Option<DefaultRoute>,
     captured_dns: Vec<String>,
-    /// The routes that capture all traffic (`route` arguments to add and to delete them), for `fail_open`.
-    capture: Vec<(Vec<String>, Vec<String>)>,
-    /// What `dns.set` was given, to publish it again after a `fail_open`.
-    published_dns: Option<(Vec<String>, String, String, String)>,
-    failed_open: bool,
     /// How to undo each change that really happened, oldest first.
     undo: Vec<UndoOp>,
 }
@@ -66,13 +61,6 @@ impl MacNetConfig {
 
     /// Adds a route; remembers how to delete it only if `route add` succeeded, so teardown never removes a route that
     /// already existed (or that failed to be created).
-    /// A capture route: like `add_route`, and remembered so `fail_open` can pull it and `fail_close` put it back.
-    fn add_capture_route(&self, active: &mut Active, add: &[&str], undo: &[&str]) {
-        self.add_route(active, add, undo);
-        let own = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        active.capture.push((own(add), own(undo)));
-    }
-
     fn add_route(&self, active: &mut Active, add: &[&str], undo: &[&str]) {
         let mut args = vec!["add"];
         args.extend_from_slice(add);
@@ -208,8 +196,8 @@ impl NetConfiguring for MacNetConfig {
             // it always did. Explicit `proxy` rules get a specific route back into the tunnel instead.
             route_rules(self, &mut active, |a| a != RoutingAction::Direct);
         } else {
-            self.add_capture_route(&mut active, &["-net", "0.0.0.0/1", &gw], &["-net", "0.0.0.0/1", &gw]);
-            self.add_capture_route(&mut active, &["-net", "128.0.0.0/1", &gw], &["-net", "128.0.0.0/1", &gw]);
+            self.add_route(&mut active, &["-net", "0.0.0.0/1", &gw], &["-net", "0.0.0.0/1", &gw]);
+            self.add_route(&mut active, &["-net", "128.0.0.0/1", &gw], &["-net", "128.0.0.0/1", &gw]);
             // Everything is captured by default: explicit `direct`/`block` rules carve an exception back out.
             route_rules(self, &mut active, |a| a != RoutingAction::Proxy);
         }
@@ -218,11 +206,7 @@ impl NetConfiguring for MacNetConfig {
         // VPN; without it the bridge forwards IPv6 once `configure_ipv6` has given the interface an address, and drops
         // it while the hub offers no IPv6 router.
         for half in ["::/1", "8000::/1"] {
-            self.add_capture_route(
-                &mut active,
-                &["-inet6", half, "-interface", iface],
-                &["-inet6", half, "-interface", iface],
-            );
+            self.add_route(&mut active, &["-inet6", half, "-interface", iface], &["-inet6", half, "-interface", iface]);
         }
 
         // Captured before the resolver is switched over, so a `direct` domain rule can still be resolved by the
@@ -244,7 +228,6 @@ impl NetConfiguring for MacNetConfig {
             };
             if self.dns.set(&published, iface, &ip, &gw) {
                 self.remember(&mut active, UndoOp::new(UNDO_DNS, &[]));
-                active.published_dns = Some((published, iface.to_string(), ip.clone(), gw.clone()));
             }
         }
         *guard = Some(active);
@@ -309,43 +292,6 @@ impl NetConfiguring for MacNetConfig {
         }
         let (iface, gw, original) = (active.iface.clone(), active.gateway.clone(), active.original.clone());
         self.add_rule_route(active, ip, action, &iface, &gw, original.as_ref());
-    }
-
-    fn fail_open(&self) {
-        let mut guard = lock(&self.state);
-        let Some(active) = guard.as_mut() else { return };
-        if active.failed_open {
-            return;
-        }
-        active.failed_open = true;
-        for (_, del) in &active.capture {
-            let mut args = vec!["delete"];
-            args.extend(del.iter().map(String::as_str));
-            self.route(&args);
-        }
-        if active.published_dns.is_some() {
-            self.dns.remove();
-        }
-    }
-
-    fn fail_close(&self) {
-        let mut guard = lock(&self.state);
-        let Some(active) = guard.as_mut() else { return };
-        if !active.failed_open {
-            return;
-        }
-        active.failed_open = false;
-        for (add, _) in &active.capture {
-            let mut args = vec!["add"];
-            args.extend(add.iter().map(String::as_str));
-            let r = self.route(&args);
-            if r.status != 0 {
-                println!("[route] add {} failed ({}): {}", add.join(" "), r.status, r.output.trim());
-            }
-        }
-        if let Some((servers, iface, ip, gw)) = &active.published_dns {
-            self.dns.set(servers, iface, ip, gw);
-        }
     }
 
     fn teardown(&self) {

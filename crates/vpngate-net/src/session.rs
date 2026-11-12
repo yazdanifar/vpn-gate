@@ -852,7 +852,7 @@ impl Session {
         }
 
         self.set(gen, ConnectionState::Connected, None, Some(&ip_string(lease.ip)), Some(connected_log), None);
-        let watch = if socks_mode { None } else { (self.deps.make_probe)(&tun_name).map(|probe| (net.clone(), probe)) };
+        let watch = if socks_mode { None } else { (self.deps.make_probe)(&tun_name) };
         let counters = self.spawn_counters(gen, &client, watch);
         let wait = (f64::from(lease.seconds) / 2.0).max(self.timing.min_renew_seconds);
         let wb = Arc::downgrade(&bridge);
@@ -879,7 +879,7 @@ impl Session {
         &self,
         gen: u64,
         client: &Arc<dyn VpnTransport>,
-        watch: Option<(Arc<dyn NetConfiguring>, Arc<dyn TunnelProbe>)>,
+        watch: Option<Arc<dyn TunnelProbe>>,
     ) -> JoinHandle<()> {
         let (weak_session, weak_client) = (self.me.clone(), Arc::downgrade(client));
         let first_in = client.bytes_in();
@@ -895,22 +895,16 @@ impl Session {
                 let now = started.elapsed().as_secs_f64();
                 // The probe runs beside the counters (it can take several seconds), and its answer is read here.
                 let mut note = None;
-                if let Some((net, probe)) = &watch {
+                if let Some(probe) = &watch {
                     if pending.as_ref().is_some_and(JoinHandle::is_finished) {
                         let alive = match pending.take() {
                             Some(h) => h.await.unwrap_or(false),
                             None => false,
                         };
-                        let was_open = dog.failed_open();
+                        let was_stalled = dog.stalled();
                         match dog.probed(now, alive) {
-                            Verdict::FailOpen if !was_open => {
-                                net.fail_open();
-                                note = Some(RELAY_STALLED_LOG);
-                            }
-                            Verdict::Recover => {
-                                net.fail_close();
-                                note = Some(RELAY_RECOVERED_LOG);
-                            }
+                            Verdict::Stalled if !was_stalled => note = Some(RELAY_STALLED_LOG),
+                            Verdict::Recovered => note = Some(RELAY_RECOVERED_LOG),
                             _ => {}
                         }
                     }
