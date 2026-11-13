@@ -53,7 +53,7 @@ impl Probe {
 
     pub fn text(p: Option<&Probe>) -> String {
         match p {
-            None => "—".into(),
+            None => "Not tested".into(),
             Some(Probe::Queued) => "Waiting…".into(),
             Some(Probe::Testing) => "Testing…".into(),
             Some(Probe::Ok { connect_ms, .. }) => format!("{connect_ms} ms"),

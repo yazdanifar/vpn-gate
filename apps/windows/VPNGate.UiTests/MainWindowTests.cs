@@ -75,7 +75,7 @@ public class MainWindowTests
     public async Task TestConnectionFillsTheColumnAndTheHeaderSortsByIt() => await WithMain(async (rig, w, root) =>
     {
         var list = List(root);
-        Assert.Equal(4, Probe.Texts(list).Count(t => t == "—"));
+        Assert.Equal(4, Probe.Texts(list).Count(t => t == "Not tested"));
         Probe.Invoke(Probe.ButtonNamed(root, "Test Connection"));
         await Probe.Until(() => !rig.Vm.IsTesting && rig.Vm.Servers.All(s => s.Test.Phase is ProbePhase.Ok or ProbePhase.Failed), "the probe results");
         await Probe.Settle();

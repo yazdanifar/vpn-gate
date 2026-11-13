@@ -437,7 +437,7 @@ private struct ProbeCell: View {
     var body: some View {
         switch outcome {
         case nil:
-            Text("—").foregroundStyle(.tertiary).help("Not tested yet — press Test Connection")
+            Text("Not tested").foregroundStyle(.secondary).help("Not tested yet — press Test Connection")
         case .queued?:
             Text("Waiting…").foregroundStyle(.secondary)
         case .testing?:

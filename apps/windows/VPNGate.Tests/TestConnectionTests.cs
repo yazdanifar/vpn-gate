@@ -64,7 +64,7 @@ public class TestConnectionTests
     {
         var (d, ipc, vm) = await Make(new() { ["10.0.0.1"] = 40, ["10.0.0.3"] = 15 });
         await using var _d = d; await using var _i = ipc;
-        Assert.All(vm.Servers, s => Assert.Equal("—", s.Test.Text));
+        Assert.All(vm.Servers, s => Assert.Equal("Not tested", s.Test.Text));
         await vm.TestConnectionsAsync();
         var by = vm.Servers.ToDictionary(s => s.Ip, s => s.Test.Text);
         Assert.Equal("40 ms", by["10.0.0.1"]);

@@ -133,7 +133,7 @@ public sealed partial class ProbeState : CommunityToolkit.Mvvm.ComponentModel.Ob
         ProbePhase.Testing => "Testing…",
         ProbePhase.Ok => $"{ConnectMs} ms",
         ProbePhase.Failed => Why ?? "failed",
-        _ => "—",
+        _ => "Not tested",
     };
 
     /// <summary>Lower sorts first: working servers by connect time, then untested ones, then failures.</summary>

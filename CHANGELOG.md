@@ -2,6 +2,8 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+### Changed
+- The "Test from this Mac/computer" column says "Not tested" for relays without a result, instead of a bare dash (macOS, Windows, Linux, Android).
 
 ## [1.2.0] - 2026-11-13
 Test Connection checks the address; DHCP fixes.

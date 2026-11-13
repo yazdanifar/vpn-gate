@@ -171,7 +171,7 @@ sealed interface Probe {
         }
 
         fun text(p: Probe?): String = when (p) {
-            null -> "—"
+            null -> "Not tested"
             Queued -> "Waiting…"
             Testing -> "Testing…"
             is Ok -> "${p.connectMs} ms"
