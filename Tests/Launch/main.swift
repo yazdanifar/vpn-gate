@@ -305,8 +305,9 @@ Task {
 }
 // A plain thread: it must fire even when the Swift concurrency pool is stuck in a blocking accessibility call.
 Thread.detachNewThread {
-    Thread.sleep(forTimeInterval: 420)
-    print("GLOBAL WATCHDOG: launch test exceeded 420s")
+    // A normal run takes about 90 s; a loaded macOS runner has taken 3-4x that. Stay under the CI step's 12 minutes.
+    Thread.sleep(forTimeInterval: 600)
+    print("GLOBAL WATCHDOG: launch test exceeded 600s")
     if let p = rig.proc { kill(p.processIdentifier, SIGKILL) }
     exit(3)
 }
