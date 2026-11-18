@@ -3,6 +3,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
 
 ## [Unreleased]
 
+### Fixed
+- The weekly `Tunnel e2e (real relay)` workflow no longer reports a Windows failure when the runner's curl cannot check
+  certificate revocation (`CRYPT_E_REVOCATION_OFFLINE`, seen 2026-11-16): curl proceeds when the revocation servers are
+  unreachable, and a run that still has no baseline public IP aborts before connecting instead of failing the restore
+  check against `?`. The same baseline guard was added to the macOS and Linux e2e scripts.
+
 ## [1.2.0] - 2026-11-13
 Test Connection checks the address; DHCP fixes.
 ### Changed

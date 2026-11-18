@@ -19,6 +19,9 @@ wait_for() { for _ in $(seq 1 40); do grep -q "$1" /tmp/vpngate-e2e.log 2>/dev/n
 
 BASE_IP=$(pubip); snap > /tmp/vpngate-e2e.before
 echo "baseline public IPv4: $BASE_IP"
+# Without a baseline the restore check fails spuriously (real address vs '?') or passes vacuously; that is a runner
+# problem, not an app failure, so stop before connecting (same guard as e2e-tunnel.ps1).
+[[ $BASE_IP != '?' ]] || { echo "no baseline public IPv4 (api.ipify.org unreachable?) - rerun"; exit 3; }
 # a loopback route that teardown must never touch (regression guard for the bypass-route bug)
 LO_BEFORE=$(netstat -rn -f inet | grep -c "^127")
 
