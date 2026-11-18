@@ -25,6 +25,9 @@ wait_for() { for _ in $(seq 1 40); do grep -q "$1" $LOG 2>/dev/null && return 0;
 
 BASE_IP=$(pubip); snap > /tmp/vpngate-e2e.before
 echo "baseline public IPv4: $BASE_IP"
+# Without a baseline the restore check fails spuriously (real address vs '?') or passes vacuously; that is a runner
+# problem, not an app failure, so stop before connecting (same guard as e2e-tunnel.ps1).
+[[ $BASE_IP != '?' ]] || { echo "no baseline public IPv4 (api.ipify.org unreachable?) - rerun"; exit 3; }
 
 run_case() {   # $1 = how to stop: INT | TERM | KILL
   echo "== connect, then stop with $1"

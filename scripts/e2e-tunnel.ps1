@@ -27,8 +27,10 @@ function Ok($m)  { Write-Host "  ok   $m" }
 function Bad($m) { Write-Host "  FAIL $m"; $script:fails++ }
 function PubIp($family) {
     # The tunnel may need a moment after [connected]; show curl's reason when it keeps failing.
+    # --ssl-revoke-best-effort: a runner now and then cannot reach any CRL/OCSP server, and schannel then fails the
+    # handshake (CRYPT_E_REVOCATION_OFFLINE) although the endpoint is fine; seen 2026-11-16 on the baseline call.
     for ($i = 0; $i -lt 3; $i++) {
-        $o = & curl.exe "-$family" -sS -m 10 https://api64.ipify.org 2>$curlErr
+        $o = & curl.exe "-$family" -sS -m 10 --ssl-revoke-best-effort https://api64.ipify.org 2>$curlErr
         if ($LASTEXITCODE -eq 0 -and $o) { return $o.Trim() }
         Start-Sleep -Seconds 2
     }
@@ -55,6 +57,13 @@ function WaitFor($pattern) {
 $baseIp = PubIp 4
 $before = Snap
 Write-Host "baseline public IPv4: $baseIp"
+if ($baseIp -eq '?') {
+    # Every later comparison (traffic through the tunnel, restore) is against the baseline; without one the run can only
+    # end in a misleading failure (2026-11-16: the restore was perfect, the final check compared the runner's address
+    # to '?'). That is a runner/network problem, not an app failure, so stop before connecting.
+    Write-Host 'E2E ABORTED: no baseline public IPv4 (network or curl problem on the runner) - rerun the workflow'
+    exit 3
+}
 
 Write-Host '== connect, then hard-kill the daemon'
 $daemonArgs = @('--connect', $Server)

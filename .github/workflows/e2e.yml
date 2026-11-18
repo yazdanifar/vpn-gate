@@ -41,27 +41,36 @@ jobs:
           if [ -z "$RELAY" ]; then
             # Capture first: awk exiting early would SIGPIPE the probe, which pipefail turns into exit 141.
             PROBED=$(scripts/probe-sample.sh 15 || true)
-            RELAY=$(awk '/ ok$/ {split($1,a,":"); print a[1]; exit}' <<< "$PROBED")
+            # The probe answers on a port from the relay list, which is often none of the daemon's defaults (2026-11-18:
+            # two legs picked relays listening on 1393 and 1664 only, and the connect then refused on every default
+            # port) - keep the port and hand it to the tunnel scripts instead of letting them try the defaults.
+            PICKED=$(awk '/ ok$/ {split($1,a,":"); print a[1], a[2]; exit}' <<< "$PROBED")
+            RELAY=${PICKED%% *}
+            PORT=${PICKED##* }
           fi
           [ -n "$RELAY" ] || { echo "no relay answered a probe"; exit 1; }
           echo "ip=$RELAY" >> "$GITHUB_OUTPUT"
+          echo "port=${PORT:-}" >> "$GITHUB_OUTPUT"
       - name: e2e (macOS; hard timeout and a route restore, so a hang cannot cut the runner off)
         if: runner.os == 'macOS'
         run: |
           trap 'sudo build/bin/vpngate-helper --daemon --uid 0 >/dev/null 2>&1 & sleep 2; kill $! 2>/dev/null; true' EXIT
-          sudo timeout 600 scripts/e2e-tunnel.sh "${{ steps.relay.outputs.ip }}" 2>&1 | tee e2e-report.txt
+          sudo timeout 600 scripts/e2e-tunnel.sh "${{ steps.relay.outputs.ip }}" "${{ steps.relay.outputs.port }}" 2>&1 | tee e2e-report.txt
       - name: e2e (Linux)
         if: runner.os == 'Linux'
         run: |
           trap 'sudo target/release/vpngate-daemon --daemon >/dev/null 2>&1 & sleep 2; sudo kill $! 2>/dev/null; true' EXIT
-          sudo VPNGATE_DAEMON="$PWD/target/release/vpngate-daemon" timeout 600 scripts/e2e-tunnel-linux.sh "${{ steps.relay.outputs.ip }}" 2>&1 | tee e2e-report.txt
+          sudo VPNGATE_DAEMON="$PWD/target/release/vpngate-daemon" timeout 600 scripts/e2e-tunnel-linux.sh "${{ steps.relay.outputs.ip }}" "${{ steps.relay.outputs.port }}" 2>&1 | tee e2e-report.txt
       - name: e2e (Windows; the runner user is an administrator)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           scripts/get-wintun.ps1 -Dest target/release | Out-Null
           # *>&1: the script prints with Write-Host (the information stream), which 2>&1 does not capture.
-          scripts/e2e-tunnel.ps1 -Server "${{ steps.relay.outputs.ip }}" *>&1 | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/e2e-report.txt"
+          # The port is empty when the relay came from the workflow input; then the daemon tries its defaults.
+          $e2eArgs = @{ Server = '${{ steps.relay.outputs.ip }}' }
+          if ('${{ steps.relay.outputs.port }}') { $e2eArgs.Port = '${{ steps.relay.outputs.port }}' }
+          scripts/e2e-tunnel.ps1 @e2eArgs *>&1 | Tee-Object -FilePath "$env:GITHUB_WORKSPACE/e2e-report.txt"
           if ($LASTEXITCODE) { throw "e2e failed ($LASTEXITCODE)" }
       - uses: actions/upload-artifact@v7
         if: always()
