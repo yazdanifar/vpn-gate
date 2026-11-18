@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
   certificate revocation (`CRYPT_E_REVOCATION_OFFLINE`, seen 2026-11-16): curl proceeds when the revocation servers are
   unreachable, and a run that still has no baseline public IP aborts before connecting instead of failing the restore
   check against `?`. The same baseline guard was added to the macOS and Linux e2e scripts.
+- The same workflow now connects on the port the probe verified. The relay pick dropped the port, so the connect tried
+  only the daemon's default ports; relays that listen on none of them (twice on 2026-11-18, on ports 1393 and 1664)
+  failed the leg although the tunnel, the restore and the app were fine.
 
 ## [1.2.0] - 2026-11-13
 Test Connection checks the address; DHCP fixes.
