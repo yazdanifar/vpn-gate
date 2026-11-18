@@ -44,9 +44,9 @@ jobs:
             # The probe answers on a port from the relay list, which is often none of the daemon's defaults (2026-11-18:
             # two legs picked relays listening on 1393 and 1664 only, and the connect then refused on every default
             # port) - keep the port and hand it to the tunnel scripts instead of letting them try the defaults.
-            PICKED=$(awk '/ ok$/ {print; exit}' <<< "$PROBED")
-            RELAY=${PICKED%%:*}
-            PORT=${PICKED##*:}
+            PICKED=$(awk '/ ok$/ {split($1,a,":"); print a[1], a[2]; exit}' <<< "$PROBED")
+            RELAY=${PICKED%% *}
+            PORT=${PICKED##* }
           fi
           [ -n "$RELAY" ] || { echo "no relay answered a probe"; exit 1; }
           echo "ip=$RELAY" >> "$GITHUB_OUTPUT"
