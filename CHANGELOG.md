@@ -3,6 +3,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versions come fr
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-18
+Tunnel e2e workflow fixes.
 ### Fixed
 - The weekly `Tunnel e2e (real relay)` workflow no longer reports a Windows failure when the runner's curl cannot check
   certificate revocation (`CRYPT_E_REVOCATION_OFFLINE`, seen 2026-11-16): curl proceeds when the revocation servers are
