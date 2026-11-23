@@ -2,6 +2,9 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+
+## [1.2.2] - 2026-11-23
+Windows upgrade fix.
 ### Fixed
 - Windows: the app no longer crashes at start (`0xC000027B` in `Microsoft.UI.Xaml.dll`) after upgrading the MSI. The app's
   assemblies were all file version 1.0.0.0, so Windows Installer kept the `VPNGate.exe`, `VPNGate.dll` and `VPNGate.Core.dll`
