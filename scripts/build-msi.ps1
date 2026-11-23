@@ -1,6 +1,8 @@
 # Builds build/VPN-Gate.msi: the Rust service, wintun.dll, the self-contained WinUI app and the WiX v4 package.
 # Needs: Rust (rust-toolchain.toml), .NET 8 SDK, and the WiX CLI (`dotnet tool install --global wix --version 4.0.5`).
-# -Reuse skips steps 1-3 (build/windows from an earlier run) and only repackages, e.g. to make a newer MSI for the upgrade test.
+# -Reuse skips steps 1-2 (the service and wintun.dll from an earlier run), e.g. to make a newer MSI for the upgrade test. The
+# app is always published again, stamped with the MSI version: Windows Installer only replaces a versioned file with a
+# higher version, so app DLLs that kept one version across releases were never upgraded.
 param([string]$Version, [string]$Output = 'build/VPN-Gate.msi', [switch]$Reuse)
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
@@ -17,11 +19,15 @@ if (-not $Reuse) {
 
   Write-Host '2/4 wintun.dll (pinned version, SHA-256 checked)'
   & "$PSScriptRoot/get-wintun.ps1" -Dest "$out/wintun" | Out-Null
-
-  Write-Host '3/4 app'
-  dotnet publish apps/windows/VPNGate.App --configuration Release -p:Platform=x64 --runtime win-x64 --output "$out/app"
-  if ($LASTEXITCODE) { throw 'dotnet publish failed' }
 }
+
+Write-Host '3/4 app'
+Remove-Item "$out/app" -Recurse -Force -ErrorAction SilentlyContinue
+dotnet publish apps/windows/VPNGate.App --configuration Release -p:Platform=x64 --runtime win-x64 --output "$out/app" `
+  "-p:Version=$version"
+if ($LASTEXITCODE) { throw 'dotnet publish failed' }
+$fileVersion = (Get-Item "$out/app/VPNGate.dll").VersionInfo.FileVersion
+if ($fileVersion -ne "$version.0") { throw "VPNGate.dll has file version $fileVersion, expected $version.0" }
 
 Write-Host '4/4 msi'
 # Harvest the app publish output into a WiX fragment (one component per file, subfolders as directories).

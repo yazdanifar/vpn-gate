@@ -40,8 +40,7 @@ Set-Content "$data\marker.txt" 'state that must survive an upgrade'
 # 3010 means "done, restart needed to replace files in use"; anything else but 0 is a failure.
 $app = Start-Process "$prog\VPNGate.exe" -PassThru
 Start-Sleep -Seconds 8
-$appRunning = -not $app.HasExited
-Write-Host "app running before the upgrade: $appRunning"
+Check (-not $app.HasExited) 'old app starts and stays up'
 $code = Msi @('/i', "`"$New`"") 'upgrade-install-new.log'
 Check ($code -eq 0 -or $code -eq 3010) "newer version installs over it with the app open (exit code $code)"
 Get-Process -Name 'VPNGate' -ErrorAction SilentlyContinue | Stop-Process -Force
@@ -56,6 +55,17 @@ Check ((StatusReply) -match '"ipcVersion"\s*:\s*9') 'pipe answers after the upgr
 $acl = (icacls.exe $data | Out-String)
 Check ($acl -match 'SYSTEM' -and $acl -match 'Administrators' -and $acl -notmatch 'BUILTIN\\Users') 'data folder ACL still locked'
 Check ((Test-Path "$prog\VPNGate.exe") -and (Test-Path "$prog\vpngate-daemon.exe")) 'program files present'
+# The app's own files must be the new build: an upgrade that kept them (same file version) beside the newer runtime made
+# 1.2.x crash at start.
+foreach ($f in 'VPNGate.exe', 'VPNGate.dll', 'VPNGate.Core.dll') {
+  $v = (Get-Item "$prog\$f").VersionInfo.FileVersion
+  Check ($v -eq "$NewVersion.0") "$f upgraded to $NewVersion.0 (has $v)"
+}
+$app = Start-Process "$prog\VPNGate.exe" -PassThru
+Start-Sleep -Seconds 10
+$alive = -not $app.HasExited
+if ($alive) { Stop-Process -Id $app.Id -Force } else { Write-Host ('app exit code 0x{0:X8}' -f $app.ExitCode) }
+Check $alive 'upgraded app starts and stays up'
 
 Check ((Msi @('/i', "`"$Old`"") 'upgrade-downgrade.log') -ne 0) 'installing the older version over the newer one is refused'
 Check ((Installed).DisplayVersion -eq $NewVersion) 'still on the newer version'

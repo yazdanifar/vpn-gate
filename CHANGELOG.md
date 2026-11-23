@@ -2,6 +2,12 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/); versions come from the `VERSION` file.
 
 ## [Unreleased]
+### Fixed
+- Windows: the app no longer crashes at start (`0xC000027B` in `Microsoft.UI.Xaml.dll`) after upgrading the MSI. The app's
+  assemblies were all file version 1.0.0.0, so Windows Installer kept the `VPNGate.exe`, `VPNGate.dll` and `VPNGate.Core.dll`
+  of the first install and replaced only the .NET and Windows App SDK files around them. They now carry the version from
+  `VERSION` (`apps/windows/Directory.Build.props`; `scripts/build-msi.ps1` stamps the MSI version and checks it), so the
+  next upgrade replaces them. The MSI tests now launch the installed app and check that an upgrade replaces the app files.
 
 ## [1.2.1] - 2026-11-18
 Tunnel e2e workflow fixes.

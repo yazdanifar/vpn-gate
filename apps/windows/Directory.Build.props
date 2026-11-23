@@ -1,0 +1,9 @@
+<Project>
+  <!-- Every assembly carries the release version from the repository's VERSION file (FileVersion 1.2.3.0). Windows Installer
+       replaces a versioned file only when the new one has a higher version: with the SDK default (1.0.0.0 forever) an MSI
+       upgrade kept the app DLLs of the first install next to a newer .NET and Windows App SDK, and the app crashed at start.
+       Override with -p:Version=x.y.z (scripts/build-msi.ps1 passes the MSI version). -->
+  <PropertyGroup>
+    <Version Condition="'$(Version)' == ''">$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)..\..\VERSION').Trim())</Version>
+  </PropertyGroup>
+</Project>
