@@ -41,6 +41,11 @@ foreach ($f in 'vpngate-daemon.exe', 'wintun.dll', 'VPNGate.dat', 'VPNGate.exe')
   Check (Test-Path "$prog\$f") "installed $f"
 }
 Check (Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\VPN Gate.lnk") 'Start menu shortcut'
+$app = Start-Process "$prog\VPNGate.exe" -PassThru
+Start-Sleep -Seconds 10
+$alive = -not $app.HasExited
+if ($alive) { Stop-Process -Id $app.Id -Force } else { Write-Host ('app exit code 0x{0:X8}' -f $app.ExitCode) }
+Check $alive 'installed app starts and stays up'
 
 # 4. state folder ACL: only SYSTEM and Administrators
 $acl = (icacls.exe $data | Out-String)
